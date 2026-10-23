@@ -63,7 +63,7 @@ Prefer this only when you want the tool surface governed as a **Unity Catalog `M
 Genie Code to work — the direct path above already runs on each user's identity. DABs cannot manage an
 `MCP_SERVICE`, so this is a one-time **UC admin flow** that `bundle destroy` / a fresh clone will
 neither remove nor recreate. Treat the commands in
-[the runbook (§9)](../backend/docs/integration/genie-code-mcp.md#9-registration-runbook-unity-catalog-mcp-service--source-of-truth)
+[the runbook (§9)](../backend/docs/integration/genie-code-mcp.md#9-registration-runbook--source-of-truth)
 as the source of truth.
 
 The flow, in brief (full commands + the wizard walkthrough in §9):
@@ -95,7 +95,7 @@ the agent never does it on its own. Details:
 
 ## Working on one schema, and team priorities
 
-Name a schema and the agent works on it: "let's migrate `edp_slv_dev.finance`" makes it pass that
+Name a schema and the agent works on it: "let's migrate `main.finance`" makes it pass that
 schema as `target` to `mtm_get_next_step` on every turn until you say otherwise. The answer is
 pinned to the wave the plan works on next **for that schema** (a converted wave finishes its
 restarts / re-share / optimize before the next wave starts) and carries a `focus` block: where the

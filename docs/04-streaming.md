@@ -26,11 +26,37 @@ Each plan row carries a `role` (`READ` / `WRITE`), an `owner`, a `job_or_pipelin
 `confidence`. The pure `streaming.has_streaming_writer(plan_rows)` collapses the rows into the
 manifest's `has_streaming_writer` flag.
 
-The profiler edge writes `streaming_plan` **delete-then-append per batch** (crash-safe,
-resumable, parallel, filter-aware; see the root README's "Streaming detection" section for
-the batching knobs). Critically, **`streaming_plan` has no `catalog`/`schema` columns**: it is
-keyed by `full_name` only and must be read with `scoping.read_detail_by_full_name`. Applying
-a `catalog`/`schema` predicate to it throws and would silently drop every streaming action.
+Critically, **`streaming_plan` has no `catalog`/`schema` columns**: it is keyed by
+`full_name` only and must be read with `scoping.read_detail_by_full_name`. Applying a
+`catalog`/`schema` predicate to it throws and would silently drop every streaming action.
+
+## The history scan (resumable, parallel, filter-aware)
+
+Lineage is always assessed and is cheap. The expensive part is the per-table
+`DESCRIBE HISTORY` read, which runs only when `scan_history=true` (default). The profiler edge
+makes that scan safe to run over a large estate:
+
+- **Per-run throttle, not a ceiling.** `max_history_tables` (default `1000`; `<=0` means
+  unlimited) caps how many tables one run assesses. Each assessed table is stamped with
+  `table_manifest.history_scanned_at`, and the next run scans only the unscanned tail (sorted
+  by `full_name`), so repeated runs cover the whole estate. The run prints how many tables
+  remain.
+- **Crash-safe.** Results are written in batches of `history_batch_size` (default `200`). Per
+  batch, the edge delete-then-appends that batch's `streaming_plan` rows and merges
+  `has_streaming_writer` plus `history_scanned_at`, so an interrupted run keeps every completed
+  batch.
+- **Parallel.** `DESCRIBE HISTORY` runs on a thread pool sized by `history_parallelism`
+  (default `8`); writes stay on the main thread.
+- **Filter-aware.** The pass honors `catalog_filter` / `schema_filter` like discovery, so a
+  scoped run shrinks the scan and never wipes out-of-scope `streaming_plan` rows.
+- **`force_rescan=true`** ignores `history_scanned_at` and re-assesses from the top. Use it
+  when lineage or history has moved (the lineage window is ~90 days).
+
+With `scan_history=false` the pass still assesses lineage and stamps the marker; it only skips
+`DESCRIBE HISTORY`. The batching helpers (`next_history_batch`,
+`delete_streaming_plan_rows_sql`) are pure and unit-tested in `src/tests/test_streaming.py`.
+`force_rescan` is a run-now parameter; the other four knobs are deploy-fixed (see
+[`backend/docs/contracts/jobs.md`](../backend/docs/contracts/jobs.md)).
 
 ## The stop/restart bracket
 

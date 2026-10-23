@@ -12,6 +12,10 @@ remediation into the runbook. It never runs `SET MANAGED`. Two checks are worth 
 
 - **Runtime gate.** `SET MANAGED` needs DBR 17.3 LTS+ (or Serverless). The notebook's runtime gate
   explicitly accepts "Serverless"; all stage jobs run serverless, which natively satisfies it.
+  Serverless also removes any chance of DBR drift between convert and rollback, because there
+  is no per-stage cluster or runtime version to keep in sync. In a classic-cluster workspace,
+  give each job a `job_clusters` entry pinned to a single `spark_version` (`17.3.x` or later)
+  instead.
 - **Managed-location gate (Check 12): fail-closed.** `locations.effective_managed_location(...)`
   resolves the hierarchy **schema -> catalog -> metastore** and returns one of three statuses:
 
@@ -24,7 +28,10 @@ remediation into the runbook. It never runs `SET MANAGED`. Two checks are worth 
   The gate is **fail-closed**: absence of proof is never treated as "configured". Dry-run
   replaces only the blocker codes it owns (`locations.DRY_RUN_OWNED_BLOCKERS` via
   `replace_owned_blockers`), so repairing a location clears the blocker without wiping blockers
-  owned by other stages.
+  owned by other stages. To clear `no_managed_location`, configure a managed location before
+  converting, for example `ALTER CATALOG <catalog> SET MANAGED LOCATION '<url>'` (or the
+  equivalent at the schema); `managed_location_unresolved` means a lookup errored (for
+  example on missing grants), so fix that access and re-run the dry run.
 
 ## Convert (`04_convert` + `04_select_waves`)
 
@@ -68,6 +75,19 @@ A table already found `MANAGED` is reconciled straight to `CONVERTED` via the au
 re-running `SET MANAGED`.
 
 ## Advisory cluster sizing
+
+Per Databricks guidance, size the convert compute to the table being copied. The planner maps
+each size band to a recommendation (`eligibility.recommended_cores` /
+`recommended_warehouse`):
+
+| Table size | Recommended compute | Est. data-copy time | Est. reader/writer downtime |
+|---|---|---|---|
+| 100 GB or less | 32-core / X-Large SQL warehouse | ~6 min or less | ~1-2 min or less |
+| 1 TB | 64-core / 2X-Large SQL warehouse | ~30 min | ~1-2 min |
+| 10 TB and above | 256-core / 4X-Large SQL warehouse | ~1.5 hrs at 10 TB | ~1-5 min |
+
+The per-table estimates behind these figures are described in
+[Discovery and signals](./03-discovery-and-signals.md#size-and-effort-estimates).
 
 `04_convert` detects the running cluster's cores and compares them to the wave's
 `recommended_cores` via `eligibility.cluster_size_status(...)`, stamping `actual_cores` /

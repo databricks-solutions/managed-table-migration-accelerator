@@ -17,7 +17,7 @@ Required set (see docs/architecture.md → "runtime→deploy handoff surface"):
 ``USE CATALOG`` is the one grant that can exceed the profiler run identity's authority
 (the catalog is a pre-existing shared securable). When the profiler cannot issue it, the
 read-back catches the miss and the notebook prints the exact statement for an admin — see
-the README "App service principal grants" fallback.
+"The app service principal's grants" in docs/00-installation.md.
 """
 
 from typing import List, Tuple

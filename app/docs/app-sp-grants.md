@@ -16,7 +16,7 @@ enforces") and Part 3.12 (Connection & policy). **Code wiring is a separate foll
    `var.prod_run_as_sp` MUST be set to the app SP. (In `dev` / `e2e` — development mode —
    jobs have **no `run_as` override** and execute as the **deploying user**, not the SP; see
    "`run_as` — who actually executes" below. This is why converts succeed in dev without any
-   SP ownership.)
+   grant to the SP.)
 2. **`operator` is attribution only — never authorization.** App access (`CAN_USE` on the
    App) is the authorization boundary; this is an admin-only app. We do **not** gate
    triggers per-user (no OBO *authorization* step like Genie Workbench needs, because
@@ -24,10 +24,11 @@ enforces") and Part 3.12 (Connection & policy). **Code wiring is a separate foll
    record **who** clicked, for the control-plane audit trail.
 3. **Day-2 operators need no admin — the *installer* does, once.** Serving the app and
    attributing the operator require no admin (an operator just needs App `CAN_USE`). But
-   *deploying* the bundle and *provisioning* the SP (grants + an owner-equivalent for
-   convert) require an appropriately privileged **installer** at setup time — see "Who
-   installs/deploys" below. Ownership (not `MODIFY` / `MANAGE`) is mandatory for
-   `SET MANAGED`; prefer the reversible **group-ownership** path in Tier 2.
+   *deploying* the bundle and *provisioning* the SP (grants + convert authority)
+   require an appropriately privileged **installer** at setup time — see "Who
+   installs/deploys" below. `SET MANAGED` needs ownership **or** `MANAGE` on the table, its
+   schema or its catalog, plus `SELECT` + `MODIFY` unless the identity owns the table; ownership
+   never changes (see "Convert permission — who can grant what" below).
 
 ---
 
@@ -68,20 +69,20 @@ A trigger involves **three** identities; only one of them runs the `ALTER TABLE`
 
 Because `run_as` is static:
 
-| Target | `mode` | `run_as` resolves to | Ownership satisfied by |
+| Target | `mode` | `run_as` resolves to | Convert authority satisfied by |
 |---|---|---|---|
-| `dev` / `e2e` | `development` | the **deploying user** (no override) | the deployer's own table ownership |
-| `prod` | `production` | `${var.prod_run_as_sp}` (the app SP) | the **SP** — must be an owner-equivalent (Tier 2) |
+| `dev` / `e2e` | `development` | the **deploying user** (no override) | the deployer's own ownership or `MANAGE` |
+| `prod` | `production` | `${var.prod_run_as_sp}` (the app SP) | the **SP** — needs `MANAGE` (Tier 2) plus `SELECT` + `MODIFY` |
 
 **This is why converts "just worked" in dev/e2e:** the job ran as *you* (the deployer) and
-you own the seeded estate — the SP was never the executor. The prod/SP ownership path is a
+you own the seeded estate — the SP was never the executor. The prod/SP authority path is a
 *different* code path that dev testing never exercises; validate it explicitly before ship.
 
 **Why `run_as` can't be "the OBO / current user":** a Job's `run_as` is a single fixed
 principal (one user *or* one SP); `runNow` has **no `run_as` override**, and a short-lived
 OBO token cannot back a long-running async job (the same reason user tokens are never
 forwarded into jobs). You *could* statically set prod `run_as` to a specific admin **user**
-(converts would work via that user's ownership), but every run would then execute as that one
+(converts would work via that user's authority), but every run would then execute as that one
 human — brittle, non-rotatable, and still needing the `operator` param for attribution — which
 is exactly why prod uses an SP. `run_as` also cannot be a group.
 
@@ -254,7 +255,7 @@ operators need only App `CAN_USE`.
 
 ### Hat 1 — platform (workspace) side, to `bundle deploy`
 
-Deploying the bundle creates ~16 Jobs, the AI/BI dashboard, the Genie handshake, **and the
+Deploying the bundle creates the stage Jobs, the AI/BI dashboard, the Genie handshake, **and the
 Databricks App**. The binding constraint is usually **app creation**, which typically requires
 **workspace admin** (or an explicitly granted Apps capability). Also needed: create/manage
 Jobs & the dashboard, `CAN_USE` (or `CAN_MANAGE` to bind) on `var.warehouse_id`, and write
@@ -262,27 +263,26 @@ access to the deploy path. → **Practically: workspace admin.**
 
 ### Hat 2 — governance (Unity Catalog) side, to provision the SP (and, in dev, to convert)
 
-This is where real authority is required, because you must **grant** to the SP and establish
-an **owner-equivalent** for convert:
+This is where real authority is required, because you must **grant** to the SP and give the
+convert identity its **convert authority**:
 
 - Create the control schema + issue Tier 1 grants → **owner of / `MANAGE` on the control
   catalog** (or metastore admin). `USE CATALOG` on a *pre-existing shared* catalog often needs
   the catalog owner / metastore admin — this is the documented `job_99_setup` fallback.
 - Issue Tier 2 namespace grants on each target → **owner of / `MANAGE` on** those
-  catalogs/schemas.
-- Establish ownership for `SET MANAGED` → **own the target tables** (or manage the
-  owning group), i.e. **metastore admin** or **catalog/table owner** on the in-scope estate.
-- Add the SP to the table-owning group (group-ownership path) → **account admin / group
-  manager**, once.
+  catalogs/schemas. Schema-grain `MANAGE` plus `SELECT` + `MODIFY` is the convert authority
+  for every table in the schema; nobody's ownership changes.
+- Any grant the convert identity cannot issue itself → the principal `authority.grantors`
+  names (table owner, then schema and catalog owners, then `MANAGE` holders, then a metastore
+  admin), listed per table in the Settings page's `convert-permissions.sql`.
 - **Dev/e2e only:** since `run_as` = the deployer, the deployer's *own* identity must also
-  satisfy every stage at run time — table ownership, `MANAGE` for the PO freeze,
+  satisfy every stage at run time — convert authority, `MANAGE` for the PO freeze,
   `CAN_MANAGE` on compaction jobs / pipelines, and ownership of any D2D shares.
 
 → **Practically:** for a **scoped** migration, *workspace admin* + *owner (or `MANAGE`) on the
-control + target catalogs, and owner of the target tables*. For a **whole-estate** migration,
-the simplest single answer is **workspace admin + metastore admin** (plus group-management
-rights if you use the group-ownership path). **Account admin is not required** unless you're
-also creating/rotating the SP or managing its group membership.
+control + target catalogs*. For a **whole-estate** migration, the simplest single answer is
+**workspace admin + metastore admin**. **Account admin is not required** unless you're also
+creating or rotating the SP.
 
 The honest framing for customers: *you designate **one** privileged installer for a one-time
 setup; you do **not** hand admin to everyone who uses the app.*

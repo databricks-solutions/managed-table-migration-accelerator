@@ -297,7 +297,7 @@ _log("Step 2 done — control plane provisioned (control tables + Genie space + 
 # MAGIC > bundle deploy resolves and applies** (`app.yaml` here is command-only; env "is not set until
 # MAGIC > the app is started"). A stop/start or SDK `apps.deploy()` restarts the container **without**
 # MAGIC > that env, so the app crashes at boot on `MIGRATION_CATALOG is missing`. This was resolved
-# MAGIC > empirically (see the README "Restarting the app" note). An installer that silently breaks the
+# MAGIC > empirically (see "Restarting the app" in docs/00-installation.md). An installer that silently breaks the
 # MAGIC > app it just installed is worse than one that asks for a click — so this notebook asks.
 
 # COMMAND ----------

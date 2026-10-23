@@ -12,20 +12,32 @@ Schema table: [../integration/control-tables.md#migration_actions](../integratio
 
 ## Action kinds
 
-`actions.ALL_KINDS`: exactly these ten, no others:
+`actions.ALL_KINDS`: exactly these fifteen, no others:
 
 | Kind | Phase | Blocking | Raised by |
 |---|---|---|---|
-| `FREEZE_COMPACTION` | `PRE_CONVERT` | yes | a `compaction_sources` actor for the table/schema |
+| `FREEZE_COMPACTION` | `PRE_CONVERT` | yes | a `compaction_sources` actor for the table/schema (OPTIMIZE or VACUUM) |
 | `UNFREEZE_COMPACTION` | `POST_CONVERT` | no | paired partner of `FREEZE_COMPACTION` |
 | `STOP_STREAM` | `PRE_CONVERT` | yes | a `streaming_plan` relationship |
 | `RESTART_STREAM` | `POST_CONVERT` | no | a `streaming_plan` relationship (one per relationship; unattributed still emits) |
+| `STOP_WRITER_JOB` | `PRE_CONVERT` | yes | an attributed `SCHEDULED_JOB` / `EVENT_JOB` writer (one per job) |
+| `RESTART_WRITER_JOB` | `POST_CONVERT` | no | paired partner of `STOP_WRITER_JOB` |
 | `RESHARE_D2D` | `POST_CONVERT` | no | `table_manifest.is_delta_shared` |
 | `ENABLE_COMPAT` | `POST_CONVERT` | no | `needs_compatibility_mode` + `compat_mode_sql` |
 | `FIX_PATH_ACCESS` | `PRE_CONVERT` | **yes** | `has_path_based_access` |
 | `UPGRADE_CONSUMER_DBR` | `PRE_CONVERT` | advisory | `has_below_floor_consumer` |
 | `LEASE_OWNERSHIP` | `PRE_CONVERT` | yes | the latest `convert_authority` verdict is `SELF_AUTHORIZABLE` or `NEEDS_GRANT` (the convert identity is missing part of the convert permission) |
 | `RESTORE_OWNERSHIP` | `POST_CONVERT` | no | paired partner of `LEASE_OWNERSHIP`, only when Authorize can grant the privileges itself (the revoke cleanup owes) |
+| `RETIRE_MAINTENANCE_JOB` | `POST_CONVERT` | no | `05b` (or a later `08c`) when a paused OPTIMIZE/VACUUM job is redundant because Predictive Optimization maintains the table |
+| `ENABLE_PREDICTIVE_OPTIMIZATION` | `POST_CONVERT` | no | `08c`, for a converted table whose PO reads off or unknown |
+| `ENABLE_AUTO_LIQUID` | `POST_CONVERT` | no | `08c`, for each converted table's liquid clustering plan |
+
+The last three are `actions.EXECUTOR_EMITTED_KINDS`: an executor raises them at run time, not
+the manifest generator. None of them, nor `RESTORE_OWNERSHIP`, ever holds a converted wave in
+`AWAITING_ACTIONS` (`actions.POST_CONVERT_DEFERRED_KINDS`); they stay listed in the runbook.
+`RETIRE_MAINTENANCE_JOB` carries the exact pause statement and the tool never deletes the job;
+each executed `08c` closes it `DONE` once the Jobs API shows the job deleted, paused, or
+unscheduled.
 
 ### Freeze / restore pairs
 
@@ -36,14 +48,34 @@ partner. These bracket the conversion:
 |---|---|
 | `FREEZE_COMPACTION` | `UNFREEZE_COMPACTION` |
 | `STOP_STREAM` | `RESTART_STREAM` |
+| `STOP_WRITER_JOB` | `RESTART_WRITER_JOB` |
 
 `job_03c_freeze` satisfies the pre-convert kind at freeze time; `job_05b_unfreeze_verify`
 closes the paired post-convert kind at unfreeze time, and only after
 [verification](#verify-before-done).
 
+### State-aware brackets (orphaned-bracket self-heal)
+
+A freeze/stop bracket is generated from a *signal* (a compaction actor, a stream, a writer), so
+a bracket that was never executed used to outlive its table's conversion and leave a
+fully-converted wave stuck in `AWAITING_ACTIONS`. Two defenses close it:
+
+- The generator **suppresses the `PRE_CONVERT` half** for a table in a migrated state
+  (`CONVERTED`, `VALIDATED`, `CLEANED`, `CONVERTED_EXTERNAL`), so the next regeneration marks it
+  `OBSOLETE`.
+- The pure `actions.bracket_keys_to_obsolete` also closes the never-run `POST_CONVERT` partner of
+  a skipped bracket. It runs at convert success (`04_convert`) and on every scan (`00_profiler`,
+  `03b`).
+
+A bracket that was **frozen for real** (a `FROZEN`, non-dry-run `freeze_ledger` row) is left
+open, because `05b_unfreeze` owns its restore. This applies to `FREEZE_KIND_PAIRS` only; the
+convert-permission pair below has its own ledger and lifecycle and is never closed this way.
+Schema-scoped Predictive Optimization brackets are left to the generator, since one table's
+state cannot prove a whole schema is migrated.
+
 ### The ownership pair
 
-`LEASE_OWNERSHIP → RESTORE_OWNERSHIP` (kind names kept from the ownership lease) is the
+`LEASE_OWNERSHIP → RESTORE_OWNERSHIP` (kind names kept from the earlier permission model) is the
 **convert permission** pair, generated from `convert_authority` verdicts that are
 `SELF_AUTHORIZABLE` or `NEEDS_GRANT` via `actions.generate_ownership_actions`. It brackets the
 conversion the same way, with two differences from the freeze pairs:
@@ -108,9 +140,10 @@ The write path is:
 4. `actions.read_open_action_keys(..., where_predicate=...)` then `actions.mark_obsolete(...)`
    for keys that no longer appear.
 
-**Read-only producers.** Only `00_profiler` and `03b_compaction_scan` generate actions.
-Nothing in that path runs `SET MANAGED`, pauses a job, restarts a stream, re-shares, or
-enables Compatibility Mode.
+**Read-only producers.** Only `00_profiler` and `03b_compaction_scan` run the manifest
+generator. Nothing in that path runs `SET MANAGED`, pauses a job, restarts a stream, re-shares,
+or enables Compatibility Mode. The three executor-emitted kinds are MERGEd by `05b` and `08c`
+through the same `action_key` identity.
 
 ## The never-delete rule
 
@@ -219,12 +252,14 @@ confirms the change:
 |---|---|
 | `FREEZE_COMPACTION` (job) | the job is actually paused |
 | `FREEZE_COMPACTION` (schema) | Predictive Optimization is actually disabled |
+| `STOP_WRITER_JOB` | the writer job's schedule or trigger is actually paused |
 | `RESTART_STREAM` | a run started **after** `convert_ts` |
-| `UNFREEZE_COMPACTION` | the prior state was restored |
+| `UNFREEZE_COMPACTION` | the job, or schema Predictive Optimization, is back in its forward-looking state |
 | `RESHARE_D2D` | `reshare.reshare_verified`: the table is present in the share after re-add |
 | `ENABLE_COMPAT` | `compat.compat_verified`, via live table properties |
-| `LEASE_OWNERSHIP` | the table is actually owned by the migration group |
-| `RESTORE_OWNERSHIP` | the table is actually owned by the captured `prior_owner` |
+| `ENABLE_AUTO_LIQUID` | live `clusterByAuto` is on |
+| `LEASE_OWNERSHIP` | each granted privilege shows in `SHOW GRANTS` and the table re-evaluates `AUTHORIZED` |
+| `RESTORE_OWNERSHIP` | each privilege Authorize added is gone from `SHOW GRANTS` (a legacy `LEASED` row: the captured `prior_owner` is restored) |
 
 Applied-but-unverified stays `IN_PROGRESS`. An external control plane should apply the same
 discipline: do not mark `DONE` on "the API call returned 200"; mark `DONE` on observed truth.

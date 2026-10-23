@@ -39,17 +39,31 @@ bucket. This page covers the three families and how their flags feed the planner
 manifest verdict as **`NEEDS_REVIEW`**: it never upgrades a `BLOCKED` table. Compatibility
 Mode itself is applied only **after** conversion by the `08b_enable_compat` executor, and only
 when a human supplies an empty external location (see
-[Cockpit and conductor](./10-cockpit-and-conductor.md) and the root README's external-readers
-section).
+[Compatibility Mode as the fallback](#compatibility-mode-as-the-fallback-08b) below and
+[Cockpit and conductor](./10-cockpit-and-conductor.md)).
 
 `needs_compatibility_mode` is a signal, not a decision. The preferred post-convert path for
 those readers is the [Unity Catalog open APIs](https://learn.microsoft.com/en-us/azure/databricks/external-access/)
-(Unity REST or Iceberg REST, with credential vending and `EXTERNAL USE SCHEMA`), which read the
-managed table by name with no second copy. The operator records that with the `08b` defer and
-the fixed reason `Readers use UC open APIs; Compatibility Mode not needed`; the runbook and app
-then show the item as **Not needed: readers use UC open APIs**. Compatibility Mode is the fallback
-for a reader that cannot use the open APIs. The signal, the `compat` bucket, and `ENABLE_COMPAT`
-keep their names.
+([Unity REST](https://learn.microsoft.com/en-us/azure/databricks/external-access/unity-rest) or
+[Iceberg REST](https://learn.microsoft.com/en-us/azure/databricks/external-access/iceberg), with
+[credential vending](https://learn.microsoft.com/en-us/azure/databricks/external-access/credential-vending)),
+which read the managed table by name with no second copy and no storage path. The
+[admin setup](https://learn.microsoft.com/en-us/azure/databricks/external-access/admin) needs
+external data access enabled on the metastore and
+`GRANT EXTERNAL USE SCHEMA ON SCHEMA <catalog>.<schema> TO <principal>` for each reader. The
+operator records the decision with the `08b` defer and the fixed reason
+`Readers use UC open APIs; Compatibility Mode not needed` (`compat.OPEN_APIS_REASON`):
+
+```bash
+databricks bundle run job_08b_enable_compat -t <target> \
+  --params "target_schema=<catalog.schema>,finish_action=defer,defer_reason=Readers use UC open APIs; Compatibility Mode not needed,confirm_execute=true"
+```
+
+Quote the whole `--params` value, because the reason contains a semicolon. The action becomes
+`DEFERRED`, and the runbook, App, MCP, and Genie then show the item as **Not needed: readers use
+UC open APIs**; `finish_action=reopen` undoes it. Compatibility Mode is the fallback for a reader
+that cannot use the open APIs. The signal, the `compat` bucket, `ENABLE_COMPAT`, `STEP_COMPAT`,
+and `mtm_enable_compat` keep their names; the App labels the step **External readers**.
 
 ### Warned before the convert (advisory)
 
@@ -72,7 +86,25 @@ surfaces as the `external_reader_readiness` view, the `wave_status.readers_undec
 per-wave `04_convert` print, the cockpits, the conductor directive on every convert-bound step,
 the App's convert gate and bulk convert dialog (an "I told the reader teams" tick, UI-only), MCP
 and Genie. All of them render `compat.preconvert_reader_warning` verbatim. Nothing is held, no
-job gates on it, and there is no new action kind or job parameter.
+job gates on it, and there is no new action kind or job parameter. Separately, `04_convert`
+re-reads whether Iceberg reads are on at convert time, so a reader team that turned them on
+after profiling still gets `SET MANAGED TRUNCATE UNIFORM HISTORY`.
+
+### Compatibility Mode as the fallback (`08b`)
+
+[Compatibility Mode](https://learn.microsoft.com/en-us/azure/databricks/external-access/compatibility-mode)
+keeps non-Databricks, read-only consumers reading a table after it becomes MANAGED, by setting
+`delta.universalFormat.enabledFormats='compatibility'` with an **empty** path under a registered
+external location that has not been used in the last 7 days. Choosing that path is a storage
+decision only a human can make, so `08b` never invents one: supply `compat_location_map` (JSON
+`{full_name: path}`) or a single `compat_location`. Each table needs its own path:
+`compat_location` is only a default for tables with no map entry, and a path that more than one
+in-scope table resolves to is refused (each such table stays MANUAL with a `shared_location`
+reason, and an executed run fails after persisting state). A table with no supplied path stays
+MANUAL. The default `confirm_execute=false` prints and persists the exact
+`ALTER TABLE ... SET TBLPROPERTIES` on the action's `evidence`; `confirm_execute=true` runs it,
+verifies through the live table properties, and closes the paired `ENABLE_COMPAT` action.
+Parameters are in [`backend/docs/contracts/jobs.md`](../backend/docs/contracts/jobs.md).
 
 ## Path-based access (two tiers)
 
@@ -142,6 +174,18 @@ convert re-assert block with `path_redirect_opt_in_required`) and raises a block
    valid only while it is `ACTIVE`, the table is still eligible, and the fingerprint matches: a new
    job or role lapses it (`PATH_REDIRECT_OPT_IN_LAPSED`) and the hold returns. Dry run and convert
    re-check it. `path_redirect_action=revoke` withdraws it.
+
+The opt-in is the third gated task of `job_00_profiler`, so run it with `run_profiler=false`:
+
+```bash
+# Preview (dry run). Add confirm_execute=true to record it; path_redirect_action=revoke withdraws it.
+databricks bundle run job_00_profiler -t <target> \
+  --params run_profiler=false,path_redirect_action=accept,path_redirect_tables=<catalog.schema.table>,path_redirect_reason=<why>
+```
+
+The App's Path-based access workstream page (Preview, then Rely on redirect, or Revoke) and the
+MCP tools `mtm_get_path_access` (read) and `mtm_opt_in_path_redirect` (v2, `confirm=true`) drive
+the same task; `mtm_run_profiler` cannot send the opt-in fields.
 
 An ineligible table's path forward is to upgrade the job (or move it to serverless), re-profile,
 and then opt in, or to rewrite the code. While an opt-in is active, the runbook carries a

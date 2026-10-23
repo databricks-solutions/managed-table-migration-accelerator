@@ -8,6 +8,16 @@ release may change job parameters or control-table columns; every such change is
 
 ## [Unreleased]
 
+### Changed
+
+- **Shorter README, fuller docs.** `README.md` is now a short front door: what the tool does, how it
+  works (a lifecycle diagram and app screenshots), prerequisites, the corrected convert
+  permissions (ownership **or** `MANAGE`, plus `SELECT` + `MODIFY`; ownership never changes), two
+  install paths with a success check, a first migration, and rollback. The detail moved into
+  `docs/`, including two new pages: `docs/00-installation.md` (install, permissions, configuration,
+  troubleshooting) and `docs/16-dashboard-and-genie.md`. `app/docs/app-sp-grants.md` drops the
+  stale claim that `SET MANAGED` requires table ownership.
+
 ## [0.1.0] - 2026-10-22
 
 First public release of the Unity Catalog EXTERNAL → MANAGED table migration accelerator, packaged

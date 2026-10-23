@@ -17,7 +17,7 @@ The intended sequence, and every safety gate along it. Stage order is the file n
                                                                                            │
                                                     ┌──────────────────────────────────────┤
                                                     ▼                                       ▼
-                                          [05b UNFREEZE + VERIFY]           [08 re-share / 08b compat]
+                                          [05b UNFREEZE + VERIFY]           [08 re-share / 08b compat / 08c clustering]
                                                     │
                                                     ▼
                                      07 cleanup (day 14+, + revoke added grants)
@@ -25,6 +25,7 @@ The intended sequence, and every safety gate along it. Stage order is the file n
   06 rollback: manual, any time within 14 days of conversion
   08 conductor: read-only, any time; recommends the next step
   10 campaign: gated; preps one schema and stops
+  99 setup: one-time install (Genie space, App service principal grants); not on the conversion path
 
   bulk (estate scale): one parallel-safe batch of waves at concurrency=bulk_max_parallel:
     11b BULK FREEZE ──▶ [03d authorize] ──▶ 11 BULK CONVERT ──▶ (11c BULK VALIDATE) ──▶ 11d BULK UNFREEZE
@@ -63,6 +64,18 @@ advisory hint for scheduling, never a substitute for the convert-time gates.
 Re-runnable at any time. `state` is preserved on existing rows, so a re-profile never resets a
 table that has advanced. Use `--params force_rescan=true,schema_filter=<schema>` for a
 targeted `DESCRIBE HISTORY` re-scan.
+
+The profiler also records each table's current UC owner (`table_manifest.table_owner`, from
+`information_schema.tables`) as evidence; it stays NULL when the owner is unavailable and is
+never fabricated. Two print-only checks ride along and never delete anything: an always-on
+`manifest_catalog` collision preflight (WARN when the control catalog is the shared default
+`main` or is not visible from this workspace), and an opt-in `report_stale` pass that flags
+manifest rows the latest covering run did not refresh.
+
+The job's third task is the gated **path-based redirect opt-in** (`path_redirect_action=accept|revoke`,
+dry-run unless `confirm_execute=true`); run it with `run_profiler=false` so no scan runs. See
+[External access and buckets](../../../docs/05-external-access-and-buckets.md) for when a table
+is eligible.
 
 Check afterwards:
 
@@ -106,12 +119,18 @@ overflow demotes to `normal` rather than being dropped. Non-pilot slices are gro
 databricks bundle run job_03_dry_run -t <target>
 ```
 
-Runs 13 gating checks per table and sets `state` to `DRY_RUN_OK` or `BLOCKED`. It rewrites
-only the blocker codes it owns (`locations.DRY_RUN_OWNED_BLOCKERS`), so repairing one blocker
-clears it without wiping blockers owned by other stages.
+Runs a global runtime gate (Check 1) and then the per-table checks, and sets `state` to
+`DRY_RUN_OK` or `BLOCKED`. Only some checks can fail a table; the advisory ones (convert
+permission, compaction recency, consumer runtime, writer schedule, external readers) report
+WARN or INFO and never block. It rewrites only the blocker codes it owns
+(`locations.DRY_RUN_OWNED_BLOCKERS`), so repairing one blocker clears it without wiping blockers
+owned by other stages.
 
 Check 9 prints the exact statement that *would* run. Check 12 is the fail-closed
-managed-location gate.
+managed-location gate. Check 13 predicts the [federation ownership guard](#the-federation-ownership-guard)
+with the same logic as the convert, so a workspace-ownership block surfaces at dry run (on the
+Runbook page) instead of mid-convert. Check 14 (writer schedule) and Check 15 (external readers)
+are advisory.
 
 ### 03b: Compaction scan (optional, read-only)
 
@@ -139,9 +158,13 @@ databricks bundle run job_03c_freeze -t <target> \
   --params plan_run_id=<id>,wave_id=<id>,confirm_execute=true
 ```
 
-Pauses compaction jobs, disables schema-level Predictive Optimization, and stops streams,
-recording the prior state in `freeze_ledger` so 05b restores exactly. Only reversible
-metadata is touched; checkpoints are captured as evidence and never modified.
+Pauses compaction and scheduled VACUUM jobs, disables schema-level Predictive Optimization,
+stops streams, and pauses attributed writer jobs (their schedule, trigger, or continuous block,
+cancelling any active run), recording the prior state in `freeze_ledger` (`prior_pause_status`,
+`prior_po_enabled`, `prior_run_id`, `trigger_type`, and the `checkpoint_location` as evidence).
+`05b` reads that ledger to bring each unit back, and `06` rollback reads it to restore the exact
+pre-migration topology. Only reversible metadata is touched; checkpoints are captured as
+evidence and never modified.
 
 Unattributed or null-target actions stay **MANUAL**: the runbook shows the exact statement,
 and a human runs it. Nothing is guessed.
@@ -212,17 +235,27 @@ databricks bundle run job_05b_unfreeze_verify -t <target> \
   --params plan_run_id=<id>,wave_id=<id>,confirm_execute=true
 ```
 
-Restores **exactly** from `freeze_ledger`: resume a job only if it was `UNPAUSED` before;
-re-enable Predictive Optimization only if it was `ON`; always restart a stopped stream from its
-checkpoint; pipelines always start with `full_refresh=False`.
+Restarts **forward-looking** from `freeze_ledger`, under `post_convert_maintenance_policy=prefer_po`
+(the only accepted value; a legacy `exact_restore` request is coerced to `prefer_po` with a
+deprecation note). It always restarts a stopped stream from its checkpoint, starts pipelines with
+`full_refresh=False`, resumes a writer job or stream schedule only if it was unpaused before
+the freeze, and re-enables schema Predictive Optimization only if it was on (never a blanket
+enable). A paused OPTIMIZE or VACUUM job is
+**not** resumed when Predictive Optimization maintains the converted table: `05b` raises a
+non-blocking `RETIRE_MAINTENANCE_JOB` recommendation with the exact pause statement instead, and
+never deletes the job. When PO is off or unknown it resumes the job, so no table is left
+unmaintained. PO and liquid clustering are then handed to `08c`. Exact restore of the
+pre-migration topology belongs to `06` rollback, not here. Each restore is verified against
+platform truth before its paired `POST_CONVERT` action closes.
 
 > **After conversion you must restart streaming jobs** (read or write) that touch the table.
 > This is the stage that does it, and it verifies a run actually started after `convert_ts`
 > before marking the action `DONE`.
 
-### 08 / 08b: POST_CONVERT papercuts (gated, dry-run by default)
+### 08 / 08b / 08c: POST_CONVERT finish steps (gated, dry-run by default)
 
-Run these when the action queue says so (`open_reshare` / `open_compat` on `wave_status`).
+Run these when the action queue says so (`open_reshare` / `open_compat` on `wave_status`, and
+`optimize_pending` for `08c`). For a bulk batch, pass `batch_id` instead of the wave pin.
 
 ```bash
 databricks bundle run job_08_reshare -t <target> \
@@ -240,12 +273,36 @@ executed run fails after persisting state. For several tables, set `compat_locat
 collide with `--params`).
 
 Delta Sharing D2D recipients are **not** auto-updated after conversion; the table must be
-removed from and re-added to each share `WITH HISTORY`. Compatibility Mode applies to MANAGED
-tables *after* conversion and is read-only for external clients; it needs an **empty**
-external-location path, which is a human storage decision the tool never invents.
+removed from and re-added to each share `WITH HISTORY`. `08` finds the shares that hold each
+table with `SHOW SHARES` and `SHOW ALL IN SHARE`; a table with no attributable share stays
+MANUAL (its statement carries a `<SHARE_NAME>` placeholder), and if share discovery is
+unavailable every action falls through to MANUAL rather than being dropped.
 
-Both dry-run by default: they print *and* persist the exact statement on the action's
-`evidence`, and run nothing.
+For external readers, prefer the **Unity Catalog open APIs** (Unity REST or Iceberg REST with
+credential vending), and record that decision with the `08b` open-APIs defer; Compatibility
+Mode is the fallback for a reader that cannot use them. Compatibility Mode applies to MANAGED
+tables *after* conversion and is read-only for external clients; it needs an **empty**
+external-location path, which is a human storage decision the tool never invents. See
+[External access and buckets](../../../docs/05-external-access-and-buckets.md).
+
+All three dry-run by default: they print *and* persist the exact statement on the action's
+`evidence`, and run nothing. With `confirm_execute=true` they run, then verify against platform
+truth (the table is back in the share, Compatibility Mode is on in the table properties,
+`clusterByAuto` is set) before closing the paired action; applied-but-unverified stays
+`IN_PROGRESS`.
+
+**Deferring a finish step.** When the tool cannot close a re-share or Compat action yet (no
+attributable share, no empty location chosen), `08` and `08b` take `finish_action=defer` with a
+non-blank `defer_reason`, and `finish_action=reopen` to undo it; `action_keys` narrows either to
+named actions. Defer and reopen use the same selector as a normal run, are gated by
+`confirm_execute`, and write a `DEFER_ACTION` / `REOPEN_ACTION` audit row before the status
+flips. A `DEFERRED` action no longer holds the wave but stays in `migration_runbook`. Only
+re-share and Compat can be deferred; stream restarts and unfreeze never can.
+
+`08c` (Turn on liquid clustering) is the last finish step: it optionally turns Predictive
+Optimization on where it reads off and enables automatic liquid clustering where that is
+provably safe. See [Turn on liquid clustering](../../../docs/08c-post-convert-maintenance.md).
+Full parameters for all three are in [../contracts/jobs.md](../contracts/jobs.md).
 
 ### 07: Cleanup (mutating, day 14+)
 
@@ -264,7 +321,7 @@ before), in undo order, verifies with `SHOW GRANTS`, flips `GRANTED → REVOKED`
 table's `RESTORE_OWNERSHIP` action. A schema or catalog grant shared with a table that still needs
 it is held back until that table is done too. The revoke is here, **not** at unfreeze, because an
 in-window `UNSET MANAGED` rollback needs the same privileges; `06_rollback` never revokes. A legacy
-ownership lease (`LEASED` row from before convert authority) is still restored to its captured
+`LEASED` ledger row (from before convert authority) is still restored to its captured
 prior owner. A still-PO-owned table whose `VACUUM` is deferred defers its revoke too. Run with
 `force_vacuum_po_tables=true`, or use the runbook's exact ledger statements.
 
@@ -280,7 +337,12 @@ databricks bundle run job_06_rollback -t <target> \
 
 No schedule, no trigger; only ever started by a human, with a required `reason`. Issues
 `ALTER TABLE <cat>.<sch>.<tbl> UNSET MANAGED;`. Targets are derived from successful `CONVERT`
-`audit_log` rows pinned by `plan_run_id + wave_id`, not from the mutable `wave_plan`.
+`audit_log` rows pinned by `plan_run_id + wave_id` (both are required for a wave; otherwise pass
+a single `full_name`), not from the mutable `wave_plan`. The stage reads each conversion's end
+time from `audit_log` and refuses a table outside the 14-day window. After a rollback the
+abandoned managed-location data is deleted by the platform roughly 7 days later, and streaming
+jobs that touch the table must be restarted again. See
+[Rollback and cleanup](../../../docs/09-rollback-and-cleanup.md).
 
 ### 08 Conductor and 10 Campaign
 
@@ -344,7 +406,13 @@ Checked by the dry run and re-asserted at convert:
 
 1. All readers and writers use **name-based** access (`catalog.schema.table`), not path-based.
 2. No concurrent OPTIMIZE / ZORDER / liquid-clustering / compaction on the table.
-3. The table is not corrupted (`DESCRIBE DETAIL` succeeds).
+3. No concurrent VACUUM on the table: a VACUUM deletes files while `SET MANAGED` validates and
+   copies the latest snapshot, and can fail it with
+   `DELTA_ALTER_TABLE_SET_MANAGED_FAILED.FILE_VALIDATION_FAILED`.
+4. The table is not corrupted (`DESCRIBE DETAIL` succeeds).
+
+`04_convert` also re-reads whether Iceberg reads (UniForm) are on at convert time, so a table
+whose reader team turned them on after profiling still gets `TRUNCATE UNIFORM HISTORY`.
 
 ### The managed-location gate (fail-closed)
 
@@ -370,7 +438,10 @@ it alone. `04_convert` also:
 - **Re-checks recent writes (opt-in).** When `recent_write_minutes > 0`, a write commit
   within that window blocks the table with a `recent_write_activity` blocker, the symmetric
   writer-side gate that makes an opportunistic (predicted-idle-window) convert fail safe if a
-  writer is actually active. Default `0` = off. Both recency checks share one `DESCRIBE
+  writer is actually active. Default `0` = off.
+- **Re-checks VACUUM recency.** A table with a `VACUUM START` or `VACUUM END` commit within
+  `recent_vacuum_minutes` (default 120) is blocked with `recent_vacuum_activity`, independent of
+  whether the VACUUM was attributed to an actor. All three recency checks share one `DESCRIBE
   HISTORY` read.
 - **Verifies coverage** (`executor.compaction_coverage_gap`, pure). Every *schedulable*
   `compaction_sources` actor (`JOB`, or schema-scoped `PREDICTIVE_OPTIMIZATION`) must have a
@@ -380,7 +451,32 @@ it alone. `04_convert` also:
   (default `true`).
 
 Manual actors (`PIPELINE`, `NOTEBOOK`, `USER`) cannot satisfy coverage mechanically and remain
-under the open-action gate instead.
+under the open-action gate instead. A scheduled VACUUM job is attributed as a `JOB` actor, so the
+same freeze bracket and coverage check cover it; a manual VACUUM stays MANUAL.
+
+### The stream-stop and writer-stop gates
+
+The same ledger cross-check runs for streams and writer jobs. Every **attributed** stream in the
+wave (`DLT` pipeline or `STRUCTURED_STREAMING` job, scoped by `full_name`) must have a real
+`FROZEN` (`dry_run=false`) `STOP_*` ledger row (`executor.stream_stop_coverage_gap`, gated by
+`require_streams_stopped`), and every attributed schedulable writer job (`SCHEDULED_JOB` /
+`EVENT_JOB`) must have one for `OP_PAUSE_WRITER_JOB` (gated by `require_writers_stopped`). Both
+default `true`, fail loud with the exact stop statement per unit, and suggest `03c_freeze`
+without running it. An unattributed stream (no job or pipeline id, or `type=UNKNOWN`) cannot be
+verified: it is printed as a CAUTION but not hard-gated, which is a documented residual.
+
+### The federation ownership guard
+
+In a per-workspace federated install, a catalog bound to two workspaces lands in both manifests.
+Before any `SET MANAGED` (`04`) or `UNSET MANAGED` (`06`), `reconcile.foreign_ownership_blockers`
+compares each table's `discovered_in_workspace_id` with the running workspace and fails loud
+when another workspace owns the table or ownership is unknown. It never changes manifest state,
+so the row stays convertible for its true owner. The guard is evidence-based: a blank-provenance
+row is treated as unknown only when more than one workspace has ever written the control plane,
+so a single-workspace install is never blocked. The profiler stamps provenance from the
+`workspace_id` job parameter, so set `var.workspace_id` per target. To hand a table off
+deliberately set `owning_workspace=<this workspace id>`; to skip the check set
+`require_owning_workspace=false`. Dry-run Check 13 predicts the verdict.
 
 ### The convert permission gate
 
@@ -422,6 +518,25 @@ Cluster sizing (`eligibility.recommended_cores` / `recommended_warehouse` /
 `cluster_size_status`) WARNs on the audit row when compute is undersized, but never blocks.
 Wave sizing treats unknown-size members conservatively (top band), never as 0 bytes.
 
+## After conversion: operator checklist
+
+The finish steps above automate most of this, but each item is owed for every converted table:
+
+- **Restart streaming.** Stop and start, with the same configuration, every job and pipeline in
+  `streaming_plan` for the table, and do it again after any rollback. `05b` does this and
+  verifies a run started after the convert.
+- **Verify readers and writers.** Confirm name-based access works. Readers below DBR 16.4 LTS
+  may have seen brief downtime through the switch, so confirm steady state. Upgrade any consumer
+  behind a `has_below_floor_consumer` flag (see `consumer_runtime_plan`); an `unknown` table is
+  not confirmed safe.
+- **External readers.** Move non-Databricks readers to the UC open APIs and record it with the
+  `08b` open-APIs defer. Only for a reader that cannot, enable Compatibility Mode after choosing
+  an empty external-location path. Never auto-run it.
+- **Delta Sharing.** Re-share D2D tables (`ALTER SHARE ... REMOVE TABLE`, then
+  `ALTER SHARE ... ADD TABLE ... WITH HISTORY`), which `08` does.
+- **VACUUM and Predictive Optimization.** If PO is disabled, `07` cleanup schedules the VACUUM
+  after day 14. Never VACUUM inside the 14-day window.
+
 ## Where to look when something is wrong
 
 | Question | Query |
@@ -437,7 +552,9 @@ Wave sizing treats unknown-size members conservatively (top band), never as 0 by
 | Which tables have an idle window open now? | `SELECT full_name, convert_window_slack_min, convert_window_confidence FROM <cat>.<sch>.table_manifest WHERE convert_window_ready ORDER BY convert_window_slack_min DESC;` (advisory) |
 | What should I do next? | latest `as_of` row in `<cat>.<sch>.migration_next_actions` |
 
-Two read-only exports help with hand-off:
+The runbook is also the dashboard's **Runbook / manual statements** page, and what is frozen
+now (dry-run versus applied) is on its **Freeze & actions** page. Two read-only exports help
+with hand-off:
 
 - `09_cockpit` with `manual=export_runbook` writes the runbook as `.sql` and `.md` to a UC
   Volume. It never executes.

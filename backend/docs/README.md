@@ -35,9 +35,10 @@ surface is made of four things, and each is documented here as a public API:
 | [app/PRD.md](./app/PRD.md) | Product requirements for the **Migration Control Plane App** (a Databricks App over this API): personas, the cockpit-derived CUJs, and functional/safety requirements mapped to the exact tables and job parameters. |
 | [app/ui-design.md](./app/ui-design.md) | Screen-by-screen UI design for that App: information architecture, wireframes per CUJ, component inventory, the UI→API mapping, and design tokens. |
 
-Concepts, tuning knobs, wave-planning heuristics, and the operator narrative live in the
-root [`README.md`](../README.md); engineering conventions live in
-[`AGENTS.md`](../AGENTS.md). These pages deliberately do not restate them — they link back.
+Concepts, tuning knobs, wave-planning heuristics, and the operator narrative live in
+[`docs/`](../../docs/README.md) (the root [`README.md`](../../README.md) is the short front
+door); engineering conventions live in [`AGENTS.md`](../../AGENTS.md). These pages deliberately
+do not restate them — they link back.
 
 ## Table naming
 
@@ -54,7 +55,7 @@ them through `migration_control_config` (see [architecture.md](./architecture.md
 
 ## Golden safety rules
 
-These are reproduced verbatim in spirit from [`AGENTS.md`](../AGENTS.md) and apply to every
+These are reproduced verbatim in spirit from [`AGENTS.md`](../../AGENTS.md) and apply to every
 integration:
 
 - **Never run `ALTER TABLE ... SET MANAGED` / `UNSET MANAGED` from outside the deployed

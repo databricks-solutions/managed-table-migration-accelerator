@@ -122,13 +122,16 @@ databricks bundle run job_08_conductor -t dev --params pin_action=clear
 ## Dry-run defaults and the convert gates
 
 - `confirm_execute=false` is the dry-run default on the executor stages `03c_freeze`,
-  `03d_lease_ownership`, `05b_unfreeze_verify`, `08_reshare`, and `08b_enable_compat`. They
+  `03d_lease_ownership`, `05b_unfreeze_verify`, `08_reshare`, `08b_enable_compat`, and
+  `08c_enable_optimization`. They
   plan, capture prior state, and persist the exact statements, but call no API. Set
   `confirm_execute=true` to act. `07_post_convert_cleanup` also takes `confirm_execute` (default
   `false`), gating the revoke of the grants Authorize added only (its VACUUM behavior is unchanged).
 - `04_convert` re-enforces its gates. `require_pre_convert_actions_cleared`,
-  `require_compaction_frozen`, `require_streams_stopped`, and `require_ownership_leased` all
-  default `true`; the convert fails closed on a gap regardless of how it was launched.
+  `require_compaction_frozen`, `require_streams_stopped`, `require_writers_stopped`,
+  `require_owning_workspace`, and `require_ownership_leased` all default `true`; the convert
+  fails closed on a gap regardless of how it was launched. Each gate is described in the
+  [operational runbook](../backend/docs/operations/runbook.md) under "Safety gates".
 - `03d_lease_ownership` is app-bound (and Jobs UI / CLI runnable). It took the resource slot
   freed by folding the source scan into the profiler discovery chunk, so the app sits at 19 jobs
   + 1 warehouse = 20, exactly at the app-resource cap; the convert-permission gate is visible in

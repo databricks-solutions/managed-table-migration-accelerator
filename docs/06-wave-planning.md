@@ -2,8 +2,10 @@
 
 The wave planner (`backend/notebooks/02_wave_planner.py`, job `job_02_wave_planner`, logic in
 `backend/src/migration/lineage.py`) sequences all eligible tables into ordered, capped
-**waves** and writes `wave_plan` + `comms_feed`. Convert and rollback pin to an exact
-`(plan_run_id, wave_id)`, so the plan is the unit of execution. This page explains bucketing,
+**waves** and writes `wave_plan` + `comms_feed`. It reads downstream consumers from
+`system.access.table_lineage` (90 days) to score each table's `blast_radius`, and exports both
+tables as CSV to a UC Volume (`export_volume` widget) for the comms workstream. Convert and
+rollback pin to an exact `(plan_run_id, wave_id)`, so the plan is the unit of execution. This page explains bucketing,
 the crucial distinction between assignment precedence and execution order, and how one schema
 fans out into several waves.
 
@@ -13,7 +15,8 @@ fans out into several waves.
 (rank 1 is the most specialized):
 
 1. `has_streaming` -> **`streaming`** (always isolated, since it needs a coordinated restart).
-2. `needs_compatibility_mode` -> **`compat`** (external readers, post-convert work).
+2. `needs_compatibility_mode` -> **`compat`** (external readers; post-convert, move them to the
+   UC open APIs, with Compatibility Mode only for a reader that cannot).
 3. `is_delta_shared` -> **`share`** (D2D source, must be re-shared post-convert).
 4. `size_band in LARGE_BANDS` (the ~10TB / >10TB bands) -> **`final_large`** (scheduled last).
 5. no external consumer, `size_band == SMALL_BAND` (<=100GB), and
@@ -73,7 +76,8 @@ flowchart TD
 Within each wave, tables are sorted by ascending blast radius then size; slices are ordered by
 ascending average blast radius then total bytes. Each wave also carries an advisory
 cluster-sizing rollup driven by its largest member (`recommended_cores` /
-`recommended_warehouse` / `max_size_band`).
+`recommended_warehouse` / `max_size_band`). It surfaces on the dashboard and `comms_feed` and is
+re-checked at convert time, where undersized compute warns but never blocks.
 
 ## Walking one schema's waves (focus mode)
 
@@ -121,12 +125,44 @@ a green light). The verdict surfaces per wave in `04_convert` and as dry-run Che
 - **Replanning is refused while any table is CONVERTING**: a new `plan_run_id` would
   invalidate the in-flight selectors.
 
+## When to re-plan
+
+Profile (`00`, optionally `01`) and plan (`02`) once to start. Re-run the planner only when its
+inputs change: the profiler re-scanned (new or resized tables), blockers were fixed (newly
+`ELIGIBLE` tables to schedule), or a planner knob changed. From the cockpit this is
+`action=advanced` with `manual=replan`.
+
+Do not re-plan while a wave is converting. The planner itself refuses while any table is
+`CONVERTING` and is the authoritative barrier; the cockpit's `confirm_replan` check (it refuses
+while a wave is `IN_PROGRESS` / `CONVERTING` unless `confirm_replan=true`) is only a courtesy in
+front of it. A re-plan keeps every `ELIGIBLE` table in the new plan whatever its lifecycle state,
+so converted and validated progress stays visible in the new plan generation, and the full
+history remains in `audit_log`.
+
 ## Progress views
 
-After each plan write the planner (re)creates two views (`backend/src/migration/progress.py`):
-`migration_progress` (one row per `catalog.schema`) and `wave_status` (one row per
-`(plan_run_id, wave_id)` for the current plan, with a derived `wave_state`). These feed the
-dashboard, the conductor, and the app.
+After each plan write the planner (re)creates two views (`backend/src/migration/progress.py`).
+They reflect the current plan generation only; historical conversions always remain in
+`audit_log`.
+
+- **`migration_progress`** has one row per `catalog.schema`: `total_tables`, per-state counts
+  (`dry_run_ok`, `converting`, `converted`, `validated`, `cleaned`, `blocked`, `rolled_back`),
+  `migrated_tables`, `remaining_tables`, `pct_migrated`, and `pct_validated`.
+- **`wave_status`** has one row per `(plan_run_id, wave_id)` for the current plan: the same state
+  counts, the sizing rollup, open-action rollups, `fully_migrated` / `optimize_pending`, and a
+  derived `wave_state` (`AWAITING_ACTIONS`, `DONE`, `ROLLED_BACK`, `BLOCKED`, `IN_PROGRESS`,
+  `READY`, or `PLANNED`).
+
+Two rollups drive the conductor. `open_lease` counts the tables still to convert whose latest
+`convert_authority` verdict is not `AUTHORIZED` (a table with no verdict counts too, since it has
+not been checked yet); it drives the optional Authorize step in step with the convert gate. A
+fully-migrated wave stays `AWAITING_ACTIONS` until its restart, re-share, and Compat work is closed
+(or the re-share / Compat action is `DEFERRED`, counted for display only in
+`deferred_post_convert`) and `optimize_pending` clears. An executed `08c` stamps
+`table_manifest.optimize_run_at`; a run that declined Predictive Optimization also records
+`optimize_po_declined`, shown as `po_declined_tables`.
+
+Both views feed the conductor, the app, and the dashboard's **Next action** page.
 
 The full `wave_plan` / `wave_status` column lists are authoritative in
 [`backend/docs/contracts/control-tables.md`](../backend/docs/contracts/control-tables.md); the

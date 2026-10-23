@@ -155,6 +155,11 @@ export function planUrl(sel: ScopeSelection): string {
   return q ? `/api/grants/plan?scopes=${encodeURIComponent(q)}` : '/api/grants/plan';
 }
 
+/** The plan URL that skips the server's short SHOW GRANTS cache (the Refresh button). */
+export function withRefresh(url: string): string {
+  return `${url}${url.includes('?') ? '&' : '?'}refresh=1`;
+}
+
 /** Read the saved selection, exception-safe: missing, corrupt or wrong-shaped data reads empty. */
 export function loadSelection(storage: Pick<Storage, 'getItem'> | null | undefined): ScopeSelection {
   try {
@@ -227,4 +232,165 @@ export function presentTone(present: 'yes' | 'no' | 'unknown'): 'success' | 'war
 /** Assemble copyable grant SQL: one `;`-terminated statement per line. */
 export function copyBlock(grants: { stmt: string }[]): string {
   return (grants ?? []).map((g) => `${g.stmt};`).join('\n');
+}
+
+export type Present = 'yes' | 'no' | 'unknown';
+
+export interface GrantLite {
+  privilege: string;
+  securableType: string;
+  securableFqn: string;
+  stmt: string;
+  present: Present;
+}
+
+export interface Tier2GroupLite extends Scope {
+  source: 'scan' | 'selected';
+  grants: GrantLite[];
+}
+
+/** `missing` hides landed grants (unknown still shows: it is not proof); `all` shows every grant. */
+export type Tier2View = 'missing' | 'all';
+
+export interface Tier2Summary {
+  schemas: number;
+  landed: number;
+  missing: number;
+  unknown: number;
+  /** Schemas whose own schema grants have all landed (the catalog grant is counted on its catalog). */
+  fullyGranted: number;
+}
+
+const isCatalogGrant = (g: GrantLite) => g.securableType === 'CATALOG';
+const schemaGrants = (g: Tier2GroupLite) => (g.grants ?? []).filter((x) => !isCatalogGrant(x));
+
+/** Counts for the Step 2 summary. A catalog grant shared by many schemas is counted once. */
+export function tier2Summary(groups: Tier2GroupLite[]): Tier2Summary {
+  const byStmt = new Map<string, Present>();
+  for (const g of groups ?? []) for (const x of g.grants ?? []) byStmt.set(x.stmt, x.present);
+  const statuses = [...byStmt.values()];
+  return {
+    schemas: (groups ?? []).length,
+    landed: statuses.filter((p) => p === 'yes').length,
+    missing: statuses.filter((p) => p === 'no').length,
+    unknown: statuses.filter((p) => p === 'unknown').length,
+    fullyGranted: (groups ?? []).filter((g) => schemaGrants(g).every((x) => x.present === 'yes')).length,
+  };
+}
+
+export interface CatalogGrants {
+  catalog: string;
+  /** The catalog's USE CATALOG grant, once; null when the view hides it (landed, `missing` view). */
+  useCatalog: GrantLite | null;
+  schemas: Tier2GroupLite[];
+  /** Every schema in the catalog, before the view filter. */
+  schemaCount: number;
+  /** Grants in this catalog that have not been proven landed (missing or unknown). */
+  open: number;
+}
+
+/**
+ * Step 2 grouped by catalog, sorted by name. USE CATALOG is pulled out once per catalog. In the
+ * `missing` view a schema whose schema grants have all landed is dropped, and so is a catalog
+ * with nothing left to show.
+ */
+export function groupTier2ByCatalog(groups: Tier2GroupLite[], view: Tier2View): CatalogGrants[] {
+  const keep = (x: GrantLite) => view === 'all' || x.present !== 'yes';
+  const byCatalog = new Map<string, Tier2GroupLite[]>();
+  for (const g of [...(groups ?? [])].sort(byName)) {
+    const list = byCatalog.get(g.catalog) ?? [];
+    list.push(g);
+    byCatalog.set(g.catalog, list);
+  }
+  const out: CatalogGrants[] = [];
+  for (const [catalog, list] of byCatalog) {
+    const catalogGrant = list.flatMap((g) => g.grants ?? []).find(isCatalogGrant) ?? null;
+    const schemas = list
+      .map((g) => ({ ...g, grants: schemaGrants(g).filter(keep) }))
+      .filter((g) => g.grants.length > 0);
+    const useCatalog = catalogGrant && keep(catalogGrant) ? catalogGrant : null;
+    if (!useCatalog && schemas.length === 0) continue;
+    const open =
+      (catalogGrant && catalogGrant.present !== 'yes' ? 1 : 0) +
+      list.reduce((n, g) => n + schemaGrants(g).filter((x) => x.present !== 'yes').length, 0);
+    out.push({ catalog, useCatalog, schemas, schemaCount: list.length, open });
+  }
+  return out;
+}
+
+/** One catalog's SQL: its USE CATALOG once, then each schema's grants. */
+export function catalogSql(entry: CatalogGrants): string {
+  const grants = [...(entry.useCatalog ? [entry.useCatalog] : []), ...entry.schemas.flatMap((s) => s.grants)];
+  return copyBlock(grants);
+}
+
+/** Every Step 2 statement for the view, USE CATALOG once per catalog. What Copy and Download use. */
+export function tier2Sql(groups: Tier2GroupLite[], view: Tier2View): string {
+  return groupTier2ByCatalog(groups, view).map(catalogSql).join('\n');
+}
+
+/** `open` hides schemas the scan already covers; `ticked` shows only picks. */
+export type ScopeView = 'open' | 'ticked' | 'all';
+
+/** The picker list after the filter box (case-insensitive substring on `catalog.schema`) and the view. */
+export function filterScopes(scopes: MergedScope[], query: string, view: ScopeView): MergedScope[] {
+  const q = (query ?? '').trim().toLowerCase();
+  return (scopes ?? []).filter((s) => {
+    if (view === 'open' && s.covered) return false;
+    if (view === 'ticked' && !s.selected) return false;
+    return !q || scopeKey(s).toLowerCase().includes(q);
+  });
+}
+
+export interface ScopeCatalogGroup {
+  catalog: string;
+  scopes: MergedScope[];
+  /** Ticked schemas that are not covered (covered ones get their grants anyway). */
+  ticked: number;
+  covered: number;
+  /** Keys a catalog-wide tick may change: the uncovered ones. */
+  selectable: string[];
+}
+
+/** Picker rows: one per catalog, in name order (the input is already sorted by mergeScopes). */
+export function groupScopesByCatalog(scopes: MergedScope[]): ScopeCatalogGroup[] {
+  const byCatalog = new Map<string, MergedScope[]>();
+  for (const s of scopes ?? []) {
+    const list = byCatalog.get(s.catalog) ?? [];
+    list.push(s);
+    byCatalog.set(s.catalog, list);
+  }
+  return [...byCatalog].map(([catalog, list]) => ({
+    catalog,
+    scopes: list,
+    ticked: list.filter((s) => s.selected && !s.covered).length,
+    covered: list.filter((s) => s.covered).length,
+    selectable: list.filter((s) => !s.covered).map(scopeKey),
+  }));
+}
+
+/** The catalog checkbox: `all` when every uncovered schema is ticked, `some` for a partial pick. */
+export function catalogTickState(group: ScopeCatalogGroup): 'all' | 'some' | 'none' {
+  if (group.selectable.length === 0 || group.ticked === 0) return 'none';
+  return group.ticked === group.selectable.length ? 'all' : 'some';
+}
+
+/** Ticks left before the server's per-plan limit. */
+export function capacityLeft(sel: ScopeSelection): number {
+  return Math.max(0, MAX_SELECTED_SCOPES - sel.selected.length);
+}
+
+/** True when ticking every key would pass the limit (keys already ticked cost nothing). */
+export function wouldPassLimit(sel: ScopeSelection, keys: string[]): boolean {
+  const ticked = new Set(sel.selected);
+  return keys.filter((k) => !ticked.has(k)).length > capacityLeft(sel);
+}
+
+/** The catalog checkbox: untick the catalog when it is fully ticked, otherwise tick all of it. */
+export function toggleCatalog(sel: ScopeSelection, group: ScopeCatalogGroup): ScopeSelection {
+  if (catalogTickState(group) === 'all') {
+    const drop = new Set(group.selectable);
+    return { ...sel, selected: sel.selected.filter((k) => !drop.has(k)) };
+  }
+  return selectAll(sel, group.selectable);
 }

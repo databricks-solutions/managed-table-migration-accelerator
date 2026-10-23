@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildGrantsPlan } from './grants-plan.js';
+import { GRANTS_CONCURRENCY, buildGrantsPlan, createStatementCache, limitConcurrency } from './grants-plan.js';
 import { parseScopeParam, showGrantsStatement, tier1Specs } from './grants.pure.js';
 
 const SP = 'a1b2c3d4-0000-1111-2222-333344445555';
@@ -112,5 +112,89 @@ describe('buildGrantsPlan', () => {
   it('convert_authority unreadable → authority_summary null', async () => {
     const plan = await buildGrantsPlan(deps({ authorityRows: () => Promise.resolve(null) }));
     expect(plan.authority_summary).toBeNull();
+  });
+
+  it('reads each securable once: N schemas over C catalogs cost N + C tier-2 statements', async () => {
+    const seen: string[] = [];
+    const targets = [
+      { catalog: 'sales', schema: 'a' },
+      { catalog: 'sales', schema: 'b' },
+      { catalog: 'sales', schema: 'c' },
+      { catalog: 'hr', schema: 'd' },
+    ];
+    const plan = await buildGrantsPlan(
+      deps({
+        distinctTargets: () => Promise.resolve(targets),
+        showGrants: (stmt: string) => {
+          seen.push(stmt);
+          return Promise.resolve([]);
+        },
+      }),
+    );
+    const tier2Stmts = seen.filter((s) => !s.includes('ctl'));
+    expect(tier2Stmts).toHaveLength(targets.length + 2);
+    expect(new Set(tier2Stmts).size).toBe(tier2Stmts.length);
+    expect(plan.tier2.every((g) => g.grants.length === 4)).toBe(true);
+  });
+
+  it(`never has more than ${GRANTS_CONCURRENCY} SHOW GRANTS in flight`, async () => {
+    let inFlight = 0;
+    let peak = 0;
+    const targets = Array.from({ length: 40 }, (_, i) => ({ catalog: `c${i % 5}`, schema: `s${i}` }));
+    await buildGrantsPlan(
+      deps({
+        distinctTargets: () => Promise.resolve(targets),
+        showGrants: async () => {
+          inFlight++;
+          peak = Math.max(peak, inFlight);
+          await new Promise((r) => setTimeout(r, 1));
+          inFlight--;
+          return [];
+        },
+      }),
+    );
+    expect(peak).toBeGreaterThan(1);
+    expect(peak).toBeLessThanOrEqual(GRANTS_CONCURRENCY);
+  });
+});
+
+describe('limitConcurrency', () => {
+  it('a synchronous throw rejects that call and frees its slot', async () => {
+    const run = limitConcurrency((arg: string) => {
+      if (arg === 'bad') throw new Error('boom');
+      return Promise.resolve(arg);
+    }, 1);
+    await expect(run('bad')).rejects.toThrow('boom');
+    await expect(run('ok')).resolves.toBe('ok');
+  });
+});
+
+describe('createStatementCache', () => {
+  it('reuses a result within the lifetime and reloads after it', async () => {
+    let t = 0;
+    let loads = 0;
+    const cache = createStatementCache(60_000, () => t);
+    const load = () => {
+      loads++;
+      return Promise.resolve([{ n: loads }]);
+    };
+    await cache.get('SHOW GRANTS x', load);
+    t = 59_999;
+    expect(await cache.get('SHOW GRANTS x', load)).toEqual([{ n: 1 }]);
+    t = 60_000;
+    expect(await cache.get('SHOW GRANTS x', load)).toEqual([{ n: 2 }]);
+  });
+
+  it('never keeps a failed read, so the next load retries', async () => {
+    const cache = createStatementCache(60_000, () => 0);
+    await expect(cache.get('s', () => Promise.reject(new Error('denied')))).rejects.toThrow('denied');
+    expect(await cache.get('s', () => Promise.resolve([{ ok: true }]))).toEqual([{ ok: true }]);
+  });
+
+  it('refresh reloads and replaces the cached entry', async () => {
+    const cache = createStatementCache(60_000, () => 0);
+    await cache.get('s', () => Promise.resolve([{ v: 'old' }]));
+    expect(await cache.get('s', () => Promise.resolve([{ v: 'new' }]), true)).toEqual([{ v: 'new' }]);
+    expect(await cache.get('s', () => Promise.resolve([{ v: 'other' }]))).toEqual([{ v: 'new' }]);
   });
 });

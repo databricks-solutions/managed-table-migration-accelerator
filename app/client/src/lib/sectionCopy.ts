@@ -601,12 +601,14 @@ export const SECTION_COPY = {
       technical: 'Least-privilege reads plus the single migration_actions write.',
     },
     grantsTier2: {
-      title: 'Step 2 · {scope}',
-      subtitle: 'Schema grants that cover every table in the schema.',
+      title: 'Step 2 · Schemas',
+      subtitle: 'Schema grants that cover every table in each schema, grouped by catalog.',
+      detail: 'Missing only hides the grants already in place. Copy and Download take every grant in the current view, not only the open groups.',
+      technical: 'USE CATALOG is listed once per catalog. Each catalog and schema is checked once with SHOW GRANTS, and the result is reused for up to a minute. Refresh checks again.',
     },
     grantsTier2Selected: {
-      title: 'Step 2 · {scope}',
-      subtitle: 'You picked this schema. Its grants cover every table in it.',
+      title: 'you picked it',
+      subtitle: 'The estate scan has not listed this schema yet. Its grants cover every table in it.',
       technical: 'From the scopes ticked or typed in the panel, before the estate scan lists the schema.',
     },
     grantsOwnership: {

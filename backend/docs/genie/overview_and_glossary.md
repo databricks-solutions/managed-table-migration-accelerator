@@ -1,6 +1,6 @@
 # Overview and Glossary — What This Migration Is, Its Terms, and a Table's Lifecycle
 
-This document answers "what is this migration, who runs it, and what does this word mean?" It explains what the External → Managed migration does and the ground rules it works under, the estate → wave → table hierarchy, the difference between a table's lifecycle state and its eligibility, every lifecycle state and the moves allowed between them, how the tooling is built, the two surfaces (jobs and app) that drive it, and a glossary of the terms that recur in answers. Each term points to the document that explains it in full.
+This document answers "what is this migration, who runs it, and what does this word mean?" It explains what the External → Managed migration does and the ground rules it works under, the estate → wave → table hierarchy, the difference between a table's lifecycle state and its eligibility, every lifecycle state and the moves allowed between them, how the tooling is built, the three surfaces (jobs, the app and Genie Code) that drive it, and a glossary of the terms that recur in answers. Each term points to the document that explains it in full.
 
 ## What the migration does
 
@@ -118,9 +118,9 @@ Stage order and what each stage may do are in [Stages and gates](stages_and_gate
 - **The config handshake.** The jobs and the app agree on where the control plane lives through `migration_control_config` (catalog, schema, warehouse id, dashboard id, Genie space id). The profiler and the setup job each upsert only their own fields, so neither blanks the other's; the app and the cockpit read it at start.
 - **Idempotent writes.** Manifest enrichment uses update-only MERGEs keyed on `full_name`; detail tables are rewritten per in-scope table; the action queue and the ledgers MERGE on deterministic keys and never hard-delete (a cleared signal flips to `OBSOLETE`, a completed freeze to `UNFROZEN`). The control schema auto-evolves: a new column is added by `ALTER TABLE ADD COLUMNS` and existing rows read NULL. No table is recreated.
 
-## Two ways to drive it: jobs and the app
+## Ways to drive it: jobs, the app and Genie Code
 
-There is one engine and two front doors.
+There is one engine and three front doors.
 
 - **The jobs are the engine.** Each stage is a Workflow job running a notebook over the shared modules. A human triggers it; it re-checks every safety gate at run time, changes only what it is allowed to, and writes the results and the audit trail. Everything can be done from the jobs alone; the app is optional. The interactive cockpit notebook is the guided driver over the jobs (see [Next step and operations](next_step_and_operations.md)).
 - **The app reads and triggers.** The control-plane app (a Databricks App) has three responsibilities and only three:
@@ -129,6 +129,7 @@ There is one engine and two front doors.
   3. **Write** a narrow slice of operator metadata on the action queue (notes and assignee) and nothing else.
 
   The app never runs `SET MANAGED`, never changes a table's state, never writes the audit log, and never rewrites the plan, the ledgers or the manifest. When an operator clicks Convert in the app, the app asks the deployed job to run, behind the same gates as a command-line run.
+- **Genie Code drives the app in plain language.** The app is also an MCP server, so Genie Code (the Databricks workspace assistant, not this Agent) can read status and launch stages through the app's tools after a user connects it as a custom MCP server. It reuses the app's reads and triggers and adds no authority: every tool that changes something needs an explicit `confirm=true`, and the job re-checks every gate.
 - **App reflects, job enforces.** The app's view of readiness is a reflection at read time. Every mutating job re-evaluates its fail-closed gates at mutation time and refuses if anything is unsafe, so a stale screen can never cause an unsafe conversion; the worst case is that the job declines and the app shows why.
 - **Which to use.** Use the jobs for the actual work, automation and precise parameter control. Use the app for at-a-glance status, triaging blockers and assigning owners, reading the runbook, and one-click launches with a confirmation dialog. The two share one control plane, so they can be mixed freely: run from the CLI and watch in the app, or launch from the app and read the audit log in a notebook.
 

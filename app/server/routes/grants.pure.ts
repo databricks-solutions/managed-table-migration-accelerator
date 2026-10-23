@@ -56,6 +56,42 @@ export function tier2Specs(catalog: string, schema: string): GrantSpec[] {
   ];
 }
 
+export interface Scope {
+  catalog: string;
+  schema: string;
+}
+
+/**
+ * A plain `catalog.schema` name. App-only (not part of the grants.py port). The match is strict
+ * because requested scopes are interpolated unquoted into SHOW GRANTS statements the server
+ * executes. Keep in lockstep with the client's parseTypedScope (shared golden cases).
+ */
+export const SCOPE_PATTERN = /^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$/;
+export const MAX_REQUESTED_SCOPES = 50;
+
+/**
+ * The `scopes` query parameter (comma-separated, possibly repeated) as validated scopes:
+ * entries that do not match SCOPE_PATTERN are dropped, duplicates collapse, at most
+ * MAX_REQUESTED_SCOPES are kept.
+ */
+export function parseScopeParam(raw: unknown): Scope[] {
+  const parts = (Array.isArray(raw) ? raw : [raw])
+    .filter((v): v is string => typeof v === 'string')
+    .flatMap((v) => v.split(','));
+  const out: Scope[] = [];
+  const seen = new Set<string>();
+  for (const part of parts) {
+    const m = SCOPE_PATTERN.exec(part.trim());
+    if (!m) continue;
+    const key = `${m[1]}.${m[2]}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push({ catalog: m[1], schema: m[2] });
+    if (out.length >= MAX_REQUESTED_SCOPES) break;
+  }
+  return out;
+}
+
 /** A single additive GRANT keyed by the SP client-id UUID, backtick-escaped (dashes require it). */
 export function grantStatement(spec: GrantSpec, spClientId: string): string {
   return `GRANT ${spec.privilege} ON ${spec.securableType} ${spec.securableFqn} TO \`${spClientId}\``;

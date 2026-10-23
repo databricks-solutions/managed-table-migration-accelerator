@@ -2,8 +2,29 @@ import { describe, expect, it } from 'vitest';
 import {
   aggregateVisibility,
   authoritySummarySql,
+  tableFromSummary,
   tallyAuthority,
 } from './estate.pure.js';
+
+describe('tableFromSummary', () => {
+  it('splits a three-part full name and keeps the table type', () => {
+    expect(tableFromSummary('main.sales.orders', 'EXTERNAL')).toEqual({
+      catalog: 'main',
+      schema: 'sales',
+      tableType: 'EXTERNAL',
+    });
+  });
+
+  it('rejects names that are not exactly three non-empty parts', () => {
+    for (const bad of ['main.sales', 'a.b.c.d', 'main..t', '', undefined, 42]) {
+      expect(tableFromSummary(bad, 'EXTERNAL')).toBeNull();
+    }
+  });
+
+  it('records a missing table type as blank, so it never counts as EXTERNAL', () => {
+    expect(tableFromSummary('m.s.t', undefined)?.tableType).toBe('');
+  });
+});
 
 describe('aggregateVisibility', () => {
   it('counts EXTERNAL tables per catalog.schema, sorted, ignoring non-EXTERNAL', () => {

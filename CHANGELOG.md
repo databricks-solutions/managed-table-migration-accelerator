@@ -21,6 +21,20 @@ release may change job parameters or control-table columns; every such change is
   bullets. `docs/00-installation.md` adds a diagram of which identity acts on what and a
   step-by-step table of what each step needs; `docs/07b-convert-permissions.md` adds the lifecycle
   of an Authorize grant through the 14-day window to its revoke at cleanup.
+- **Settings → "What you can see" now generates grants.** Tick a discovered schema, or type one,
+  and its Tier 2 grant SQL appears before the first profiler run. Previously "Add scope" only
+  added a badge. Discovered schemas are unticked suggestions (Tier 2 includes `MANAGE`), and the
+  selection is kept in the browser. The scan lists each catalog's table summaries eight at a time
+  within a 20-second deadline instead of walking every schema one call at a time; a stopped scan
+  says how much it covered instead of looking complete. "No scopes yet." no longer shows while
+  the scan is still running, invalid typed names explain why, and typed scopes can be removed.
+  `GET /api/grants/plan` accepts an optional `scopes` parameter (validated server-side, max 50).
+- **Genie Code, front and center.** The README gains a "Drive it with Genie Code" section (what the
+  app's MCP server is, how to connect it, example prompts, the `confirm=true` safety model).
+  `docs/15-genie-code-mcp.md` adds a "What you can ask" table mapping prompts to tools; the
+  overview, app, installation (connect step and the `mcp_tier` variable) and Genie knowledge
+  pages now name Genie Code as the third way to drive the migration and separate it from the
+  app's Ask Genie button.
 
 ## [0.1.0] - 2026-10-22
 

@@ -10,6 +10,37 @@ This page is the operator narrative. The **design of record and the exact regist
 in [`backend/docs/integration/genie-code-mcp.md`](../backend/docs/integration/genie-code-mcp.md);
 this page links into it rather than restating it.
 
+Genie Code is not the app's **Ask Genie** button. Ask Genie is a Genie space docked in the app that
+answers questions about the control tables (see [Dashboard and Genie](./16-dashboard-and-genie.md)).
+Genie Code is the workspace assistant; through this MCP server it calls the migration's own tools and
+can launch its jobs.
+
+## What you can ask
+
+You ask in plain language; Genie Code picks the tool. Some examples, with the tools behind them:
+
+| Ask | Tools it calls | Changes anything? |
+|---|---|---|
+| "Where does the migration stand? What should I do next?" | `mtm_get_estate_status`, `mtm_get_next_step` | No |
+| "What is blocking `main.sales`, and who has to fix it?" | `mtm_list_blockers`, `mtm_list_open_actions`, `mtm_get_convert_permissions` | No |
+| "Show me the waves and what is in wave 3." | `mtm_list_waves`, `mtm_get_wave_members`, `mtm_get_readiness` | No |
+| "Which tables are read by path, and from where?" | `mtm_get_path_access` | No |
+| "Give me the runbook of manual steps." | `mtm_get_runbook` | No |
+| "Rescan the estate", "Re-plan the waves", "Dry-run `main.sales`" | `mtm_run_profiler`, `mtm_plan_waves`, `mtm_dry_run` | No tables (these stages only read and record) |
+| "Can I convert `main.sales`?" | `mtm_conversion_preflight`, always first for any convert request | No |
+| "Freeze, authorize and convert wave 3." | `mtm_freeze`, `mtm_authorize_convert`, `mtm_convert` | Yes, each behind `confirm=true` |
+| "Finish wave 3: restart streams, re-share, set up external readers, turn on clustering." | `mtm_unfreeze`, `mtm_reshare`, `mtm_enable_compat`, `mtm_enable_optimization` | Yes, each behind `confirm=true` |
+| "Roll back `main.sales.orders`; the reason is ..." | `mtm_rollback` | Yes, behind `confirm=true`, within 14 days |
+| "Did that run finish?" | `mtm_get_run_status` | No |
+
+Three rules hold for every answer. Genie Code signs in as **you** (so you need `CAN_USE` on the app)
+and you are recorded as the operator, while the reads and job launches themselves run as the app's
+service principal, exactly as when you click in the app. A tool that changes something only returns
+a "needs confirmation" preview until it is called again with `confirm=true`, and the job it launches
+re-checks every gate. And
+`mtm_convert` accepts only a selector: it rejects every gate-downgrade parameter, so the assistant
+can never weaken a safety gate. With `mcp_tier=v1` only the "No" rows are available.
+
 ## What ships in the bundle
 
 The MCP server is part of the app (`app/server/mcp/`), mounted at `POST /mcp`. The bundle wires up

@@ -7,12 +7,13 @@
 Convert Unity Catalog **EXTERNAL** tables to **MANAGED** tables with
 `ALTER TABLE ... SET MANAGED`, safely and at estate scale. One Databricks Asset Bundle discovers
 your external tables, finds what would break, plans the conversion in waves, converts them, and
-lets you roll back for 14 days. A person approves every change.
+lets you roll back for 14 days. A person approves every change. Drive it from the app, the
+notebooks, or in plain language with **Genie Code**: the app doubles as an MCP server.
 
 ![The app's Overview page: migration progress at the top, and the recommended next step (convert one schema) below it](docs/images/overview.png)
 
 **[Install](#install)** · **[Your first migration](#your-first-migration)** ·
-**[Documentation](./docs/README.md)**
+**[Drive it with Genie Code](#drive-it-with-genie-code)** · **[Documentation](./docs/README.md)**
 
 ## Who it is for
 
@@ -61,7 +62,7 @@ control tables.
 |---|---|---|
 | **The app** (a Databricks App) | Most teams. It shows where the migration stands, recommends the next step, and launches it. | [Using the app](./docs/12-using-the-app.md) |
 | **Notebooks and jobs** | Running without the app, scripting, or CI. `09_cockpit` is a guided notebook. | [Using the notebooks](./docs/11-using-notebooks.md) |
-| **Genie Code** (MCP) | Asking an assistant to read status or launch a step; changes still need `confirm=true`. | [Genie Code MCP](./docs/15-genie-code-mcp.md) |
+| **Genie Code** (MCP), built into the app | Asking in plain language: "what's next?", "what blocks this schema?", "convert this wave". Changes still need `confirm=true`. | [Drive it with Genie Code](#drive-it-with-genie-code) |
 
 ## Prerequisites
 
@@ -175,6 +176,39 @@ databricks bundle run job_05_validate     -t dev --profile <profile> \
 After the pilot, scale out wave by wave, or convert several non-conflicting waves at once with
 [Bulk convert](./docs/14-bulk-convert.md). The end-to-end runbook is the
 [Estate migration playbook](./docs/13-estate-migration-playbook.md).
+
+## Drive it with Genie Code
+
+The app is also an **MCP server**, so Genie Code, the Databricks assistant, can run the migration
+for you in plain language. It ships with the bundle; there is nothing else to install.
+
+```mermaid
+flowchart LR
+  you(["You, in Genie Code"]) -- "plain language" --> genie["Genie Code"]
+  genie -- "MCP tools" --> app["Migration app<br/>/mcp"]
+  app -- "reads" --> control[("Control tables")]
+  app -- "launches, after confirm=true" --> jobs["Migration jobs<br/>re-check every gate"]
+```
+
+**Connect it** (no account admin needed): in Genie Code, open **Settings → Custom MCP server**,
+choose `mcp-managed-table-migration` (or paste the app's `/mcp` URL) and save. It signs in as you,
+so anyone with `CAN_USE` on the app can connect, and each run records who asked for it.
+
+**Then ask**, for example:
+
+- "Where does the migration stand, and what should I do next?"
+- "What is blocking `main.sales`, and who needs to fix it?"
+- "Can I convert `main.sales`?" (it runs a preflight first and tells you what is still open)
+- "Freeze, convert and validate the next wave." (each step waits for your confirmation)
+
+Reading is free. Every tool that changes something needs an explicit `confirm=true`, and the job
+re-checks every safety gate exactly as it does when you click in the app. To allow reads and
+non-mutating stages only, deploy with `--var="mcp_tier=v1"`. Full guide:
+[Genie Code MCP](./docs/15-genie-code-mcp.md).
+
+> [!TIP]
+> Genie Code is not the app's **Ask Genie** button. Ask Genie answers questions about the control
+> tables from a Genie space; Genie Code calls the migration's tools and can launch its jobs.
 
 ## Rollback and the 14-day window
 

@@ -111,7 +111,8 @@ async function main() {
         // on a fresh deploy instead of a red error. See routes/readiness.ts.
         registerReadinessRoute(app);
         // GET /api/grants/plan — generates Tier 1/2 grant SQL parameterized from the SP identity +
-        // control/target namespaces, each securable annotated present via SHOW GRANTS. Read-only;
+        // control/target namespaces (manifest targets plus the optional, validated `scopes` the
+        // admin ticked), each securable annotated present via SHOW GRANTS. Read-only;
         // the app never executes a GRANT (SR12). See routes/grants-plan.ts.
         registerGrantsPlanRoute(app);
         // GET /api/estate/obo-discovery — enumerates the EXTERNAL tables the SIGNED-IN admin can

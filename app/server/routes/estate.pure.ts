@@ -19,6 +19,17 @@ export interface SchemaVisibility {
   externalTableCount: number;
 }
 
+/**
+ * One UC table-summary (`full_name` = `catalog.schema.table`, `table_type`) as a DiscoveredTable,
+ * or null when the name is not exactly three non-empty parts (UC names cannot contain dots).
+ */
+export function tableFromSummary(fullName: unknown, tableType: unknown): DiscoveredTable | null {
+  if (typeof fullName !== 'string') return null;
+  const parts = fullName.split('.');
+  if (parts.length !== 3 || parts.some((p) => p.trim() === '')) return null;
+  return { catalog: parts[0], schema: parts[1], tableType: typeof tableType === 'string' ? tableType : '' };
+}
+
 /** Count EXTERNAL tables per catalog.schema, sorted; non-EXTERNAL ignored (case-insensitive). */
 export function aggregateVisibility(rows: DiscoveredTable[]): SchemaVisibility[] {
   const counts = new Map<string, number>();

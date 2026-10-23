@@ -21,9 +21,9 @@ Getting that right across a whole estate (hundreds or thousands of tables, some 
 some shared, some read by non-Databricks engines) is what this tooling exists to do
 safely, idempotently, and with a full audit trail.
 
-## The two surfaces
+## The surfaces
 
-There is one engine and two front doors onto it.
+There is one engine and three front doors onto it.
 
 - **Notebooks and jobs are the engine.** Every stage is a Databricks Workflow job wrapping a
   notebook under `backend/notebooks/`. A **human** triggers conversions from these jobs. The
@@ -32,6 +32,10 @@ There is one engine and two front doors onto it.
   same control Delta tables and triggers the same jobs. Its guiding sentence is "the app
   reflects; the job enforces": it surfaces state and launches one job per click, and the
   job re-checks every gate independently.
+- **Genie Code drives the same app in plain language.** The app is also an MCP server
+  (`POST /mcp`), so Genie Code, the Databricks assistant, can read status and launch stages
+  through governed tools. Every tool that changes something needs `confirm=true`, and the job
+  still enforces every gate. See [Genie Code MCP](./15-genie-code-mcp.md).
 
 > **You build the tooling; a human runs the conversion.** There is no unattended convert
 > path. Stage `04_convert` requires an explicit selector and a confirmation flag, and the

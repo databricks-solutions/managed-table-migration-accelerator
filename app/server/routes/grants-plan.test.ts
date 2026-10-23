@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { buildGrantsPlan } from './grants-plan.js';
-import { showGrantsStatement, tier1Specs } from './grants.pure.js';
+import { parseScopeParam, showGrantsStatement, tier1Specs } from './grants.pure.js';
 
 const SP = 'a1b2c3d4-0000-1111-2222-333344445555';
 
@@ -57,6 +57,56 @@ describe('buildGrantsPlan', () => {
     const plan = await buildGrantsPlan(deps({ distinctTargets: () => Promise.resolve([]) }));
     expect(plan.tier2).toEqual([]);
     expect(plan.targets_known).toBe(false);
+  });
+
+  it('labels profiled targets as scan', async () => {
+    const plan = await buildGrantsPlan(deps());
+    expect(plan.tier2.map((t) => t.source)).toEqual(['scan']);
+  });
+
+  it('builds tier2 for selected scopes before the profiler runs, without claiming targets are known', async () => {
+    const plan = await buildGrantsPlan(
+      deps({
+        distinctTargets: () => Promise.resolve([]),
+        requestedScopes: [{ catalog: 'main', schema: 'sales' }],
+      }),
+    );
+    expect(plan.targets_known).toBe(false);
+    expect(plan.tier2).toHaveLength(1);
+    expect(plan.tier2[0]).toMatchObject({ catalog: 'main', schema: 'sales', source: 'selected' });
+    expect(plan.tier2[0].grants.map((g) => g.privilege)).toEqual(['USE CATALOG', 'USE SCHEMA', 'SELECT', 'MANAGE']);
+  });
+
+  it('a selected scope already profiled stays one scan group, never a duplicate', async () => {
+    const plan = await buildGrantsPlan(
+      deps({
+        requestedScopes: [
+          { catalog: 'sales', schema: 'orders' },
+          { catalog: 'hr', schema: 'people' },
+        ],
+      }),
+    );
+    expect(plan.tier2.map((t) => [`${t.catalog}.${t.schema}`, t.source])).toEqual([
+      ['sales.orders', 'scan'],
+      ['hr.people', 'selected'],
+    ]);
+  });
+
+  it('never runs SHOW GRANTS for a scope parseScopeParam rejected', async () => {
+    const seen: string[] = [];
+    await buildGrantsPlan(
+      deps({
+        distinctTargets: () => Promise.resolve([]),
+        requestedScopes: parseScopeParam('main.sales,x.y TO `evil`,a.b; DROP TABLE t'),
+        showGrants: (stmt: string) => {
+          seen.push(stmt);
+          return Promise.resolve([]);
+        },
+      }),
+    );
+    const tier2Stmts = seen.filter((s) => !s.includes('ctl'));
+    expect(tier2Stmts.length).toBeGreaterThan(0);
+    expect(tier2Stmts.every((s) => / ON (CATALOG main|SCHEMA main\.sales)$/.test(s))).toBe(true);
   });
 
   it('convert_authority unreadable → authority_summary null', async () => {

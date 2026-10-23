@@ -604,13 +604,19 @@ export const SECTION_COPY = {
       title: 'Step 2 · {scope}',
       subtitle: 'Schema grants that cover every table in the schema.',
     },
+    grantsTier2Selected: {
+      title: 'Step 2 · {scope}',
+      subtitle: 'You picked this schema. Its grants cover every table in it.',
+      technical: 'From the scopes ticked or typed in the panel, before the estate scan lists the schema.',
+    },
     grantsOwnership: {
       title: 'Convert permission',
       subtitle: 'Converting needs ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes.',
     },
     grantsScope: {
       title: 'What you can see',
-      subtitle: 'The schemas your own account can see.',
+      subtitle: 'Schemas with external tables your own account can see. Tick the ones to grant.',
+      technical: 'Listed with your sign-in, so it shows only what you can see. Ticked schemas get their Step 2 grants.',
     },
   },
   how: {

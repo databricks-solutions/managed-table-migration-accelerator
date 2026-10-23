@@ -28,6 +28,9 @@ release may change job parameters or control-table columns; every such change is
   within a 20-second deadline instead of walking every schema one call at a time; a stopped scan
   says how much it covered instead of looking complete. "No scopes yet." no longer shows while
   the scan is still running, invalid typed names explain why, and typed scopes can be removed.
+- **Settings → "What you can see" marks schemas the profiler already lists.** Their chips read
+  "already covered by the scan" instead of offering a tick that changed nothing, because their
+  grants are already in Step 2. "Select all" and the selected count skip them.
   `GET /api/grants/plan` accepts an optional `scopes` parameter (validated server-side, max 50).
 - **Genie Code, front and center.** The README gains a "Drive it with Genie Code" section (what the
   app's MCP server is, how to connect it, example prompts, the `confirm=true` safety model).

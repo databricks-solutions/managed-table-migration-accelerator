@@ -14,6 +14,8 @@ export interface MergedScope extends Scope {
   /** External tables the admin can see in it; null for a typed scope the scan did not list. */
   externalTableCount: number | null;
   selected: boolean;
+  /** The profiler already lists this schema, so its Step 2 grants are shown regardless of ticks. */
+  covered: boolean;
 }
 
 /** What the admin picked: typed scopes plus the keys (`catalog.schema`) that are ticked. Persisted. */
@@ -61,9 +63,13 @@ const byName = (a: Scope, b: Scope) => a.catalog.localeCompare(b.catalog) || a.s
 /**
  * Every chip the panel shows: discovered scopes, typed scopes, and any saved selection the scan
  * did not list this time (kept, so a truncated scan never silently drops a pick). Deduped by
- * key, manual wins the source label, sorted.
+ * key, manual wins the source label, sorted. `covered` marks schemas the profiler already lists.
  */
-export function mergeScopes(obo: SchemaVisibilityLite[], selection: ScopeSelection): MergedScope[] {
+export function mergeScopes(
+  obo: SchemaVisibilityLite[],
+  selection: ScopeSelection,
+  covered: ReadonlySet<string> = new Set(),
+): MergedScope[] {
   const selected = new Set(selection.selected);
   const counts = new Map((obo ?? []).map((o) => [scopeKey(o), o.externalTableCount ?? null]));
   const map = new Map<string, MergedScope>();
@@ -75,6 +81,7 @@ export function mergeScopes(obo: SchemaVisibilityLite[], selection: ScopeSelecti
       source,
       externalTableCount: counts.get(key) ?? null,
       selected: selected.has(key),
+      covered: covered.has(key),
     });
   };
   for (const o of obo ?? []) put(o, 'obo');
@@ -122,6 +129,16 @@ export function scopesQuery(sel: ScopeSelection): string {
     .sort(byName)
     .map(scopeKey)
     .join(',');
+}
+
+/** Keys of the Tier 2 groups the profiler already lists (`source: 'scan'`). */
+export function scanCoveredKeys(groups: (Scope & { source: 'scan' | 'selected' })[]): Set<string> {
+  return new Set(groups.filter((g) => g.source === 'scan').map(scopeKey));
+}
+
+/** The keys "Select all" may tick: covered schemas already get their grants, so they are skipped. */
+export function selectableKeys(scopes: MergedScope[]): string[] {
+  return scopes.filter((s) => !s.covered).map(scopeKey);
 }
 
 /**

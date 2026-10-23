@@ -17,8 +17,10 @@ import {
   presentTone,
   removeTyped,
   saveSelection,
+  scanCoveredKeys,
   scopesQuery,
   selectAll,
+  selectableKeys,
   toggleScope,
   visibleTier2,
 } from './grantsPanel.pure';
@@ -57,14 +59,14 @@ describe('mergeScopes', () => {
         { typed: [{ catalog: 'sales', schema: 'orders' }], selected: ['sales.orders'] },
       ),
     ).toEqual([
-      { catalog: 'sales', schema: 'orders', source: 'manual', externalTableCount: 4, selected: true },
-      { catalog: 'sales', schema: 'ref', source: 'obo', externalTableCount: 1, selected: false },
+      { catalog: 'sales', schema: 'orders', source: 'manual', externalTableCount: 4, selected: true, covered: false },
+      { catalog: 'sales', schema: 'ref', source: 'obo', externalTableCount: 1, selected: false, covered: false },
     ]);
   });
 
   it('keeps a saved pick the scan did not list this time', () => {
     expect(mergeScopes([], { typed: [], selected: ['hr.people'] })).toEqual([
-      { catalog: 'hr', schema: 'people', source: 'manual', externalTableCount: null, selected: true },
+      { catalog: 'hr', schema: 'people', source: 'manual', externalTableCount: null, selected: true, covered: false },
     ]);
   });
 
@@ -119,6 +121,50 @@ function memoryStorage(initial: Record<string, string> = {}) {
     },
   };
 }
+
+describe('scan coverage', () => {
+  const tier2 = [
+    { catalog: 'm', schema: 'profiled', source: 'scan' as const },
+    { catalog: 'm', schema: 'picked', source: 'selected' as const },
+  ];
+
+  it('scanCoveredKeys lists only the profiled groups', () => {
+    expect([...scanCoveredKeys(tier2)]).toEqual(['m.profiled']);
+  });
+
+  it('mergeScopes marks a discovered schema the profiler already lists as covered', () => {
+    const merged = mergeScopes(
+      [
+        { catalog: 'm', schema: 'profiled', externalTableCount: 3 },
+        { catalog: 'm', schema: 'new', externalTableCount: 1 },
+      ],
+      EMPTY_SELECTION,
+      scanCoveredKeys(tier2),
+    );
+    expect(merged.map((s) => [s.schema, s.covered])).toEqual([
+      ['new', false],
+      ['profiled', true],
+    ]);
+  });
+
+  it('selectableKeys skips covered schemas, so Select all never ticks one', () => {
+    const merged = mergeScopes(
+      [
+        { catalog: 'm', schema: 'profiled', externalTableCount: 3 },
+        { catalog: 'm', schema: 'new', externalTableCount: 1 },
+      ],
+      EMPTY_SELECTION,
+      new Set(['m.profiled']),
+    );
+    expect(selectableKeys(merged)).toEqual(['m.new']);
+  });
+
+  it('nothing is covered before the grant plan loads', () => {
+    expect(mergeScopes([{ catalog: 'm', schema: 'profiled', externalTableCount: 3 }], EMPTY_SELECTION)[0].covered).toBe(
+      false,
+    );
+  });
+});
 
 describe('visibleTier2', () => {
   const groups = [

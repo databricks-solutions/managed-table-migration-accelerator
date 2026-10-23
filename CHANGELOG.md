@@ -17,6 +17,10 @@ release may change job parameters or control-table columns; every such change is
   `docs/`, including two new pages: `docs/00-installation.md` (install, permissions, configuration,
   troubleshooting) and `docs/16-dashboard-and-genie.md`. `app/docs/app-sp-grants.md` drops the
   stale claim that `SET MANAGED` requires table ownership.
+- **Permissions, pictured.** The README's permissions section is now a one-glance diagram and three
+  bullets. `docs/00-installation.md` adds a diagram of which identity acts on what and a
+  step-by-step table of what each step needs; `docs/07b-convert-permissions.md` adds the lifecycle
+  of an Authorize grant through the 14-day window to its revoke at cleanup.
 
 ## [0.1.0] - 2026-10-22
 

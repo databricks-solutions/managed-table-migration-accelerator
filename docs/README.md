@@ -48,7 +48,7 @@ These are still separate, deliberate launches, with streaming waves kept serial.
 | Page | What it covers |
 |---|---|
 | [00 - Installation](./00-installation.md) | Prerequisites, who needs which permissions, bundle variables, the two install paths, the success check, troubleshooting, and uninstalling. |
-| [01 - Overview](./01-overview.md) | What the migration is; the golden safety rules and non-negotiable `SET MANAGED` facts; the two surfaces. |
+| [01 - Overview](./01-overview.md) | What the migration is; the golden safety rules and non-negotiable `SET MANAGED` facts; the three surfaces (jobs, app, Genie Code). |
 | [02 - Architecture](./02-architecture.md) | Manifest-driven design; pure logic + thin Spark edges; module map; the one bundle; two system diagrams. |
 | [03 - Discovery and signals](./03-discovery-and-signals.md) | The profiler: discovering EXTERNAL tables, hard-signal eligibility, the signals it writes, the config handshake. |
 | [04 - Streaming](./04-streaming.md) | Detecting, stopping, converting, and restarting streaming readers/writers. |

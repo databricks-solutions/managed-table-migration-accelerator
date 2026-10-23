@@ -317,6 +317,15 @@ SP can see *after* grants, discovered by the profiler.
    bring the SP up to the admin's visibility.
    - Requires adding to `app/resources/app.yml` `user_api_scopes`:
      `catalog.catalogs:read`, `catalog.schemas:read`, `catalog.tables:read`.
+   - **How it lists (built):** the paged catalog list, then one paged
+     `GET /api/2.1/unity-catalog/table-summaries?catalog_name=…` per catalog (full name + table
+     type, up to 10k per page), eight catalogs at a time, inside a 20-second deadline and a
+     2,000-call cap (`estate-discovery.ts` `walkCatalogs`). A catalog the admin cannot read is
+     counted as `catalogsDenied`, never fatal. When the deadline or the cap stops the walk, the
+     response carries `truncated: true` and `coverage` (catalogs total / scanned / denied) and the
+     panel says "Scanned X of Y catalogs" — a partial list is never presented as complete. Results
+     are cached per user (keyed by the forwarded email, never the token) for 5 minutes;
+     `?refresh=1` (the panel's Refresh button) rescans.
    - **OBO is used for discovery/attribution only — never to trigger jobs.** Authorization
      stays App `CAN_USE`; execution stays the SP.
    - **A grant the SP can't give itself still needs a person.** OBO can *enumerate* tables,
@@ -378,6 +387,18 @@ it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 down
 - **OBO list is labelled as the admin's visibility, never "the estate,"** and always sits
   next to a manual "add catalog/schema" input (discovery layer 2) so narrow OBO visibility
   never caps the scope.
+- **Selection is opt-in (built).** Discovered schemas render as unticked suggestion chips with
+  their external-table count; a typed scope is ticked on add. Only ticked scopes are sent as
+  `GET /api/grants/plan?scopes=cat.sch,…`, and the plan returns Tier 2 for the manifest targets
+  plus those scopes (each group labelled `source: scan | selected`; a scope already in the
+  manifest stays one `scan` group). Tier 2 includes `MANAGE`, so nothing is pre-selected; "Select
+  all" is an explicit click. The server re-validates every scope against a strict
+  `catalog.schema` pattern (letters, digits, underscores) and caps the list at 50
+  (`grants.pure.ts` `parseScopeParam`), because the names are interpolated into `SHOW GRANTS`
+  statements the SP executes; the client mirrors the pattern (golden cases in
+  `app/server/routes/fixtures/scope_cases.json`) and shows why a typed name was rejected.
+  The selection is saved in the browser (`localStorage`), never in a control table, and
+  `targets_known` still means "the profiler has listed targets".
 - **Prefer schema-grain grants** in the generated SQL (they cover tables OBO didn't list);
   the convert-permission grant script is the only per-table artifact, grouped by who must run
   each statement.
@@ -386,7 +407,9 @@ it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 down
   from the stored `convert_authority` verdicts (mirrors the runbook / comms-feed download). This
   handles "thousands of tables" without a giant on-screen block.
 - **Honest states (SR7):** before the profiler runs the target list is unknown — say so,
-  don't emit an empty grant block. A `SHOW GRANTS` verification read (like `job_99_setup`)
+  don't emit an empty grant block; the Tier 2 notice points at the scope picker instead. The
+  picker shows one state per situation: checking (spinner only), unavailable (with the reason),
+  nothing visible, partial scan (coverage text), and the listed schemas. A `SHOW GRANTS` verification read (like `job_99_setup`)
   can flag which Tier 1 grants have / haven't landed.
 
 ---
@@ -420,6 +443,8 @@ change set:
   generates/verifies Tier 1/2 grant SQL + the convert-permission grant script, and `GET /api/estate/obo-discovery`
   pre-fills scope from the forwarded token (`user_api_scopes` now includes the three
   `catalog.*:read` scopes). Discovery-only; never triggers a job; execution stays the SP.
+  Ticked or typed scopes feed `GET /api/grants/plan?scopes=…`, so Tier 2 SQL exists before the
+  first profiler run.
 - ✅ **Ownership classification + owner notices — done (permissioning Plan 3).** The profiler
   captures `table_manifest.table_owner`; `migration.ownership.classify_change` buckets each table
   `NONE`/`JOIN_GROUP`/`LEASE`; `migration.comms.build_owner_notice` drafts `comms_feed.owner_notice`.

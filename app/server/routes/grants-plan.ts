@@ -3,7 +3,9 @@ import { getExecutionContext } from '@databricks/appkit';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 import {
   type GrantSpec,
+  type Scope,
   grantStatement,
+  parseScopeParam,
   showGrantsStatement,
   spHasGrant,
   tier1Specs,
@@ -27,7 +29,8 @@ export interface GrantsPlanResponse {
   sp_client_id: string | null;
   control: { catalog: string; schema: string };
   tier1: GrantStatus[];
-  tier2: { catalog: string; schema: string; grants: GrantStatus[] }[];
+  /** `scan` = a profiled target in table_manifest; `selected` = a scope the admin picked in the panel. */
+  tier2: { catalog: string; schema: string; source: 'scan' | 'selected'; grants: GrantStatus[] }[];
   /** Convert permission over the tables still to convert; null when convert_authority is unreadable. */
   authority_summary: AuthoritySummary | null;
   targets_known: boolean;
@@ -40,6 +43,8 @@ export interface GrantsPlanDeps {
   currentUser: () => Promise<string | null>;
   /** Distinct in-scope EXTERNAL target catalog/schemas from table_manifest; [] when none/absent. */
   distinctTargets: () => Promise<{ catalog: string; schema: string }[]>;
+  /** Scopes the admin selected in the panel, already validated by parseScopeParam. */
+  requestedScopes?: Scope[];
   /** Run a SHOW GRANTS statement and return its rows. Throws → the caller maps to 'unknown'. */
   showGrants: (stmt: string) => Promise<Record<string, unknown>[]>;
   /** authoritySummarySql rows; null when convert_authority is absent (not bootstrapped yet). */
@@ -73,11 +78,20 @@ export async function buildGrantsPlan(deps: GrantsPlanDeps): Promise<GrantsPlanR
   const sp = await deps.currentUser();
   const targets = await deps.distinctTargets();
 
+  const scanKeys = new Set(targets.map((t) => `${t.catalog}.${t.schema}`));
+  const tier2Targets = [
+    ...targets.map((t) => ({ ...t, source: 'scan' as const })),
+    ...(deps.requestedScopes ?? [])
+      .filter((s) => !scanKeys.has(`${s.catalog}.${s.schema}`))
+      .map((s) => ({ ...s, source: 'selected' as const })),
+  ];
+
   const tier1 = await Promise.all(tier1Specs(deps.catalog, deps.schema).map((s) => statusFor(s, sp, deps.showGrants)));
   const tier2 = await Promise.all(
-    targets.map(async (t) => ({
+    tier2Targets.map(async (t) => ({
       catalog: t.catalog,
       schema: t.schema,
+      source: t.source,
       grants: await Promise.all(tier2Specs(t.catalog, t.schema).map((s) => statusFor(s, sp, deps.showGrants))),
     })),
   );
@@ -137,7 +151,7 @@ async function spQuery(statement: string): Promise<Record<string, unknown>[]> {
 }
 
 export function registerGrantsPlanRoute(app: Application): void {
-  app.get('/api/grants/plan', (_req: Request, res: Response) => {
+  app.get('/api/grants/plan', (req: Request, res: Response) => {
     void (async () => {
       const catalog = resolveMigrationCatalog();
       const schema = resolveMigrationSchema();
@@ -145,6 +159,7 @@ export function registerGrantsPlanRoute(app: Application): void {
       const plan = await buildGrantsPlan({
         catalog,
         schema,
+        requestedScopes: parseScopeParam(req.query.scopes),
         currentUser: async () => {
           try {
             const rows = await spQuery('SELECT current_user() AS u');

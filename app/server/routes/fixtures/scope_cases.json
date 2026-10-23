@@ -1,0 +1,22 @@
+{
+  "_comment": "Golden cases for a typed or requested catalog.schema scope. Read by grants.pure.test.ts (server parseScopeParam) and grantsPanel.pure.test.ts (client parseTypedScope) so the two validators cannot drift.",
+  "valid": [
+    { "input": "main.sales", "catalog": "main", "schema": "sales" },
+    { "input": "  Main_1.Sales_2  ", "catalog": "Main_1", "schema": "Sales_2" },
+    { "input": "c.s", "catalog": "c", "schema": "s" }
+  ],
+  "invalid": [
+    "",
+    "main",
+    "main.sales.orders",
+    ".sales",
+    "main.",
+    "my-cat.sales",
+    "`main`.`sales`",
+    "main.sales; DROP TABLE x",
+    "main.sales TO `x`",
+    "main .sales",
+    "main.sa'les",
+    "ma in.sales"
+  ]
+}

@@ -25,7 +25,13 @@ From `app/client/src/components/nav.ts` (four nav groups, plus the workstream de
 - **OBSERVE**: `/runs`, `/freeze`, `/dashboard`, `/runbook`.
 - **LEARN / SETUP**: `/how-it-works`, `/settings`.
 
-Genie is a docked panel available on every route, not a route of its own.
+Genie is a docked panel available on every route, not a route of its own (the **Ask Genie**
+button, backed by the Genie space).
+
+The app is also an **MCP server** at `POST /mcp` (`app/server/mcp/`). Connected to Genie Code as
+a custom MCP server, it exposes the same reads and job triggers as tools, so the migration can be
+driven in plain language from the workspace assistant. It adds no authority: mutating tools need
+`confirm=true` and the job re-checks every gate. See [Genie Code MCP](./15-genie-code-mcp.md).
 
 **Focus mode** is a state of `/overview`, not a route: `/overview?focus=<catalog.schema>` renders
 that schema's own row (`migration_next_actions_by_scope`, latest batch) in the same guided card,

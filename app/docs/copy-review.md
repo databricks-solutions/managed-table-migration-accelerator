@@ -888,6 +888,14 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Title | Step 2 · {scope} |
 | Subtitle | Schema grants that cover every table in the schema. |
 
+### `grantsTier2Selected`
+
+| Field | Text |
+| --- | --- |
+| Title | Step 2 · {scope} |
+| Subtitle | You picked this schema. Its grants cover every table in it. |
+| Technical detail | From the scopes ticked or typed in the panel, before the estate scan lists the schema. |
+
 ### `grantsOwnership`
 
 | Field | Text |
@@ -900,7 +908,8 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Field | Text |
 | --- | --- |
 | Title | What you can see |
-| Subtitle | The schemas your own account can see. |
+| Subtitle | Schemas with external tables your own account can see. Tick the ones to grant. |
+| Technical detail | Listed with your sign-in, so it shows only what you can see. Ticked schemas get their Step 2 grants. |
 ## How
 
 ### `hub`

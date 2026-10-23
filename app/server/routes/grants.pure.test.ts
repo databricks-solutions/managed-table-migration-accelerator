@@ -1,6 +1,11 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  MAX_REQUESTED_SCOPES,
   grantStatement,
+  parseScopeParam,
   showGrantsStatement,
   spHasGrant,
   tier1Specs,
@@ -8,6 +13,41 @@ import {
 } from './grants.pure.js';
 
 const SP = 'a1b2c3d4-0000-1111-2222-333344445555';
+
+const CASES = JSON.parse(
+  readFileSync(resolve(dirname(fileURLToPath(import.meta.url)), 'fixtures/scope_cases.json'), 'utf8'),
+) as { valid: { input: string; catalog: string; schema: string }[]; invalid: string[] };
+
+describe('parseScopeParam', () => {
+  it('accepts every golden valid scope', () => {
+    for (const c of CASES.valid) {
+      expect(parseScopeParam(c.input)).toEqual([{ catalog: c.catalog, schema: c.schema }]);
+    }
+  });
+
+  it('drops every golden invalid scope, including injection-shaped input', () => {
+    for (const bad of CASES.invalid) {
+      expect(parseScopeParam(bad)).toEqual([]);
+    }
+  });
+
+  it('splits commas, accepts a repeated parameter, collapses duplicates and keeps the valid ones', () => {
+    expect(parseScopeParam(['main.sales,bad name,main.sales', 'hr.people'])).toEqual([
+      { catalog: 'main', schema: 'sales' },
+      { catalog: 'hr', schema: 'people' },
+    ]);
+  });
+
+  it(`caps at ${MAX_REQUESTED_SCOPES} scopes`, () => {
+    const raw = Array.from({ length: MAX_REQUESTED_SCOPES + 10 }, (_, i) => `c.s${i}`).join(',');
+    expect(parseScopeParam(raw)).toHaveLength(MAX_REQUESTED_SCOPES);
+  });
+
+  it('is empty for an absent or non-string parameter', () => {
+    expect(parseScopeParam(undefined)).toEqual([]);
+    expect(parseScopeParam({ a: 'main.sales' })).toEqual([]);
+  });
+});
 
 describe('tier1Specs', () => {
   it('is the 4 least-privilege control-plane grants, in order', () => {

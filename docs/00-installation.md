@@ -122,9 +122,12 @@ and checks with `SHOW GRANTS` which grants have landed:
   which covers every table in the schema, including ones nobody has listed yet.
 - **Convert permission**: a downloadable `convert-permissions.sql` with the grants the convert
   identity still needs per table, grouped by who must run them.
-- **Scope pre-fill**: the external tables the signed-in admin can see, next to a manual
-  "add catalog/schema" input. That is the admin's visibility, not the whole estate; the profiler
-  finds the authoritative set once the grants land.
+- **What you can see**: the schemas with external tables the signed-in admin can see, next to a
+  manual "add catalog/schema" input. Tick a schema (or type one) and its Tier 2 grants appear
+  straight away, so you can grant the app access before the first profiler run. Nothing is
+  ticked for you. The list is the admin's visibility, not the whole estate: the profiler finds
+  the authoritative set once the grants land. On a large metastore the scan stops after about
+  20 seconds and says how many catalogs it covered.
 
 The app generates and verifies this SQL; it never runs a `GRANT` or changes an owner. The full grant
 contract, including the `run_as` model and the reasoning behind each tier, is in
@@ -143,6 +146,7 @@ Set these bundle variables before deploying, either in `databricks.yml` under yo
 | `catalog_filter` / `schema_filter` | `*` / `*` | Glob filters that limit which catalogs and schemas the profiler scans. |
 | `workspace_id` | blank | Your workspace ID, so links from the app open in the right workspace. Optional. |
 | `prod_host` / `prod_run_as_sp` | placeholder / blank | `prod` target only: the prod workspace URL and the service principal application ID that runs the jobs. |
+| `mcp_tier` | `v2` | What Genie Code may do through the app: `v2` adds the gated tools that change things; `v1` is reads and non-mutating stages only. |
 | `telemetry_enabled` | `true` | `false` to turn off usage telemetry (see below). |
 
 The `dev` target ships with a placeholder host (`https://CHANGE-ME-dev.cloud.databricks.com`):
@@ -211,6 +215,21 @@ recommendation.
 Open the app URL and go to **Settings**. Every control-plane query should report healthy, and the
 **Grants the App SP needs** panel should show the control-plane grants as landed. After the
 profiler has run, **Overview** shows your estate and the recommended next step.
+
+## Connect Genie Code (optional)
+
+The deployed app is also an MCP server, so you can drive the migration from Genie Code in plain
+language. No account admin and no extra resource is needed:
+
+1. In Genie Code, open **Settings → Custom MCP server**.
+2. Choose `mcp-managed-table-migration`, or paste the app's `/mcp` URL, and **Save**. Genie Code
+   checks the connection before it saves.
+3. Ask "Where does the migration stand?" to confirm the tools answer.
+
+The bundle variable `mcp_tier` controls what Genie Code can do: `v2` (the default) adds the gated
+tools that change things, each behind `confirm=true`; `v1` allows reads and non-mutating stages
+only. If the server lists but will not save, it is a CORS preflight problem; the fix and the
+governed Unity Catalog MCP Service alternative are in [Genie Code MCP](./15-genie-code-mcp.md).
 
 ## Restarting the app
 

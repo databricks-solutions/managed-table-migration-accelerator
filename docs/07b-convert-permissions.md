@@ -78,6 +78,17 @@ recorded as added, so no revoke is promised for it.
 
 ## Revoke at cleanup, not unfreeze
 
+```mermaid
+flowchart LR
+  check["Check<br/>convert_authority verdict<br/>per table"] --> auth["Authorize (03d)<br/>grant only what is missing,<br/>verify with SHOW GRANTS"]
+  auth --> convert(["Convert (04)"])
+  convert --> window["Validate, unfreeze,<br/>14-day rollback window<br/>grants still held"]
+  window -. "rollback (06)" .-> rolled["ROLLED_BACK"]
+  window --> cleaned["CLEANED<br/>after day 14"]
+  rolled --> revoke["Cleanup (07)<br/>revoke only added=true,<br/>verify, ledger to REVOKED"]
+  cleaned --> revoke
+```
+
 The freeze bracket restores at `05b`, right after validate. The added grants do not. They are
 held through convert, validate, and the entire 14-day rollback window, because an in-window
 rollback (`UNSET MANAGED`) needs the same permission.

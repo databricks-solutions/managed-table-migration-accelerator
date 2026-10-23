@@ -22,7 +22,52 @@ deployed jobs.
 ## Who needs which permissions
 
 Elevated rights are needed **once, by whoever installs**. People who run the migration day to day
-need only `CAN_USE` on the app. Four identities are involved:
+need only `CAN_USE` on the app.
+
+```mermaid
+flowchart LR
+  installer(["Installer<br/>once, at install"])
+  operator(["Operator<br/>day to day"])
+
+  subgraph ws["Databricks workspace"]
+    app["Migration app<br/>runs as the app service principal"]
+    jobs["Stage jobs<br/>run as the convert identity"]
+  end
+
+  subgraph uc["Unity Catalog"]
+    control[("Control schema<br/>&lt;catalog&gt;.migration")]
+    tables[("Your external tables")]
+  end
+
+  installer -- "bundle deploy<br/>workspace admin" --> app
+  installer -- "creates it, grants the app access<br/>owner or MANAGE on the catalog" --> control
+  operator -- "CAN_USE" --> app
+  app -- "reads state<br/>USE + SELECT, MODIFY on migration_actions" --> control
+  app -- "starts runs<br/>CAN_MANAGE_RUN" --> jobs
+  jobs -- "SET MANAGED<br/>USE CATALOG + USE SCHEMA<br/>owner or MANAGE<br/>SELECT + MODIFY" --> tables
+  jobs -- "state + audit log" --> control
+```
+
+A click in the app never runs as you. The app's service principal starts the run, and the job runs
+as its **convert identity**: you on `dev` and `e2e`, a service principal on `prod`. The operator's
+name is recorded for the audit trail only.
+
+What each step needs:
+
+| Step | Who | Needs | Granted by |
+|---|---|---|---|
+| **Install** | Installer | Workspace admin (to create the app); owner of, or `MANAGE` on, the control catalog | Your admins, once |
+| **Provision the app** | App service principal | `USE CATALOG`, `USE SCHEMA` and `SELECT` on the control schema; `MODIFY` on `migration_actions` only | `job_99_setup`, automatically |
+| **Use the app** | Operators | `CAN_USE` on the app. No data grants. | App permissions |
+| **Profile, dry run, validate** | Convert identity | `USE CATALOG`, `USE SCHEMA` and `SELECT` on the target schemas | A target schema owner, or the Settings page script |
+| **Freeze**, only if recommended | Convert identity | `CAN_MANAGE` on each OPTIMIZE / VACUUM job and pipeline it pauses (a workspace permission, not a grant); `MANAGE` on the schema to pause Predictive Optimization | Job and pipeline owners; a schema owner |
+| **Convert and roll back** | Convert identity | Ownership **or** `MANAGE` on the table, its schema or its catalog, plus `SELECT` + `MODIFY` unless it owns the table | **Authorize** grants what is missing; cleanup revokes it |
+| **Re-share**, Delta Sharing only | Convert identity | Ownership of the share (not a grant), or a provider admin runs the two `ALTER SHARE` statements from the runbook | The share owner |
+
+How Authorize grants and cleanup revokes is pictured in
+[Convert permissions and Authorize](./07b-convert-permissions.md#revoke-at-cleanup-not-unfreeze).
+
+In detail, the four identities:
 
 - **The installer** (deploys the bundle and provisions the app's service principal):
   - **Workspace side**: creating the app is usually the gate, so in practice a workspace admin.
@@ -48,13 +93,6 @@ need only `CAN_USE` on the app. Four identities are involved:
   [Convert permissions and Authorize](./07b-convert-permissions.md).
 - **Operators** (the people using the app): `CAN_USE` on the app. Nothing else; the jobs run as the
   convert identity, and the operator is recorded for attribution only.
-
-Some prerequisites are not Unity Catalog grants:
-
-- Pausing a scheduled OPTIMIZE or VACUUM job, or stopping a pipeline, during the freeze needs
-  `CAN_MANAGE` on that job or pipeline.
-- Re-sharing a Delta Sharing (Databricks-to-Databricks) table needs ownership of the share, or a
-  provider admin runs the two `ALTER SHARE` statements from the runbook.
 
 ### The app service principal's grants
 

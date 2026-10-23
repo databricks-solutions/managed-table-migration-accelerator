@@ -79,19 +79,21 @@ profiler flags any that do not.
 
 ## Permissions
 
-The convert never changes who owns a table. It needs these privileges instead:
+```mermaid
+flowchart LR
+  installer(["Installer"]) -- "installs once" --> app["Migration app"]
+  operator(["Operators"]) -- "use day to day" --> app
+  app -- "launches" --> jobs["Migration jobs"]
+  jobs -- "convert" --> tables[("Your tables")]
+```
 
-| Who | Needs | When |
-|---|---|---|
-| **Installer** | Workspace admin, plus ownership of or `MANAGE` on the control catalog (to create the `migration` schema and grant the app its access). | Once, at install. |
-| **Convert identity** (the job's run-as: you on `dev`, a service principal on `prod`) | `USE CATALOG` + `USE SCHEMA`; ownership **or** `MANAGE` on the table, its schema, or its catalog; and `SELECT` + `MODIFY` unless it owns the table. | Before each convert. The tool checks it per table. |
-| **App service principal** | Four narrow grants on the control schema. The setup job applies them. | Once, at install. |
-| **Operators** | `CAN_USE` on the app. No data grants. | Day to day. |
+- **Installer, once:** a workspace admin who owns, or has `MANAGE` on, the control catalog.
+- **Operators, day to day:** `CAN_USE` on the app. Nothing else.
+- **The jobs, per table:** ownership **or** `MANAGE`, plus `SELECT` + `MODIFY`. Ownership never
+  changes; **Authorize** grants only what is missing.
 
-When the convert identity is missing a privilege it can grant itself, **Authorize** grants only
-what is missing, verifies it, and cleanup revokes it later. Anything else becomes a grant script
-naming who must run it. Details: [Installation: who needs which permissions](./docs/00-installation.md#who-needs-which-permissions)
-and [Convert permissions and Authorize](./docs/07b-convert-permissions.md).
+Every identity, privilege and grant statement, step by step:
+[Who needs which permissions](./docs/00-installation.md#who-needs-which-permissions).
 
 ## Install
 

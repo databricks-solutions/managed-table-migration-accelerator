@@ -1,0 +1,19 @@
+# E2E-ONLY (INTEGRATION TEST ASSET) — Lakeflow Declarative Pipeline that streams from an EXTERNAL
+# Delta table. Deployed so the DLT/pipeline convert bracket integration test
+# (.e2e/e2e_dlt_pipeline.py) can prove OP_STOP_PIPELINE / RESTORE_START_PIPELINE end-to-end with
+# detection via real lineage. It is NOT a migration stage. Serverless. The external source is
+# passed via `configuration.source_table` (no hardcoded prod tables); the driver seeds it.
+resources:
+  pipelines:
+    pipeline_e2e_dlt:
+      name: "[${bundle.target}] ${bundle.name} :: e2e dlt (integration)"
+      catalog: ${var.manifest_catalog}
+      schema: e2e_dlt
+      serverless: true
+      channel: CURRENT
+      development: true
+      libraries:
+        - file:
+            path: ../notebooks/e2e/dlt_pipeline.py
+      configuration:
+        source_table: ${var.manifest_catalog}.e2e_dlt.src_bronze

@@ -1,0 +1,272 @@
+# Databricks App — admin-only migration control-plane UI.
+#
+# This app is part of the SINGLE root bundle (managed-table-migration). It is
+# deployed by `databricks bundle deploy`, which syncs app/ and lets the Apps
+# platform install and build it. Do NOT use `databricks apps deploy` here — the
+# bundle owns the app lifecycle.
+#
+# source_code_path is relative to THIS file (app/resources/), so `..` points at
+# the app source root (app/). See the DABs path-resolution rules: resource files
+# are one level deep, so `..` reaches their parent (here, the app dir itself).
+resources:
+  apps:
+    app:
+      # Prefixed with `mcp-` so Databricks recognizes this app as a custom MCP server
+      # (the AI Playground / AI Gateway MCP surface only lists apps whose name starts with
+      # `mcp-`). Kept in lockstep with var.app_name (default `mcp-${bundle.name}`), which the
+      # profiler uses to resolve this App's service principal at runtime (w.apps.get) and grant
+      # it CAN_RUN on the Genie space. This is NOT a resource reference, so it introduces no
+      # deploy cycle.
+      name: mcp-${bundle.name}
+      description: "Admin-only control plane for migrating external/Hive tables to UC managed tables, organized into waves."
+      source_code_path: ..
+
+      # Start the app automatically on deploy.
+      lifecycle:
+        started: true
+      user_api_scopes:
+        - dashboards.genie
+        # Lets the forwarded user token flow through the AI Gateway so this app is
+        # selectable/persistable as a custom MCP server in the AI Playground / Gateway
+        # MCP dialog (paired with the `mcp-` name prefix that makes it discoverable).
+        - ai-gateway
+        # OBO estate discovery ONLY (GET /api/estate/obo-discovery): the forwarded admin token
+        # enumerates the EXTERNAL tables the admin can see, to pre-fill the grant scope. Never
+        # used to trigger a job — authorization stays App CAN_USE; execution stays the SP.
+        - catalog.catalogs:read
+        - catalog.schemas:read
+        - catalog.tables:read
+
+      # SINGLE authoritative app spec. Databricks docs are explicit that a bundle
+      # `config.env` "will override the environment variables specified in the app.yaml
+      # file", and every documented example pairs `config.command` WITH `config.env` —
+      # i.e. `config` is treated as the whole runtime spec, not a per-key merge. So we
+      # declare the COMPLETE spec here (command + every env var) rather than splitting it
+      # across two files, which would risk `config` silently replacing app.yaml's env and
+      # dropping the job/warehouse bindings at runtime.
+      #
+      # Field-name spelling matters and differs by file:
+      #   - HERE (a bundle file) the reference field is `value_from` (snake_case), and
+      #     ${var.…} DOES resolve. The camelCase spelling is SILENTLY IGNORED by the
+      #     bundle schema, so it must never appear in this file.
+      #   - The App runtime spec uses the camelCase spelling and canNOT resolve ${var.…}
+      #     (it would render as a literal string) — which is why MIGRATION_CATALOG/SCHEMA
+      #     can only live here.
+      #
+      # MIGRATION_CATALOG/SCHEMA come from the SAME single declaration (databricks.yml
+      # var.manifest_catalog / var.manifest_schema) that the jobs consume, so a target
+      # cannot set the app's catalog and leave the jobs' stale. app/app.yaml is trimmed to
+      # command-only; this block is the source of truth for the app's environment.
+      config:
+        command:
+          - npm
+          - run
+          - start
+        env:
+          - name: DATABRICKS_WAREHOUSE_ID
+            # Bound as the `sql-warehouse` resource below (permission: CAN_USE), so the App SP's
+            # CAN_USE is granted declaratively by the binding — no out-of-band grant needed. We
+            # sit exactly at the 20-resource cap by binding 19 operator jobs + this one warehouse
+            # (the slot freed by folding source-scan into the profiler now holds job_03d).
+            value_from: sql-warehouse
+          # AppKit's `jobs` plugin has a STATIC required resource `job` bound to the single
+          # env DATABRICKS_JOB_ID (see @databricks/appkit .../plugins/jobs/manifest.js). The
+          # ResourceRegistry enforces it at createApp REGARDLESS of the custom multi-job map,
+          # so without it the app crashes at boot with "Missing required resources: job:Job".
+          # This value is never used behaviorally: JobsPlugin.discoverJobs() EXCLUDES
+          # DATABRICKS_JOB_ID and only synthesizes a "default" alias when NO other jobs exist
+          # — and we register the DATABRICKS_JOB_<ALIAS> vars below (incl. this baseline) — so
+          # this purely satisfies the
+          # baseline gate. Pointed at the profiler job (any real id works; a display name does
+          # not). Do NOT remove: it is a functional requirement of the jobs plugin.
+          - name: DATABRICKS_JOB_ID
+            value_from: profiler
+          - name: DATABRICKS_JOB_PROFILER
+            value_from: profiler
+          # No DATABRICKS_JOB_SOURCE_SCAN: the tier-2 source scan is folded into the profiler
+          # ("discovery chunk", job_00_profiler) behind the run_source_scan toggle, so the app
+          # triggers it via the `profiler` alias — no separate binding. That freed slot now holds
+          # DATABRICKS_JOB_LEASE_OWNERSHIP (job_03d) above. job_01_source_scan stays
+          # bundle-deployed + CLI-runnable, just not app-bound.
+          - name: DATABRICKS_JOB_WAVE_PLANNER
+            value_from: wave_planner
+          - name: DATABRICKS_JOB_DRY_RUN
+            value_from: dry_run
+          - name: DATABRICKS_JOB_FREEZE
+            value_from: freeze
+          # Authorize (job_03d, alias lease_ownership). Bound to the slot freed by folding the
+          # source scan into the profiler discovery chunk — so the app can trigger the grants the
+          # convert identity can give itself (ownership never changes). 07 revokes only those.
+          - name: DATABRICKS_JOB_LEASE_OWNERSHIP
+            value_from: lease_ownership
+          - name: DATABRICKS_JOB_CONVERT
+            value_from: convert
+          - name: DATABRICKS_JOB_VALIDATE
+            value_from: validate
+          - name: DATABRICKS_JOB_UNFREEZE_VERIFY
+            value_from: unfreeze_verify
+          - name: DATABRICKS_JOB_ROLLBACK
+            value_from: rollback
+          - name: DATABRICKS_JOB_CLEANUP
+            value_from: cleanup
+          - name: DATABRICKS_JOB_CONDUCTOR
+            value_from: conductor
+          - name: DATABRICKS_JOB_ENABLE_OPTIMIZATION
+            value_from: enable_optimization
+          - name: DATABRICKS_JOB_RESHARE
+            value_from: reshare
+          - name: DATABRICKS_JOB_ENABLE_COMPAT
+            value_from: enable_compat
+          - name: DATABRICKS_JOB_CAMPAIGN
+            value_from: campaign
+          - name: DATABRICKS_JOB_BULK_FREEZE
+            value_from: bulk_freeze
+          - name: DATABRICKS_JOB_BULK_CONVERT
+            value_from: bulk_convert
+          - name: DATABRICKS_JOB_BULK_VALIDATE
+            value_from: bulk_validate
+          - name: DATABRICKS_JOB_BULK_UNFREEZE
+            value_from: bulk_unfreeze
+          # Plain values from bundle variables — the reason this block exists (app.yaml
+          # cannot resolve ${var.…}). MIGRATION_SCHEMA is inert until the app agent makes
+          # app/server/config/catalog.ts read process.env.MIGRATION_SCHEMA (today it
+          # hardcodes 'migration'); wired here so it is ready the moment that lands.
+          - name: MIGRATION_CATALOG
+            value: ${var.manifest_catalog}
+          - name: MIGRATION_SCHEMA
+            value: ${var.manifest_schema}
+          # Numeric workspace/org id (the ?o= URL param) so the client can build
+          # fully-qualified path-access deep links (<host>/?o=<id>#workspace/...). Empty
+          # on targets that don't set var.workspace_id → the client omits ?o= (host-only
+          # links still resolve within the current workspace session).
+          # Quoted so an empty var renders "" (string), not a null scalar — the Apps deployments
+          # API rejects an env entry whose `value` is null ("Must specify environment variable
+          # source using either value or valueFrom"). Empty → client omits ?o=.
+          - name: DATABRICKS_WORKSPACE_ID
+            value: "${var.workspace_id}"
+          # Genie Code MCP surface (POST /mcp). MCP_TIER=v1 (default) exposes reads + non-mutating
+          # stages only; set to v2 to expose gated conversions (each behind confirm=true + the job's
+          # own fail-closed gates). CORS is locked to DATABRICKS_HOST at runtime (never "*"); set the
+          # optional MCP_ALLOWED_ORIGIN env here to override. Quoted so an empty var renders "".
+          - name: MCP_TIER
+            value: "${var.mcp_tier}"
+          # Usage telemetry opt-out (same bundle variable as the jobs). "true" tags the app's SDK
+          # calls with uc-ext2managed/<version> and records each job launch (alias + app|mcp
+          # surface only) on one current_user.me() call; "false" (or unset) sends nothing.
+          - name: MTM_TELEMETRY_ENABLED
+            value: "${var.telemetry_enabled}"
+
+      # Resource bindings — 19 operator jobs + the SQL warehouse = 20 resources, exactly at the
+      # Databricks Apps hard cap of 20. Each job is bound by bundle
+      # resolution (${resources.jobs.<key>.id}) at CAN_MANAGE_RUN; the SQL warehouse is bound as
+      # `sql-warehouse` at CAN_USE, which grants the App SP that permission declaratively (the
+      # app runs every control-plane query through it AS its SP). Three jobs are deliberately NOT
+      # bound (all bundle-deployed + CLI-runnable): `job_03b_compaction_scan` (its job-to-be-done
+      # is covered by the scoped profiler "Re-profile a schema"), `job_01_source_scan` (folded
+      # into the profiler discovery chunk behind run_source_scan, triggered via the `profiler`
+      # alias), and `job_09` (the one-click `profiler → wave_planner` get-started orchestrator;
+      # un-app-bound to free a slot for `job_08c` — the from-scratch redo is the two-step
+      # profiler → wave planner flow; still bundle-deployed + CLI-runnable).
+      # `job_08c_enable_optimization` (POST_CONVERT enable-PO/auto-liquid stage) is now bound
+      # as the `enable_optimization` alias, taking the slot freed by `job_09`.
+      # The slot freed by folding source-scan now holds `job_03d_lease_ownership`.
+      # Adding ANY 21st resource here fails the deploy with
+      # "Number of app resources must be less than or equal to 20".
+      #
+      # The alias `name` of each binding MUST stay in lockstep with the
+      # `config.env` entries above (DATABRICKS_JOB_<ALIAS_UPPER> value_from: <alias>)
+      # and the app plugin.
+      #
+      # NO genie-space binding: the Genie space cannot be a bundle resource (the
+      # create API validates table existence and 403s on a fresh workspace). The app
+      # reads genie_space_id at runtime from the migration_control_config handshake table.
+      #
+      # NEITHER e2e seeder (job_e2e_seed_stream / job_e2e_seed_fixture_estate) is bound
+      # here — they must never be reachable from an operator surface. The bulk cockpit
+      # (job_11e_bulk_cockpit) is likewise NOT bound: it is a notebook launcher, not an
+      # app-triggered alias. The four bulk stages (11b/11/11c/11d) ARE bound below.
+      resources:
+        - name: sql-warehouse
+          sql_warehouse:
+            id: ${var.warehouse_id}
+            permission: CAN_USE
+        - name: profiler
+          job:
+            id: ${resources.jobs.job_00_profiler.id}
+            permission: CAN_MANAGE_RUN
+        # No `source_scan` binding: job_01_source_scan is folded into the profiler discovery
+        # chunk (run_source_scan toggle) and triggered via the `profiler` alias. It stays
+        # bundle-deployed + CLI-runnable (like job_03b_compaction_scan). Its freed slot now
+        # holds the `lease_ownership` binding above.
+        - name: wave_planner
+          job:
+            id: ${resources.jobs.job_02_wave_planner.id}
+            permission: CAN_MANAGE_RUN
+        - name: dry_run
+          job:
+            id: ${resources.jobs.job_03_dry_run.id}
+            permission: CAN_MANAGE_RUN
+        - name: freeze
+          job:
+            id: ${resources.jobs.job_03c_freeze.id}
+            permission: CAN_MANAGE_RUN
+        - name: lease_ownership
+          job:
+            id: ${resources.jobs.job_03d_lease_ownership.id}
+            permission: CAN_MANAGE_RUN
+        - name: convert
+          job:
+            id: ${resources.jobs.job_04_convert.id}
+            permission: CAN_MANAGE_RUN
+        - name: validate
+          job:
+            id: ${resources.jobs.job_05_validate.id}
+            permission: CAN_MANAGE_RUN
+        - name: unfreeze_verify
+          job:
+            id: ${resources.jobs.job_05b_unfreeze_verify.id}
+            permission: CAN_MANAGE_RUN
+        - name: rollback
+          job:
+            id: ${resources.jobs.job_06_rollback.id}
+            permission: CAN_MANAGE_RUN
+        - name: cleanup
+          job:
+            id: ${resources.jobs.job_07_post_convert_cleanup.id}
+            permission: CAN_MANAGE_RUN
+        - name: conductor
+          job:
+            id: ${resources.jobs.job_08_conductor.id}
+            permission: CAN_MANAGE_RUN
+        - name: enable_optimization
+          job:
+            id: ${resources.jobs.job_08c_enable_optimization.id}
+            permission: CAN_MANAGE_RUN
+        - name: reshare
+          job:
+            id: ${resources.jobs.job_08_reshare.id}
+            permission: CAN_MANAGE_RUN
+        - name: enable_compat
+          job:
+            id: ${resources.jobs.job_08b_enable_compat.id}
+            permission: CAN_MANAGE_RUN
+        - name: campaign
+          job:
+            id: ${resources.jobs.job_10_campaign.id}
+            permission: CAN_MANAGE_RUN
+        - name: bulk_freeze
+          job:
+            id: ${resources.jobs.job_11b_bulk_freeze.id}
+            permission: CAN_MANAGE_RUN
+        - name: bulk_convert
+          job:
+            id: ${resources.jobs.job_11_bulk_convert.id}
+            permission: CAN_MANAGE_RUN
+        - name: bulk_validate
+          job:
+            id: ${resources.jobs.job_11c_bulk_validate.id}
+            permission: CAN_MANAGE_RUN
+        - name: bulk_unfreeze
+          job:
+            id: ${resources.jobs.job_11d_bulk_unfreeze.id}
+            permission: CAN_MANAGE_RUN

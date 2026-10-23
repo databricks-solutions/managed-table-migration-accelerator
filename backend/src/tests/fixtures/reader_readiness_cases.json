@@ -1,0 +1,26 @@
+{
+  "_comment": "Shared golden cases for compat.reader_readiness / preconvert_reader_warning (pytest) and the TS mirror readerReadiness / preconvertReaderWarning (vitest). Edit both implementations together.",
+  "readiness": [
+    {"id": "no_signal", "needs_compat": false, "access_notes": null, "compat_status": null, "compat_resolution": null, "expected": "NONE"},
+    {"id": "no_signal_null_flag", "needs_compat": null, "access_notes": "path_based_access", "compat_status": null, "compat_resolution": null, "expected": "NONE"},
+    {"id": "needs_compat_no_action", "needs_compat": true, "access_notes": null, "compat_status": null, "compat_resolution": null, "expected": "UNDECIDED"},
+    {"id": "needs_compat_open", "needs_compat": true, "access_notes": "external_reader", "compat_status": "OPEN", "compat_resolution": null, "expected": "UNDECIDED"},
+    {"id": "needs_compat_in_progress", "needs_compat": true, "access_notes": null, "compat_status": "IN_PROGRESS", "compat_resolution": null, "expected": "UNDECIDED"},
+    {"id": "needs_compat_done", "needs_compat": true, "access_notes": null, "compat_status": "DONE", "compat_resolution": null, "expected": "COMPAT_ON"},
+    {"id": "needs_compat_done_lowercase", "needs_compat": true, "access_notes": null, "compat_status": "done", "compat_resolution": null, "expected": "COMPAT_ON"},
+    {"id": "deferred_open_apis", "needs_compat": true, "access_notes": null, "compat_status": "DEFERRED", "compat_resolution": "deferred: Readers use UC open APIs; Compatibility Mode not needed", "expected": "OPEN_APIS"},
+    {"id": "deferred_open_apis_spacing", "needs_compat": true, "access_notes": null, "compat_status": "DEFERRED", "compat_resolution": "  Deferred:   readers use UC open APIs;   Compatibility Mode not needed  ", "expected": "OPEN_APIS"},
+    {"id": "deferred_other_reason", "needs_compat": true, "access_notes": null, "compat_status": "DEFERRED", "compat_resolution": "deferred: waiting on storage team", "expected": "UNDECIDED"},
+    {"id": "deferred_no_resolution", "needs_compat": true, "access_notes": null, "compat_status": "DEFERRED", "compat_resolution": null, "expected": "UNDECIDED"},
+    {"id": "open_apis_text_but_open", "needs_compat": true, "access_notes": null, "compat_status": "OPEN", "compat_resolution": "deferred: Readers use UC open APIs; Compatibility Mode not needed", "expected": "UNDECIDED"},
+    {"id": "fgac_note", "needs_compat": false, "access_notes": "external_reader, compat_mode_unavailable_rls_cls", "compat_status": null, "compat_resolution": null, "expected": "FGAC_REQUIRED"},
+    {"id": "fgac_note_wins_over_compat_flag", "needs_compat": true, "access_notes": "compat_mode_unavailable_rls_cls", "compat_status": "DONE", "compat_resolution": null, "expected": "FGAC_REQUIRED"},
+    {"id": "other_notes_only", "needs_compat": false, "access_notes": "external_writer_detected", "compat_status": "OPEN", "compat_resolution": null, "expected": "NONE"}
+  ],
+  "warning": [
+    {"id": "nothing", "undecided": 0, "fgac_required": 0, "expected": ""},
+    {"id": "undecided_only", "undecided": 2, "fgac_required": 0, "expected": "2 table(s) have external readers with no decision recorded. Readers that use a storage path stop at convert. Move them to the UC open APIs before the window, or plan Compatibility Mode."},
+    {"id": "fgac_only", "undecided": 0, "fgac_required": 1, "expected": "1 table(s) have external readers and row filters or column masks. Compatibility Mode cannot serve them. Those readers stop at convert. After convert, set up cross-engine ABAC with catalog commits (DBR 18.0+)."},
+    {"id": "both", "undecided": 3, "fgac_required": 1, "expected": "3 table(s) have external readers with no decision recorded. Readers that use a storage path stop at convert. Move them to the UC open APIs before the window, or plan Compatibility Mode. 1 table(s) have external readers and row filters or column masks. Compatibility Mode cannot serve them. Those readers stop at convert. After convert, set up cross-engine ABAC with catalog commits (DBR 18.0+)."}
+  ]
+}

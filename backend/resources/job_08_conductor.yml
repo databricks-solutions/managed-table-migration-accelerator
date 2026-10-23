@@ -1,0 +1,78 @@
+# Stage 08 — Conductor: compute the ONE recommended next step (never touches a table).
+# Appends a row to <manifest>.migration_next_actions (+ one per-scope row each to
+# migration_next_actions_by_scope) that the cockpit + dashboard + app read, and records
+# operator team-pin decisions (gated pin_decision task) in migration_focus_pins.
+resources:
+  jobs:
+    job_08_conductor:
+      name: "[${bundle.target}] ${bundle.name} :: 08 conductor"
+      tags:
+        project: managed-migration
+        stage: "08-conductor"
+      # Read-only recommendation refresh. Schedule paused by default; the cockpit also
+      # runs it on demand. Serverless compute (no DBR pin needed).
+      schedule:
+        quartz_cron_expression: ${var.conductor_schedule_cron}
+        timezone_id: UTC
+        pause_status: PAUSED
+      # Tailed by many stages (recompute_next_step): queue overlapping runs instead of skipping
+      # them; each queued run recomputes from current state.
+      queue:
+        enabled: true
+      # Run-now parameters for the team pin list (migration.focus). Every default is a no-op, so
+      # the stage tails (run_job_task with no job_parameters) and the cockpit / app "Refresh
+      # recommendation" launches only recompute, exactly as before.
+      parameters:
+        - name: pin_action
+          default: "none"
+        - name: pin_scope
+          default: ""
+        - name: pin_rank
+          default: ""
+        - name: pin_reason
+          default: ""
+        - name: operator
+          default: ""
+      tasks:
+        # Team pin change (add / remove / move / clear): only when pin_action != none.
+        - task_key: gate_pin
+          condition_task:
+            op: NOT_EQUAL
+            left: "{{job.parameters.pin_action}}"
+            right: "none"
+        - task_key: pin_decision
+          depends_on:
+            - task_key: gate_pin
+              outcome: "true"
+          notebook_task:
+            notebook_path: ../notebooks/08a_focus_pins.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              pin_action: "{{job.parameters.pin_action}}"
+              pin_scope: "{{job.parameters.pin_scope}}"
+              pin_rank: "{{job.parameters.pin_rank}}"
+              pin_reason: "{{job.parameters.pin_reason}}"
+              operator: "{{job.parameters.operator}}"
+        # run_if ALL_DONE: the recommendation is recomputed whether the pin task ran, was excluded
+        # (no pin change — every tail) or refused a pin (the run still fails, loudly). Databricks
+        # excludes a task whose dependencies are ALL excluded, whatever its run_if, so with
+        # pin_decision as the only dependency every tail excluded the conductor (observed live).
+        # The gate_pin "false" edge is met exactly when pin_decision is excluded, so one of the two
+        # always runs. (An edge on a condition task must name an outcome.)
+        - task_key: conductor
+          depends_on:
+            - task_key: gate_pin
+              outcome: "false"
+            - task_key: pin_decision
+          run_if: ALL_DONE
+          notebook_task:
+            notebook_path: ../notebooks/08_conductor.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              parallelism: ${var.parallelism}
+              include_streaming: ${var.cockpit_default_include_streaming}
+              job_run_id: "{{job.run_id}}"

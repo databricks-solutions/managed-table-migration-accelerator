@@ -1,0 +1,196 @@
+# Stage 00 — Discovery chunk: profiler (discover EXTERNAL tables + assess eligibility) plus
+# an OPTIONAL, gated tier-2 source scan (01_source_scan.py). Both are read-only.
+#
+# This job is the app's single "discovery" alias. Two toggles pick which halves run — profiler
+# only (default), source scan only, or both — so the app no longer needs a second bound job for
+# the source scan (that binding was folded into this one; see app/resources/app.yml). The
+# standalone job_01_source_scan stays deployed for the CLI path (`databricks bundle run
+# job_01_source_scan`), it is simply no longer app-bound.
+#
+# either / or / both, via a two-gate DAG (see the tasks below):
+#   run_profiler=true,  run_source_scan=false (defaults) -> profiler only (today's behavior)
+#   run_profiler=false, run_source_scan=true             -> source scan only (uses the EXISTING
+#                                                           manifest a prior profiler run wrote)
+#   run_profiler=true,  run_source_scan=true             -> both; the scan runs AFTER a
+#                                                           successful profile (fresh manifest)
+#
+# A third, independent gate records the customer's path-based redirect decision
+# (01b_path_redirect_optin.py): path_redirect_action=accept|revoke for path_redirect_tables,
+# gated by confirm_execute (default false = dry-run). The default "none" excludes it, so a
+# normal profiler or scan run never executes it. It is the ONLY mutating mode of this job
+# (audited, operator-attributed); name-based access verified by the scan stays the default exit.
+resources:
+  jobs:
+    job_00_profiler:
+      # Display name stays ":: 00 profiler" — the installer resolves jobs by this stable stage
+      # suffix (migration.install.OPERATOR_JOB_LABELS) and the app's run pill keys off it. The
+      # folded source scan is an internal task, not a rename.
+      name: "[${bundle.target}] ${bundle.name} :: 00 profiler"
+      tags:
+        project: managed-migration
+        stage: "00-profiler"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Job-level parameters allow an operator to trigger a TARGETED re-detection per run
+      # (e.g. `--params force_rescan=true,schema_filter=<schema>`) WITHOUT redeploying the
+      # bundle. Each defaults to its bundle variable, so unattended runs behave as before.
+      # (Late-arriving streaming/pipeline lineage is now re-detected automatically by the
+      # profiler's lineage re-eval pass; force_rescan remains for re-running DESCRIBE HISTORY.)
+      parameters:
+        # Discovery-chunk toggles. Defaults reproduce the pre-chunk behavior (profiler only).
+        - name: run_profiler
+          default: "true"
+        - name: run_source_scan
+          default: "false"
+        - name: force_rescan
+          default: ${var.force_rescan}
+        - name: catalog_filter
+          default: ${var.catalog_filter}
+        - name: schema_filter
+          default: ${var.schema_filter}
+        # Authoritative workspace/org id for discovery provenance. Deterministic on serverless
+        # (runtime probes fail there); a NULL stamp would fail-close the convert ownership guard.
+        - name: workspace_id
+          default: ${var.workspace_id}
+        # Tier-2 source-scan knobs (only consumed when run_source_scan=true). Same defaults the
+        # standalone job_01_source_scan uses, so a folded scan behaves identically. scan_source
+        # is NOT a job parameter here — the gate already decided; the task hardcodes it to "true".
+        - name: scan_mode
+          default: ${var.scan_mode}
+        - name: workspace_paths
+          default: ${var.scan_workspace_paths}
+        - name: exclude_paths
+          default: ${var.scan_exclude_paths}
+        - name: max_notebooks
+          default: ${var.scan_max_notebooks}
+        # Path-based redirect opt-in (only consumed when path_redirect_action != none).
+        - name: path_redirect_action
+          default: "none"
+        - name: path_redirect_tables
+          default: ""
+        - name: path_redirect_reason
+          default: ""
+        - name: confirm_execute
+          default: "false"
+        - name: operator
+          default: ""
+      # DAG — three INDEPENDENT root condition gates + ordering edges:
+      #   gate_profiler ──true──▶ profiler
+      #   gate_source_scan ──true──▶ source_scan ◀── profiler (ordering)
+      #   gate_path_redirect ──true──▶ path_redirect_decision ◀── source_scan (ordering)
+      #                                 └──▶ recompute_next_step (read-only conductor)
+      # source_scan depends on BOTH its gate (outcome=true) AND profiler (ordering). It CANNOT
+      # use the default run_if (ALL_SUCCESS): under ALL_SUCCESS an EXCLUDED profiler is NOT a
+      # success, so in source-scan-only mode (run_profiler=false) the excluded profiler
+      # cascade-excluded source_scan and the scan never ran. It uses run_if=NONE_FAILED instead:
+      #   - source-scan-only: profiler Excluded (not failed) + gate_source_scan true -> scan RUNS.
+      #   - profiler-only: gate_source_scan's true edge is unmet -> scan EXCLUDED.
+      #   - both: scan waits for the profile; a FAILED profile is a failure -> scan skipped, run
+      #     loud-fails (no stale scan).
+      tasks:
+        - task_key: gate_profiler
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.run_profiler}}"
+            right: "true"
+        - task_key: profiler
+          depends_on:
+            - task_key: gate_profiler
+              outcome: "true"
+          notebook_task:
+            notebook_path: ../notebooks/00_profiler.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              catalog_filter: "{{job.parameters.catalog_filter}}"
+              schema_filter: "{{job.parameters.schema_filter}}"
+              workspace_id: "{{job.parameters.workspace_id}}"
+              scan_history: ${var.scan_history}
+              max_history_tables: ${var.max_history_tables}
+              history_parallelism: ${var.history_parallelism}
+              history_batch_size: ${var.history_batch_size}
+              force_rescan: "{{job.parameters.force_rescan}}"
+              scan_consumer_runtime: ${var.scan_consumer_runtime}
+              scan_recency: ${var.scan_recency}
+              recency_lookback_days: ${var.recency_lookback_days}
+              scan_compaction: ${var.scan_compaction}
+              recent_optimize_minutes: ${var.recent_optimize_minutes}
+              refresh_actions: ${var.refresh_actions}
+              # SQL warehouse id recorded into migration_control_config so the cockpit/app
+              # can resolve the control plane. A control-plane DESCRIPTOR only — the profiler
+              # creates no Genie space and no App grants; that install-time provisioning lives
+              # in job_99_setup, so the profiler has NO app/Genie awareness.
+              warehouse_id: ${var.warehouse_id}
+        - task_key: gate_source_scan
+          condition_task:
+            op: EQUAL_TO
+            left: "{{job.parameters.run_source_scan}}"
+            right: "true"
+        - task_key: source_scan
+          # run_if=NONE_FAILED: source_scan depends on gate_source_scan (outcome=true) AND
+          # profiler (ordering). Under the DEFAULT run_if (ALL_SUCCESS) an EXCLUDED profiler
+          # does NOT count as success, so in source-scan-only mode (run_profiler=false) the
+          # excluded profiler cascade-excluded source_scan and the scan never ran. NONE_FAILED
+          # tolerates an excluded/skipped profiler (scan-only mode -> scan runs) while still
+          # skipping the scan when a profile actually FAILED (both mode -> no stale scan). The
+          # gate_source_scan outcome=true edge still gates profiler-only mode (scan excluded).
+          run_if: NONE_FAILED
+          depends_on:
+            - task_key: gate_source_scan
+              outcome: "true"
+            # Ordering only: run AFTER the profile when both halves run.
+            - task_key: profiler
+          notebook_task:
+            notebook_path: ../notebooks/01_source_scan.py
+            base_parameters:
+              # The gate already decided we run — force the notebook's internal scan_source
+              # guard on. manifest_catalog/schema stay deploy-fixed (a run-now caller cannot
+              # redirect writes to another control plane).
+              scan_source: "true"
+              scan_mode: "{{job.parameters.scan_mode}}"
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              workspace_paths: "{{job.parameters.workspace_paths}}"
+              exclude_paths: "{{job.parameters.exclude_paths}}"
+              max_notebooks: "{{job.parameters.max_notebooks}}"
+        - task_key: gate_path_redirect
+          condition_task:
+            op: NOT_EQUAL
+            left: "{{job.parameters.path_redirect_action}}"
+            right: "none"
+        - task_key: path_redirect_decision
+          # Same run_if=NONE_FAILED reasoning as source_scan: an excluded profiler/scan (opt-in
+          # only mode) must not cascade-exclude the decision; a FAILED one still skips it.
+          run_if: NONE_FAILED
+          depends_on:
+            - task_key: gate_path_redirect
+              outcome: "true"
+            # Ordering only: decide AFTER a fresh profile / scan when they run in the same launch.
+            # Both edges are needed: with the scan gated off, profiler -> source_scan alone would
+            # not order the decision after the profile.
+            - task_key: profiler
+            - task_key: source_scan
+          notebook_task:
+            notebook_path: ../notebooks/01b_path_redirect_optin.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              path_redirect_action: "{{job.parameters.path_redirect_action}}"
+              path_redirect_tables: "{{job.parameters.path_redirect_tables}}"
+              path_redirect_reason: "{{job.parameters.path_redirect_reason}}"
+              confirm_execute: "{{job.parameters.confirm_execute}}"
+              operator: "{{job.parameters.operator}}"
+        # An opt-in moves a table in or out of the plan, so refresh the recommendation after it
+        # (read-only conductor, ALL_DONE). Gated on the same outcome so a normal profiler run
+        # does not launch the conductor.
+        - task_key: recompute_next_step
+          run_if: ALL_DONE
+          depends_on:
+            - task_key: gate_path_redirect
+              outcome: "true"
+            - task_key: path_redirect_decision
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

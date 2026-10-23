@@ -1,0 +1,48 @@
+# Stage 11e — BULK COCKPIT: app-free operator surface (READ-ONLY, never mutates).
+# Reflects parallel-safe batches and launches, via jobs.run_now with the batch selector, the four
+# job_11* bulk jobs plus 03d Authorize and the 08 re-share / 08b Compat / 08c optimize finish jobs.
+# It triggers those jobs but performs NO mutation itself (never runs SET MANAGED). On-demand
+# only (no schedule). Serverless compute (no DBR pin needed).
+resources:
+  jobs:
+    job_11e_bulk_cockpit:
+      name: "[${bundle.target}] ${bundle.name} :: 11e bulk cockpit"
+      tags:
+        project: managed-migration
+        stage: "11e-bulk-cockpit"
+      max_concurrent_runs: 1
+      parameters:
+        - name: plan_run_id
+          default: ""
+        - name: batch_id
+          default: ""
+        - name: action
+          default: "show"
+        - name: confirm_convert
+          default: "false"
+        - name: confirm_execute
+          default: "false"
+        - name: compat_location
+          default: ""
+        - name: compat_location_map
+          default: ""
+        - name: convert_run_as
+          default: ""
+      tasks:
+        - task_key: bulk_cockpit
+          notebook_task:
+            notebook_path: ../notebooks/11_bulk_cockpit.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              bundle_target: ${bundle.target}
+              plan_run_id: "{{job.parameters.plan_run_id}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              action: "{{job.parameters.action}}"
+              confirm_convert: "{{job.parameters.confirm_convert}}"
+              confirm_execute: "{{job.parameters.confirm_execute}}"
+              compat_location: "{{job.parameters.compat_location}}"
+              compat_location_map: "{{job.parameters.compat_location_map}}"
+              convert_run_as: "{{job.parameters.convert_run_as}}"

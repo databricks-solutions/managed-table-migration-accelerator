@@ -1,0 +1,51 @@
+# E2E-ONLY (INTEGRATION TEST ASSET) — real Structured Streaming writer seed.
+# Deployed so the streaming-detection integration test (.e2e/e2e_streaming.py) can prove the
+# profiler's detection wiring end-to-end. It is NOT a migration stage: it only writes a small
+# synthetic EXTERNAL Delta table via a genuine streaming sink. Runs on serverless. Only
+# meaningful where ${var.e2e_external_base} is set (BUNDLE_VAR_e2e_external_base for the e2e target).
+resources:
+  jobs:
+    job_e2e_seed_stream:
+      name: "[${bundle.target}] ${bundle.name} :: e2e seed stream (integration)"
+      tags:
+        project: managed-migration
+        stage: "e2e-seed-stream"
+      # A far-future (effectively never-firing) UNPAUSED schedule so the freeze bracket can prove
+      # the STOP_STREAM_JOB schedule pause+resume gap end-to-end: 03c_freeze pauses it
+      # (UNPAUSED -> PAUSED), 05b_unfreeze_verify resumes it (-> UNPAUSED). The cron never fires
+      # during a test (adds no run cost); the --live driver launches actual runs via run-now.
+      schedule:
+        quartz_cron_expression: "0 0 5 31 12 ? 2099"
+        timezone_id: "UTC"
+        pause_status: "UNPAUSED"
+      # Serverless compute — the serverless runtime runs Structured Streaming natively.
+      # Job-level parameters (the invoke contract) so the e2e_streaming.py --live driver can
+      # override trigger_mode=live (+ max_runtime_s watchdog) via run_now to prove the freeze
+      # bracket against a genuinely RUNNING stream job. Default = bounded (cheap).
+      parameters:
+        # Default MUST be false: 05b_unfreeze_verify's RESTART_STREAM restore re-launches this job
+        # via start_job with DEFAULT job params, and a restarted streaming job must never drop its
+        # sink table (reset=true runs DROP TABLE + rm location). The e2e driver passes reset=true
+        # explicitly on the INITIAL launch to get a clean estate; every product-driven restart
+        # inherits this false default and is non-destructive.
+        - name: reset
+          default: "false"
+        - name: rows_per_second
+          default: "50"
+        - name: trigger_mode
+          default: "available_now"
+        - name: max_runtime_s
+          default: "1200"
+      tasks:
+        - task_key: seed_stream
+          notebook_task:
+            notebook_path: ../notebooks/e2e/seed_stream.py
+            base_parameters:
+              catalog: ${var.manifest_catalog}
+              schema: e2e_stream
+              table: src_01
+              external_base: ${var.e2e_external_base}
+              rows_per_second: "{{job.parameters.rows_per_second}}"
+              reset: "{{job.parameters.reset}}"
+              trigger_mode: "{{job.parameters.trigger_mode}}"
+              max_runtime_s: "{{job.parameters.max_runtime_s}}"

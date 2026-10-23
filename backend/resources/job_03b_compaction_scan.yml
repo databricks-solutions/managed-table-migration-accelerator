@@ -1,0 +1,37 @@
+# Stage 03b — Targeted compaction rescan + action-backlog refresh (READ-ONLY).
+# The dedicated operator workflow to run against ONE catalog.schema immediately before
+# converting it. Re-scans DESCRIBE HISTORY for that scope, attributes compaction actors,
+# and regenerates migration_actions. Never pauses/optimizes/converts anything.
+resources:
+  jobs:
+    job_03b_compaction_scan:
+      name: "[${bundle.target}] ${bundle.name} :: 03b compaction scan"
+      tags:
+        project: managed-migration
+        stage: "03b-compaction-scan"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Run-now params: target_schema is the primary "which schema to rescan before
+      # converting it" selector; recent_optimize_minutes is an advanced tuning knob for
+      # the recent-compaction window. Read-only stage — no mutation risk. All other knobs
+      # (filters, history/parallelism, refresh_actions) and manifest_catalog/schema stay
+      # deploy-fixed so a run-now caller cannot redirect writes to another control plane.
+      parameters:
+        - name: target_schema
+          default: ${var.target_schema}
+        # Advanced:
+        - name: recent_optimize_minutes
+          default: ${var.recent_optimize_minutes}
+      tasks:
+        - task_key: compaction_scan
+          notebook_task:
+            notebook_path: ../notebooks/03b_compaction_scan.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              target_schema: "{{job.parameters.target_schema}}"
+              catalog_filter: ${var.catalog_filter}
+              schema_filter: ${var.schema_filter}
+              history_limit: ${var.compaction_history_limit}
+              recent_optimize_minutes: "{{job.parameters.recent_optimize_minutes}}"
+              parallelism: ${var.history_parallelism}
+              refresh_actions: ${var.refresh_actions}

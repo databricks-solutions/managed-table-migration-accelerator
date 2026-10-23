@@ -1,0 +1,55 @@
+-- @param catalog STRING = main
+-- @param schema STRING = migration
+-- @param refresh_token STRING
+SELECT
+  as_of,
+  plan_run_id,
+  estate_total_schemas,
+  estate_pct_migrated,
+  estate_pct_validated,
+  schemas_done,
+  schemas_in_progress,
+  schemas_blocked,
+  prev_summary,
+  next_step_kind,
+  next_step_title,
+  next_wave_id,
+  next_group_key,
+  next_bucket,
+  next_selector,
+  next_selector_kind,
+  mutates,
+  reversible,
+  eta_copy_min,
+  max_downtime_min,
+  recommended_warehouse,
+  recommended_cores,
+  remaining_tables,
+  downstream_count,
+  owners,
+  needs_streaming_restart,
+  needs_reshare,
+  needs_compat,
+  below_floor_consumers,
+  resume_needed,
+  blockers_summary,
+  next_next_preview,
+  exact_command,
+  directive,
+  ready_now_tables,
+  min_slack_min,
+  readiness_evaluated,
+  estate_total_tables,
+  estate_migrated_tables,
+  estate_converted,
+  estate_validated_tables,
+  estate_remaining_tables,
+  estate_blocked_tables,
+  estate_discovered_tables,
+  estate_ineligible_tables,
+  estate_open_pre_convert
+FROM IDENTIFIER(:catalog || '.' || :schema || '.migration_next_actions')
+WHERE :refresh_token IS NOT NULL  -- cache-bust (always true)
+  -- Latest snapshot only (REQUIRED): the current directive is the most recent by as_of.
+  AND as_of = (SELECT MAX(as_of) FROM IDENTIFIER(:catalog || '.' || :schema || '.migration_next_actions'))
+ORDER BY as_of DESC

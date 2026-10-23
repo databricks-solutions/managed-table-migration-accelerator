@@ -1,0 +1,31 @@
+# E2E-ONLY (DEV FIXTURE ASSET) — synthetic control-plane fixture estate.
+# Deployed so the dashboard / app / conductor surfaces that the small real e2e estate cannot
+# exercise (convert-window readiness, multi-day burn-down, every gate kind, freeze ledger, open
+# actions across kinds, path-access) all light up at pagination scale (~300 tables).
+#
+# It is NOT a migration stage. It writes ONLY control-plane rows namespaced under fx_* schemas
+# (no backing Delta files) plus its own fixture plan_run_id. Runs no SET MANAGED, mutates no user
+# tables, runs no VACUUM. Idempotent. `teardown=true` removes every fx_* row EXCEPT
+# path_access_locations (kept permanent). Runs on serverless. Only meaningful in a dev target.
+resources:
+  jobs:
+    job_e2e_seed_fixture_estate:
+      name: "[${bundle.target}] ${bundle.name} :: e2e seed fixture estate (dev-only)"
+      tags:
+        project: managed-migration
+        stage: "e2e-seed-fixture-estate"
+      # Serverless compute — pure control-plane writes via the migration.* builders.
+      tasks:
+        - task_key: seed_fixture_estate
+          notebook_task:
+            notebook_path: ../notebooks/e2e/seed_fixture_estate.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              table_count: "300"
+              rng_seed: "42"
+              # Hybrid live-windowing proof is opt-in; needs a writable external base.
+              seed_real_writes: "false"
+              external_base: ${var.e2e_external_base}
+              teardown: "false"
+              fixture_control_plane: ${var.e2e_fixture_control_plane}

@@ -1,0 +1,54 @@
+# Stage 05b — UNFREEZE + VERIFY: restore compaction/streaming after a convert.
+# The post-convert partner of 03c_freeze. Reads FROZEN freeze_ledger rows for a wave
+# (plan_run_id + wave_id) or a catalog.schema, restores exactly what the freeze changed
+# (resume paused job only if it was unpaused; re-enable PO only if it was on; restart the
+# stopped stream from its checkpoint, pipelines full_refresh=False), verifies against
+# platform truth, auto-closes the paired POST_CONVERT actions, and flips the ledger to
+# UNFROZEN. confirm_execute defaults to false (dry-run). Never full-refreshes, deletes a
+# checkpoint, VACUUMs, or SET MANAGEDs.
+resources:
+  jobs:
+    job_05b_unfreeze_verify:
+      name: "[${bundle.target}] ${bundle.name} :: 05b unfreeze + verify"
+      tags:
+        project: managed-migration
+        stage: "05b-unfreeze-verify"
+      max_concurrent_runs: 1
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      parameters:
+        - name: plan_run_id
+          default: ""
+        - name: wave_id
+          default: ""
+        - name: target_schema
+          default: ${var.target_schema}
+        - name: confirm_execute
+          default: ${var.confirm_execute}
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: unfreeze_verify
+          notebook_task:
+            notebook_path: ../notebooks/05b_unfreeze_verify.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              manifest_schema: ${var.manifest_schema}
+              plan_run_id: "{{job.parameters.plan_run_id}}"
+              wave_id: "{{job.parameters.wave_id}}"
+              target_schema: "{{job.parameters.target_schema}}"
+              confirm_execute: "{{job.parameters.confirm_execute}}"
+              operator: "{{job.parameters.operator}}"
+              parallelism: ${var.parallelism}
+        # Auto-refresh the recommendation after this stage so migration_next_actions moves on
+        # (next finish step / next wave / DONE) instead of going stale. The conductor is
+        # READ-ONLY; run_if ALL_DONE refreshes even if the stage failed.
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: unfreeze_verify
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

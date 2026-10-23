@@ -1,0 +1,49 @@
+# Stage 03 — Dry Run: pre-flight checks for ELIGIBLE tables (NOTHING destructive).
+resources:
+  jobs:
+    job_03_dry_run:
+      name: "[${bundle.target}] ${bundle.name} :: 03 dry run"
+      tags:
+        project: managed-migration
+        stage: "03-dry-run"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Run-now params: scope filters + size band + the recent-OPTIMIZE window let an
+      # operator dry-run an arbitrary slice on demand. Read-only stage — no mutation risk.
+      # manifest_catalog/schema stay deploy-fixed so a run-now caller cannot redirect
+      # writes to another control plane.
+      parameters:
+        - name: catalog_filter
+          default: ${var.catalog_filter}
+        - name: schema_filter
+          default: ${var.schema_filter}
+        - name: size_band_filter
+          default: "*"
+        - name: recent_optimize_minutes
+          default: ${var.recent_optimize_minutes}
+        # This workspace's numeric id so Check 13 can PREDICT the convert ownership guard.
+        - name: current_workspace_id
+          default: ${var.workspace_id}
+      tasks:
+        - task_key: dry_run
+          notebook_task:
+            notebook_path: ../notebooks/03_dry_run.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              catalog_filter: "{{job.parameters.catalog_filter}}"
+              schema_filter: "{{job.parameters.schema_filter}}"
+              size_band_filter: "{{job.parameters.size_band_filter}}"
+              recent_optimize_minutes: "{{job.parameters.recent_optimize_minutes}}"
+              current_workspace_id: "{{job.parameters.current_workspace_id}}"
+        # Refresh the recommendation after the dry run moves a wave to READY, so
+        # migration_next_actions does not stay on "prep" (the MCP mtm_dry_run path runs this job
+        # directly; job_10_campaign runs the notebook and has its own conductor task).
+        # Conductor is READ-ONLY; run_if ALL_DONE refreshes even if the dry run failed.
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: dry_run
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

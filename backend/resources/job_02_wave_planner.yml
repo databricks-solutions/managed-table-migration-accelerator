@@ -1,0 +1,60 @@
+# Stage 02 — Wave planner: sequence tables into waves + emit comms feed (+ CSV export).
+# Runs right after the profiler (00) and before dry-run/convert — convert/rollback consume
+# the wave_id it assigns. (Optional source-scan stage 01 is independent of this.)
+# The planner tails the conductor (read-only recommendation refresh), so every plan run
+# leaves a fresh recommended next step in migration_next_actions for the app/dashboard.
+resources:
+  jobs:
+    job_02_wave_planner:
+      name: "[${bundle.target}] ${bundle.name} :: 02 wave planner"
+      tags:
+        project: managed-migration
+        stage: "02-wave-planner"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Expert Replan surface: wave-shape knobs are run-now overridable. The job itself
+      # fails closed if any table is in CONVERTING state (a replan invalidates the plan
+      # pins 04_convert depends on), so exposing these is safe. manifest_catalog/schema
+      # stay deploy-fixed so a run-now caller cannot redirect writes to another control
+      # plane; lineage_lookback_days / parallelism / export_volume stay fixed (estate
+      # policy, not per-run wave shape).
+      parameters:
+        - name: pilot_schema
+          default: ${var.pilot_schema}
+        - name: pilot_max_tables
+          default: ${var.pilot_max_tables}
+        - name: wave_max_tables
+          default: ${var.wave_max_tables}
+        - name: wave_max_tb
+          default: ${var.wave_max_tb}
+        - name: wave_grain
+          default: ${var.wave_grain}
+      tasks:
+        - task_key: wave_planner
+          notebook_task:
+            notebook_path: ../notebooks/02_wave_planner.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              lineage_lookback_days: "90"
+              parallelism: ${var.parallelism}
+              export_volume: ""
+              app_name: ${var.app_name}
+              table_owner_group: ${var.table_owner_group}
+              pilot_max_tables: "{{job.parameters.pilot_max_tables}}"
+              pilot_schema: "{{job.parameters.pilot_schema}}"
+              wave_max_tables: "{{job.parameters.wave_max_tables}}"
+              wave_max_tb: "{{job.parameters.wave_max_tb}}"
+              wave_grain: "{{job.parameters.wave_grain}}"
+              bulk_max_parallel: ${var.bulk_max_parallel}
+        - task_key: conductor
+          depends_on:
+            - task_key: wave_planner
+          notebook_task:
+            notebook_path: ../notebooks/08_conductor.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              parallelism: ${var.parallelism}
+              include_streaming: ${var.cockpit_default_include_streaming}

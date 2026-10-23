@@ -1,0 +1,69 @@
+# Stage 03d — AUTHORIZE (job key kept from the ownership lease): grant the run_as identity (the
+# convert identity, the App SP in prod) only the Unity Catalog privileges SET MANAGED needs and it
+# is missing. Evaluates convert_authority for the scope's still-to-convert tables (a wave
+# plan_run_id + wave_id, a parallel batch, or a catalog.schema), seeds the LEASE_OWNERSHIP
+# actions (the grant statements + who can run each), and — only for tables the identity can
+# authorize itself, and only when confirm_execute=true — runs the missing GRANTs, records each in
+# ownership_ledger (op_kind=GRANT; prior_held / added) and re-verifies. A table that needs another
+# principal's grant stays MANUAL. confirm_execute defaults to false (dry-run: PLANNED ledger rows
+# with the exact statements, nothing run). Ownership never changes; never SET MANAGED, deletes
+# data, or VACUUMs. 07 revokes only what this stage added, after cleanup or rollback.
+resources:
+  jobs:
+    job_03d_lease_ownership:
+      name: "[${bundle.target}] ${bundle.name} :: 03d lease ownership"
+      tags:
+        project: managed-migration
+        stage: "03d-lease-ownership"
+      max_concurrent_runs: 1
+      # Serverless compute — runtime managed by serverless (GRANT needs no DBR pin).
+      parameters:
+        - name: plan_run_id
+          default: ""
+        - name: wave_id
+          default: ""
+        - name: target_schema
+          default: ${var.target_schema}
+        # Bulk selector: authorize every wave in this parallel batch in one run (requires plan_run_id).
+        # Takes PRECEDENCE over wave_id / target_schema when set (batch-first: they are ignored, not
+        # rejected). The only raises are blank-all and batch_id without plan_run_id.
+        # Empty = single-wave / schema mode.
+        - name: batch_id
+          default: ""
+        - name: confirm_execute
+          default: ${var.confirm_execute}
+        # Plan 1: server-injected operator (attribution). Declared so runNow accepts the override.
+        - name: operator
+          default: ""
+        # Deprecated and ignored: ownership no longer changes. Kept as a job parameter so
+        # existing run-now callers (and the app, until it stops sending it) stay valid.
+        - name: table_owner_group
+          default: ${var.table_owner_group}
+      tasks:
+        - task_key: lease
+          notebook_task:
+            notebook_path: ../notebooks/03d_lease_ownership.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              manifest_schema: ${var.manifest_schema}
+              plan_run_id: "{{job.parameters.plan_run_id}}"
+              wave_id: "{{job.parameters.wave_id}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              target_schema: "{{job.parameters.target_schema}}"
+              confirm_execute: "{{job.parameters.confirm_execute}}"
+              table_owner_group: "{{job.parameters.table_owner_group}}"
+              operator: "{{job.parameters.operator}}"
+              parallelism: ${var.parallelism}
+        # Auto-refresh the recommendation after this stage so migration_next_actions moves on
+        # (next finish step / next wave / DONE) instead of going stale. The conductor is
+        # READ-ONLY; run_if ALL_DONE refreshes even if the stage failed.
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: lease
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

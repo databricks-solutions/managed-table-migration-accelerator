@@ -1,0 +1,51 @@
+# Stage 07 — Post-conversion cleanup (VACUUM after day 14). DAILY schedule.
+# Picks up VALIDATED tables as they age past the 14-day rollback window.
+resources:
+  jobs:
+    job_07_post_convert_cleanup:
+      name: "[${bundle.target}] ${bundle.name} :: 07 post-convert cleanup"
+      tags:
+        project: managed-migration
+        stage: "07-cleanup"
+      schedule:
+        quartz_cron_expression: "0 0 9 * * ?"   # daily 09:00
+        timezone_id: "America/Chicago"
+        pause_status: PAUSED                      # operator unpauses deliberately
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Run-now params: full_name targets a single VALIDATED table for cleanup on demand;
+      # max_tables is the per-run VACUUM safety cap (default 50, matching the notebook
+      # widget so the daily schedule is unchanged). force_vacuum_po_tables stays
+      # deploy-fixed (never blanket-VACUUM PO-managed tables from a run-now click) and
+      # manifest_catalog/schema stay deploy-fixed so a run-now caller cannot redirect
+      # writes to another control plane.
+      parameters:
+        - name: full_name
+          default: ""
+        - name: max_tables
+          default: "50"
+        # Revoke the convert privileges Authorize (03d) added, for CLEANED / ROLLED_BACK tables,
+        # and restore any legacy ownership lease (false = dry-run: print the statements only).
+        - name: confirm_execute
+          default: "false"
+        # Deprecated and ignored (kept so existing run-now callers stay valid).
+        - name: table_owner_group
+          default: ${var.table_owner_group}
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: cleanup
+          notebook_task:
+            notebook_path: ../notebooks/07_post_convert_cleanup.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              job_id: "{{job.id}}"
+              job_run_id: "{{job.run_id}}"
+              manifest_schema: ${var.manifest_schema}
+              full_name: "{{job.parameters.full_name}}"
+              max_tables: "{{job.parameters.max_tables}}"
+              confirm_execute: "{{job.parameters.confirm_execute}}"
+              table_owner_group: "{{job.parameters.table_owner_group}}"
+              operator: "{{job.parameters.operator}}"
+              force_vacuum_po_tables: "false"

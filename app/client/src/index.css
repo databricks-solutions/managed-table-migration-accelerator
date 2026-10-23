@@ -1,0 +1,200 @@
+@import "@databricks/appkit-ui/styles.css";
+
+/* -- Fonts: DM Sans (sans) + DM Mono (mono), self-hosted under public/fonts/ ---------
+ * Latin woff2 subsets. The design ships these as --font-sans / --font-mono; every
+ * component reads those vars (no hardcoded families). Fallback stacks below keep the
+ * app legible before the faces load. */
+@font-face { font-family: 'DM Sans'; src: url('/fonts/dm-sans-regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DM Sans'; src: url('/fonts/dm-sans-medium.woff2')  format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DM Sans'; src: url('/fonts/dm-sans-bold.woff2')    format('woff2'); font-weight: 700; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DM Mono'; src: url('/fonts/dm-mono-regular.woff2') format('woff2'); font-weight: 400; font-style: normal; font-display: swap; }
+@font-face { font-family: 'DM Mono'; src: url('/fonts/dm-mono-medium.woff2')  format('woff2'); font-weight: 500; font-style: normal; font-display: swap; }
+
+/* =====================================================================================
+ * v4 design token block — pasted VERBATIM from the design's :root. Do not edit values
+ * here; this is the single source of the palette. The appkit-ui bridge block below only
+ * ADDS the extra token names appkit-ui's stylesheet expects (it never overrides these).
+ * ===================================================================================== */
+:root{
+  /* -- Layer 1: Databricks palette ------------------------------------- */
+  --db-oat-light:#F9F7F4; --db-oat-medium:#EEEDE9; --db-white:#FFFFFF;
+  --db-navy-900:#0B2026; --db-navy-800:#1B3139; --db-navy-700:#143D4A;
+  --db-navy-600:#295866; --db-navy-500:#3E6B7A; --db-navy-400:#618794;
+  --db-lava-600:#FF3621; --db-lava-700:#BD2B26; --db-lava-800:#801C17;
+  --db-green-600:#00A972; --db-yellow-600:#DE8C00; --db-blue-600:#2272B4;
+  --db-maroon-600:#9E1D51; --db-gray-lines:#DCE0E2; --db-gray-text:#5A6F77;
+
+  /* -- Layer 2: semantic ----------------------------------------------- */
+  --background:var(--db-oat-light);
+  --card:var(--db-white);
+  --foreground:var(--db-navy-800);
+  --primary:var(--db-navy-800);
+  --primary-foreground:var(--db-white);
+  --muted:var(--db-oat-medium);
+  --muted-foreground:var(--db-gray-text);
+  --border:var(--db-gray-lines);
+  --input:var(--db-gray-lines);
+  --ring:var(--db-lava-600);
+
+  /* NEW 1-2: deep navy surfaces (dark cards, code blocks) */
+  --surface-deep:var(--db-navy-900);
+  --surface-deep-2:var(--db-navy-700);
+  /* NEW 3: third muted step (tertiary text on light) */
+  --muted-foreground-2:#90A5B1;
+  /* NEW 4: label + body colours on dark cards */
+  --label-on-dark:var(--db-navy-400);
+  --label-on-dark-2:var(--db-navy-500);
+  --fg-on-dark:var(--db-white);
+  --fg-on-dark-2:#C4CCD6;
+  --border-on-dark:var(--db-navy-600);
+  --track-on-dark:#1F4653;
+  --dot-inactive-on-dark:#3E5A66;
+  /* NEW 5: Lava 800 — mutation badge ground */
+  --brand-deep:var(--db-lava-800);
+  /* NEW 6: brand, kept separate from destructive (decision 7) */
+  --brand:var(--db-lava-600);
+  --brand-hover:var(--db-lava-700);
+  /* NEW 7: code green on navy */
+  --code-on-dark:#9ED6C4;
+
+  /* destructive — same hex as brand today, will diverge */
+  --destructive:var(--db-lava-600);
+  --destructive-hover:var(--db-lava-700);
+  --destructive-foreground:var(--db-lava-800);
+  --destructive-bg:#FDEDEB;
+  --destructive-bg-subtle:#FFF6F4;
+  --destructive-border:#FABFBA;
+
+  --success:var(--db-green-600);
+  --success-foreground:#03543F;
+  --success-bg:#E8F5EF;
+  --success-border:#A7DFC8;
+  --success-deep:#0F3B33;
+
+  --warning:var(--db-yellow-600);
+  --warning-foreground:#7D5319;
+  --warning-bg:#FFF8EB;
+  --warning-border:#FFDB96;
+  --warning-deep:#4A3410;
+
+  /* NEW 6b: --info family (had no token) */
+  --info:var(--db-blue-600);
+  --info-foreground:#0E538B;
+  --info-bg:#EEF6FC;
+  --info-border:#BAE1FC;
+
+  --accent-maroon:var(--db-maroon-600);
+  --accent-maroon-bg:#FBEEF3;
+  --accent-maroon-bg-subtle:#FDF7FA;
+  --accent-maroon-border:#E8C4D5;
+
+  --border-subtle:#F1EFEA;
+  --disabled:#DDD6D3;
+
+  /* NEW 8-9: fonts */
+  --font-sans:'DM Sans',system-ui,sans-serif;
+  --font-mono:'DM Mono',ui-monospace,monospace;
+
+  /* radius — Tailwind-compatible ladder off --radius */
+  --radius:0.625rem;
+  --radius-xs:4px; --radius-sm:5px; --radius-md:6px; --radius-lg:8px;
+  --radius-xl:12px; --radius-pill:99px;
+
+  /* spacing — the 4px scale plus the four off-scale values in use */
+  --space-1:4px;  --space-2:6px;  --space-3:8px;  --space-4:10px;
+  --space-5:12px; --space-6:14px; --space-7:16px; --space-8:20px;
+  --space-9:22px; --space-10:26px;
+
+  /* type scale */
+  --fs-micro:8.5px; --fs-eyebrow:9px; --fs-caption:10px; --fs-body-sm:11px;
+  --fs-body:12px;   --fs-body-lg:13px; --fs-h4:15px; --fs-h3:17px;
+  --fs-h2:21px;     --fs-h1:24px;
+
+  /* elevation — Navy 900 base, cool */
+  --shadow-ring:rgba(255,255,255,0.06);
+  --shadow-md:0 12px 32px rgba(11,32,38,0.28);
+  --shadow-lg:0 24px 64px rgba(11,32,38,0.35);
+  --shadow-xl:0 32px 80px rgba(11,32,38,0.4);
+  --scrim:rgba(11,32,38,0.62);
+}
+
+/* =====================================================================================
+ * appkit-ui bridge — the token names appkit-ui's stylesheet reads that the design block
+ * above doesn't spell out. Every value is derived from the v4 palette; nothing here
+ * introduces a new colour. The --sidebar-* set maps appkit's Sidebar onto the design's
+ * navy rail (surface-deep ground, navy-700 active/hover). Light-only theme, per design.
+ * ===================================================================================== */
+:root{
+  --card-foreground:var(--foreground);
+  --popover:var(--card);
+  --popover-foreground:var(--foreground);
+  --secondary:var(--muted);
+  --secondary-foreground:var(--foreground);
+  --accent:var(--muted);
+  --accent-foreground:var(--foreground);
+
+  /* Sidebar → the design's dark navy control rail */
+  --sidebar:var(--surface-deep);
+  --sidebar-foreground:var(--fg-on-dark);
+  --sidebar-accent:var(--surface-deep-2);
+  --sidebar-accent-foreground:var(--fg-on-dark);
+  --sidebar-border:var(--surface-deep-2);
+  --sidebar-primary:var(--brand);
+  --sidebar-primary-foreground:var(--fg-on-dark);
+  --sidebar-ring:var(--ring);
+
+  /* charts — db palette, in case a later surface uses appkit charts */
+  --chart-1:var(--db-navy-600);
+  --chart-2:var(--db-green-600);
+  --chart-3:var(--db-lava-600);
+  --chart-4:var(--db-yellow-600);
+  --chart-5:var(--db-blue-600);
+  --chart-6:var(--db-maroon-600);
+  --chart-7:var(--db-navy-400);
+  --chart-8:var(--db-gray-text);
+}
+
+html, body {
+  margin: 0;
+  padding: 0;
+  background: var(--background);
+  font-family: var(--font-sans);
+  color: var(--foreground);
+  -webkit-font-smoothing: antialiased;
+}
+#root { min-height: 100vh; }
+
+/* Unlayered so it beats appkit-ui's @layer base ::selection (30% --primary tint + white text),
+ * which is near-invisible on the oat ground and on the navy cards. Both colours are explicit so
+ * the highlight reads the same on light pages, dark cards, inputs, and the sidebar. */
+::selection {
+  background-color: var(--info-border);
+  color: var(--db-navy-900);
+}
+
+/* -- Motion: the app's shared easing (pages/how/how.css scopes the same curves to
+ * .how-academy). Named --motion-* because Tailwind's theme already owns --ease-out /
+ * --ease-in-out for its `ease-*` utilities; redefining those here would retime every
+ * transition in the app. */
+:root {
+  --motion-ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --motion-ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --motion-ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* A Disclosure's content arrives instead of jumping in: opacity plus 4px, 200ms. Opacity
+ * only when the user asks for reduced motion. */
+.disclosure[open] > .disclosure-body {
+  animation: disclosure-reveal 200ms var(--motion-ease-out);
+}
+@keyframes disclosure-reveal {
+  from { opacity: 0; transform: translateY(-4px); }
+  to { opacity: 1; transform: none; }
+}
+@keyframes disclosure-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .disclosure[open] > .disclosure-body { animation: disclosure-fade 150ms linear; }
+}

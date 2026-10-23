@@ -1,0 +1,256 @@
+# Databricks Asset Bundle — External -> Managed table migration tooling.
+# Packages every migration notebook as one Workflow job per stage.
+#
+#   databricks bundle validate -t dev
+#   databricks bundle deploy   -t dev
+#   databricks bundle run job_00_profiler -t dev
+#
+# The agent builds the tooling; a human runs the conversion from these jobs.
+bundle:
+  name: managed-table-migration
+  # Genie space resources require the DIRECT deployment engine (default in CLI 1.3.0+).
+  # Pinned here so dashboard + Genie deploy consistently regardless of CLI default.
+  engine: direct
+
+# NOTE: there is intentionally NO `artifacts:` block to build the App.
+# We tried it across two deploy probes to "guarantee the build ran". The deploy logs
+# settled it: the Apps platform re-installs and rebuilds `dist/` itself, discarding any
+# artifact we upload — so a bundle-side `npm run build` produces output that never runs.
+# It was a build whose result is thrown away, and leaving it in invites the belief that it
+# produces the deployed artifact. Do NOT re-add `artifacts.app_build`; the platform owns
+# the App build.
+
+include:
+  - backend/resources/*.yml
+  - app/resources/*.yml
+
+variables:
+  manifest_catalog:
+    description: Catalog holding the control tables (manifest, audit_log, plans).
+    default: main
+  manifest_schema:
+    description: Schema holding the control tables.
+    default: migration
+  catalog_filter:
+    description: Glob filter for catalogs to scope (* = all).
+    default: "*"
+  schema_filter:
+    description: Glob filter for schemas to scope (* = all).
+    default: "*"
+  mcp_tier:
+    description: Genie Code MCP tier — v1 (reads + non-mutating stages) or v2 (gated conversions).
+    default: v2
+  telemetry_enabled:
+    description: >-
+      Usage telemetry (opt-out). "true" stamps the toolkit's own closed-vocabulary signals
+      (stage, outcome, banded counts, blocker/error codes — never names, paths or identities) on
+      one cheap call per stage run to this workspace's control plane. "false" sends nothing.
+      See backend/docs/operations/telemetry.md.
+    default: "true"
+  table_owner_group:
+    description: >-
+      DEPRECATED and ignored (convert authority). Was the ownership-lease target group; the
+      convert identity is now authorized with grants (03d Authorize) and ownership never
+      changes. Still passed to the 02/03d/04/07 widgets so existing invocations keep working.
+    # Default is a single SPACE, not "" (kept from when this var was surfaced to the app as a
+    # config.env value, which the Apps deployments API rejects when empty). Nothing reads it.
+    default: " "
+
+  # Profiler streaming/history-scan knobs (resumable, parallel, filter-aware).
+  scan_history:
+    description: Whether the profiler runs DESCRIBE HISTORY for streaming detection.
+    default: "true"
+  max_history_tables:
+    description: Cap on tables assessed per profiler run (per-run throttle; re-run to continue).
+    default: "1000"
+  history_parallelism:
+    description: Parallel DESCRIBE HISTORY workers in the profiler streaming pass.
+    default: "8"
+  history_batch_size:
+    description: Tables per incremental streaming_plan write batch (crash-safety granularity).
+    default: "200"
+  force_rescan:
+    description: Re-scan tables already marked history_scanned_at (ignore the resume marker).
+    default: "false"
+  scan_consumer_runtime:
+    description: Resolve JOB-consumer DBR vs the 15.4 floor from system tables (advisory signal).
+    default: "true"
+  scan_recency:
+    description: Resolve per-table last read/write recency + counts from system.access.table_lineage.
+    default: "true"
+  recency_lookback_days:
+    description: Lookback window (days) for the recency/staleness aggregation.
+    default: "365"
+
+  # Compaction attribution + action-queue knobs (profiler widened pass + stage 03b).
+  scan_compaction:
+    description: Attribute OPTIMIZE/compaction actors from the widened DESCRIBE HISTORY pass.
+    default: "true"
+  recent_optimize_minutes:
+    description: Window (minutes) within which an OPTIMIZE/compaction commit counts as "recent".
+    default: "120"
+  refresh_actions:
+    description: Regenerate the migration_actions backlog after profiling / rescanning.
+    default: "true"
+  compaction_history_limit:
+    description: DESCRIBE HISTORY LIMIT for the targeted stage-03b compaction rescan.
+    default: "200"
+  target_schema:
+    description: Precise catalog.schema for the stage-03b/03c/05b targeted scope (blank = use plan/wave or filters).
+    default: ""
+
+  # Freeze executor (stage 03c freeze + 05b unfreeze/verify). confirm_execute defaults to
+  # false so a run is a safe DRY-RUN (plan + capture prior state, no API calls). Set true to
+  # actually pause/stop/restore. The executor only touches reversible metadata.
+  confirm_execute:
+    description: Actually pause/stop/restore in stages 03c/05b (true) — default false is a dry-run.
+    default: "false"
+
+  # Stage 01 (optional tier-2 source scan) knobs — OFF by default (safe no-op).
+  scan_source:
+    description: Run the tier-2 source scan (export notebook/job SOURCE + find path literals).
+    default: "false"
+  scan_mode:
+    description: Source-scan mode — targeted_jobs (from tier-1 lineage) or broad (workspace walk).
+    default: "targeted_jobs"
+  scan_workspace_paths:
+    description: Workspace roots to walk in broad mode (comma-separated).
+    default: "/"
+  scan_exclude_paths:
+    description: Path prefixes to exclude in broad mode (comma-separated).
+    default: "/Repos,/Shared/Archive"
+  scan_max_notebooks:
+    description: Safety cap on notebooks exported per source-scan run.
+    default: "500"
+
+  # All jobs run on SERVERLESS compute — the serverless runtime natively satisfies the
+  # SET MANAGED (DBR 17.0+) and TRUNCATE UNIFORM HISTORY (17.2+) requirements, and the
+  # notebooks' runtime gate explicitly accepts "Serverless". No DBR/cluster pinning needed.
+
+  # Wave-planner v2 sizing/grain knobs (stage 02).
+  pilot_max_tables:
+    description: Cap on the auto-picked pilot wave (single catalog.schema).
+    default: "15"
+  pilot_schema:
+    description: Pin the pilot to an exact catalog.schema (blank = auto-pick densest).
+    default: ""
+  wave_max_tables:
+    description: Max tables per non-pilot wave (schema slices are chunked to fit).
+    default: "300"
+  wave_max_tb:
+    description: Max TB per non-pilot wave (0 = no byte cap; oversized singletons are flagged).
+    default: "25"
+  wave_grain:
+    description: Wave slice grain — catalog_schema (default) or catalog.
+    default: "catalog_schema"
+
+  # Safety + behavior knobs surfaced as job parameters.
+  max_tables:
+    description: Safety cap on tables converted per run.
+    default: "10"
+  parallelism:
+    description: Parallel converts/rollbacks (different tables only; keep conservative).
+    default: "4"
+  bulk_max_parallel:
+    description: >-
+      Max waves converted concurrently in ONE bulk-convert batch (serverless-budget cap).
+      Each wave itself runs `parallelism` table-threads, so effective concurrent SET MANAGED
+      is bulk_max_parallel * parallelism — keep modest. Used as the for_each concurrency on
+      the four job_11* bulk jobs and as the planner's batch-size cap.
+    default: "4"
+
+  # E2E-only: writable external-location base for the live streaming / DLT integration seeds
+  # (Parts B/C of the streaming test-hardening plan). Blank by default so the e2e seed jobs are
+  # only meaningful where an operator sets it (BUNDLE_VAR_e2e_external_base for the e2e target).
+  # These assets are gated integration tooling — never run as part of a normal migration.
+  e2e_external_base:
+    description: Writable external-location base (e.g. s3://.../mtm_e2e) for the e2e streaming/DLT seeds.
+    default: ""
+  # E2E-only: one extra `catalog.schema` the synthetic fixture seeder may write to, on top of the
+  # built-in `mtm_e2e_dev.migration` (migration.fixture_safety). Blank = built-in allowlist only.
+  e2e_fixture_control_plane:
+    description: Extra catalog.schema allowed for the dev-only synthetic fixture estate (blank = none).
+    default: ""
+
+  prod_host:
+    description: Workspace host for the prod target.
+    default: "https://CHANGE-ME-prod.cloud.databricks.com"
+  prod_run_as_sp:
+    description: Service principal application id to run prod jobs as.
+    default: ""
+
+  # Control plane (stage 08 Conductor + stage 09 cockpit + stage 10 gated campaign).
+  conductor_schedule_cron:
+    description: Quartz cron for the read-only Conductor schedule (paused by default).
+    default: "0 0 6 * * ?"
+  cockpit_default_include_streaming:
+    description: Default for the cockpit/conductor include_streaming toggle (streaming stays isolated).
+    default: "false"
+
+  # AI/BI scoping dashboard + Genie space (read-only over the control tables).
+  # The Genie space is created/updated by the install-time setup job (job_99_setup) via the
+  # SDK — NOT as a bundle resource — so a fresh `bundle deploy` never fails on missing control
+  # tables. The profiler (stage 00) has no Genie/App awareness.
+  warehouse_id:
+    description: SQL warehouse ID powering the scoping dashboard + Genie space.
+    default: ""
+  ensure_genie:
+    description: Whether job_99_setup creates/updates the Genie space (needs warehouse_id).
+    default: "true"
+  genie_grant_users:
+    description: Grant CAN_RUN on the Genie Agent to the `users` group (false = creator-only).
+    default: "true"
+  app_name:
+    description: >-
+      Databricks App name whose service principal is granted CAN_RUN on the Genie space.
+      job_99_setup resolves the SP at runtime via w.apps.get(name=...). Default is
+      mcp-${bundle.name} (the app is `mcp-`-prefixed so Databricks recognizes it as a custom
+      MCP server), a bundle-level substitution (NOT a resource reference), so it creates
+      no deploy cycle — the App binds the profiler job, so job_99_setup must not bind the
+      App back. Keep the app resource's `name` at mcp-${bundle.name} too so the two stay in sync.
+    default: mcp-${bundle.name}
+  dataset_catalog:
+    description: Catalog the dashboard/Genie read control tables from (defaults to the manifest catalog).
+    default: main
+  dataset_schema:
+    description: Schema the dashboard/Genie read control tables from (defaults to the manifest schema).
+    default: migration
+  workspace_id:
+    description: >-
+      Numeric workspace/org id (the `?o=` URL param). Exposed to the app via
+      DATABRICKS_WORKSPACE_ID so path-access deep links can be the fully-qualified,
+      cross-workspace-safe form (`<host>/?o=<id>#workspace/...`). Empty = omit `?o=`
+      (host-only links still resolve within the current workspace session).
+    # Default is a single SPACE, not "": the Apps
+    # deployments API rejects an empty/null config.env `value`, and this is surfaced as
+    # DATABRICKS_WORKSPACE_ID. The server normalizes it (`normalizeWorkspaceId`: trim → all-digits
+    # test → null), so " " == "unset" (client omits `?o=`) while keeping the app deploy valid.
+    default: " "
+
+targets:
+  dev:
+    mode: development
+    default: true
+    workspace:
+      host: https://CHANGE-ME-dev.cloud.databricks.com
+
+  # Development target for the live e2e estate (backend/.e2e). Nothing workspace-specific is
+  # committed: the host comes from --profile and the workspace values from BUNDLE_VAR_* (copy
+  # .env.e2e.example to .env.e2e, fill it in, and `set -a; source .env.e2e; set +a`):
+  #   databricks bundle deploy -t e2e --profile <profile>
+  # (development mode: resources are [dev <user>]-prefixed; the cockpit resolves by suffix).
+  e2e:
+    mode: development
+    variables:
+      genie_grant_users: "false"
+
+  prod:
+    # production mode: pauses schedules on deploy by the operator's choosing, prefixes
+    # nothing, and enforces that the bundle is deployed from a clean state. Manual
+    # approval is enforced via job-run permissions + a human triggering the run.
+    mode: production
+    workspace:
+      host: ${var.prod_host}
+      root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
+    run_as:
+      service_principal_name: ${var.prod_run_as_sp}

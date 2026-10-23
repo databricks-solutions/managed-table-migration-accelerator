@@ -1,0 +1,1221 @@
+{
+ "_doc": "Golden cases for the convert-authority roll-up (authority.apply_authority_to_waves), the wave sentence (authority.wave_authority_text) and the grant script (authority.grant_script). Python (test_authority_rollup_fixture.py) and the TS mirror (app/client/src/lib/convertAuthority.pure.test.ts) both pin to it. authority_rows are stored convert_authority rows from convert_authority_cases.json. Regenerate only when the Python rule changes, and change the TS mirror in the same commit.",
+ "authority_rows": [
+  {
+   "full_name": "main_cat.sch_a.c0",
+   "actor": "migration-sp",
+   "status": "NEEDS_GRANT",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "OWNER_OR_MANAGE"
+   ],
+   "self_grantable": false,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing ownership or MANAGE on the table; someone who can grant it must run the grant script.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c0",
+     "privilege": "MANAGE",
+     "self_grantable": false,
+     "grantors": [
+      "data-owner@example.com",
+      "catalog-admins"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of table `main_cat.sch_a.c0` (`data-owner@example.com`) to run: GRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_a.c1",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_TABLE",
+   "basis_via": null,
+   "missing": [
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing SELECT and MODIFY on the table; it holds MANAGE on the table, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c1",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c1",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_a.c2",
+   "actor": "migration-sp",
+   "status": "AUTHORIZED",
+   "basis": "MANAGE_TABLE",
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` can convert this table: it holds MANAGE on the table.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_b.c3",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [
+    "USE_SCHEMA",
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing USE SCHEMA on the schema and SELECT and MODIFY on the table; it holds MANAGE on the schema, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`",
+     "securable_type": "SCHEMA",
+     "securable_name": "main_cat.sch_b",
+     "privilege": "USE SCHEMA",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c3",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c3",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_a.c4",
+   "actor": "migration-sp",
+   "status": "AUTHORIZED",
+   "basis": "TABLE_OWNER",
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` can convert this table: it owns the table.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_a.c5",
+   "actor": "data-owner@example.com",
+   "status": "AUTHORIZED",
+   "basis": "SCHEMA_OWNER",
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`data-owner@example.com` can convert this table: it owns the schema.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_a.c6",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_TABLE",
+   "basis_via": null,
+   "missing": [
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing MODIFY on the table; it holds MANAGE on the table, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c6",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_b.c7",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing SELECT and MODIFY on the table; it holds MANAGE on the schema, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c7",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c7",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_b.c8",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing MODIFY on the table; it holds MANAGE on the schema, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c8",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_a.c9",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_TABLE",
+   "basis_via": "account users",
+   "missing": [
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing MODIFY on the table; it holds MANAGE on the table through group `account users`, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_a.c9 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c9",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c9 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_b.c10",
+   "actor": "migration-sp",
+   "status": "AUTHORIZED",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` can convert this table: it holds MANAGE on the schema.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_a.c11",
+   "actor": "migration-sp",
+   "status": "AUTHORIZED",
+   "basis": "MANAGE_TABLE",
+   "basis_via": "account users",
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` can convert this table: it holds MANAGE on the table through group `account users`.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_c.c12",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "SCHEMA_OWNER",
+   "basis_via": null,
+   "missing": [
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing SELECT and MODIFY on the table; it owns the schema, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sch_c.c12 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_c.c12",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_c.c12 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_c.c12 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_c.c12",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_c.c12 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_c.c13",
+   "actor": "migration-sp",
+   "status": "AUTHORIZED",
+   "basis": "SCHEMA_OWNER",
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` can convert this table: it owns the schema.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "main_cat.sch_a.c14",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_TABLE",
+   "basis_via": null,
+   "missing": [
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing SELECT and MODIFY on the table; it holds MANAGE on the table, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sch_a.c14 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c14",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_a.c14 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_a.c14 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_a.c14",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c14 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_b.c15",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing MODIFY on the table; it holds MANAGE on the schema, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sch_b.c15 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sch_b.c15",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c15 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "ms_cat.s.m1",
+   "actor": "admin@example.com",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "USE_CATALOG",
+    "USE_SCHEMA",
+    "OWNER_OR_MANAGE",
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": true,
+   "reason": "`admin@example.com` is missing USE CATALOG on the catalog, USE SCHEMA on the schema, and ownership or MANAGE, SELECT, and MODIFY on the table; it is a metastore admin (which does not count by itself), so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE CATALOG ON CATALOG ms_cat TO `admin@example.com`",
+     "securable_type": "CATALOG",
+     "securable_name": "ms_cat",
+     "privilege": "USE CATALOG",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT USE CATALOG ON CATALOG ms_cat TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA ms_cat.s TO `admin@example.com`",
+     "securable_type": "SCHEMA",
+     "securable_name": "ms_cat.s",
+     "privilege": "USE SCHEMA",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA ms_cat.s TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT MANAGE ON TABLE ms_cat.s.m1 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "ms_cat.s.m1",
+     "privilege": "MANAGE",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MANAGE ON TABLE ms_cat.s.m1 TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT SELECT ON TABLE ms_cat.s.m1 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "ms_cat.s.m1",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE ms_cat.s.m1 TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE ms_cat.s.m1 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "ms_cat.s.m1",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE ms_cat.s.m1 TO `admin@example.com`"
+    }
+   ]
+  },
+  {
+   "full_name": "ms_cat.s.m2",
+   "actor": "admin@example.com",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "OWNER_OR_MANAGE"
+   ],
+   "self_grantable": true,
+   "metastore_admin": true,
+   "reason": "`admin@example.com` is missing ownership or MANAGE on the table; it is a metastore admin (which does not count by itself), so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MANAGE ON TABLE ms_cat.s.m2 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "ms_cat.s.m2",
+     "privilege": "MANAGE",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MANAGE ON TABLE ms_cat.s.m2 TO `admin@example.com`"
+    }
+   ]
+  },
+  {
+   "full_name": "co_cat.s.co1",
+   "actor": "admin@example.com",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "CATALOG_OWNER",
+   "basis_via": null,
+   "missing": [
+    "USE_SCHEMA",
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": true,
+   "reason": "`admin@example.com` is missing USE SCHEMA on the schema and SELECT and MODIFY on the table; it owns the catalog, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`",
+     "securable_type": "SCHEMA",
+     "securable_name": "co_cat.s",
+     "privilege": "USE SCHEMA",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "co_cat.s.co1",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`",
+     "securable_type": "TABLE",
+     "securable_name": "co_cat.s.co1",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`"
+    }
+   ]
+  },
+  {
+   "full_name": "co_cat.s.co2",
+   "actor": "admin@example.com",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "CATALOG_OWNER",
+   "basis_via": null,
+   "missing": [
+    "USE_SCHEMA"
+   ],
+   "self_grantable": true,
+   "metastore_admin": true,
+   "reason": "`admin@example.com` is missing USE SCHEMA on the schema; it owns the catalog, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`",
+     "securable_type": "SCHEMA",
+     "securable_name": "co_cat.s",
+     "privilege": "USE SCHEMA",
+     "self_grantable": true,
+     "grantors": [
+      "admin@example.com"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sch_a.e1",
+   "actor": "migration-sp",
+   "status": "UNKNOWN",
+   "basis": null,
+   "basis_via": null,
+   "missing": [],
+   "self_grantable": false,
+   "metastore_admin": null,
+   "reason": "Permissions for `migration-sp` could not be read (PERMISSION_DENIED on system.information_schema); the convert stays blocked until they can be.",
+   "grant_requests": []
+  },
+  {
+   "full_name": "hidden_cat.sch.e2",
+   "actor": "migration-sp",
+   "status": "UNKNOWN",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "USE_CATALOG",
+    "USE_SCHEMA",
+    "OWNER_OR_MANAGE",
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": false,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing USE CATALOG on the catalog, USE SCHEMA on the schema, and ownership or MANAGE, SELECT, and MODIFY on the table and cannot read who owns the table; ask the catalog owner or a metastore admin to run the grant script.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE CATALOG ON CATALOG hidden_cat TO `migration-sp`",
+     "securable_type": "CATALOG",
+     "securable_name": "hidden_cat",
+     "privilege": "USE CATALOG",
+     "self_grantable": false,
+     "grantors": [],
+     "grantor_hint": "the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT USE CATALOG ON CATALOG hidden_cat TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA hidden_cat.sch TO `migration-sp`",
+     "securable_type": "SCHEMA",
+     "securable_name": "hidden_cat.sch",
+     "privilege": "USE SCHEMA",
+     "self_grantable": false,
+     "grantors": [],
+     "grantor_hint": "the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT USE SCHEMA ON SCHEMA hidden_cat.sch TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MANAGE ON TABLE hidden_cat.sch.e2 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "hidden_cat.sch.e2",
+     "privilege": "MANAGE",
+     "self_grantable": false,
+     "grantors": [],
+     "grantor_hint": "the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT MANAGE ON TABLE hidden_cat.sch.e2 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT SELECT ON TABLE hidden_cat.sch.e2 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "hidden_cat.sch.e2",
+     "privilege": "SELECT",
+     "self_grantable": false,
+     "grantors": [],
+     "grantor_hint": "the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT SELECT ON TABLE hidden_cat.sch.e2 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE hidden_cat.sch.e2 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "hidden_cat.sch.e2",
+     "privilege": "MODIFY",
+     "self_grantable": false,
+     "grantors": [],
+     "grantor_hint": "the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT MODIFY ON TABLE hidden_cat.sch.e2 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sales.e3",
+   "actor": "migration-sp",
+   "status": "SELF_AUTHORIZABLE",
+   "basis": "SCHEMA_OWNER",
+   "basis_via": "data-eng",
+   "missing": [
+    "SELECT",
+    "MODIFY"
+   ],
+   "self_grantable": true,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing SELECT and MODIFY on the table; it owns the schema through group `data-eng`, so Authorize can grant it.",
+   "grant_requests": [
+    {
+     "statement": "GRANT SELECT ON TABLE main_cat.sales.e3 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sales.e3",
+     "privilege": "SELECT",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sales.e3 TO `migration-sp`"
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE main_cat.sales.e3 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sales.e3",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sales.e3 TO `migration-sp`"
+    }
+   ]
+  },
+  {
+   "full_name": "main_cat.sales.e4",
+   "actor": "migration-sp",
+   "status": "NEEDS_GRANT",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "OWNER_OR_MANAGE"
+   ],
+   "self_grantable": false,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing ownership or MANAGE on the table; someone who can grant it must run the grant script.",
+   "grant_requests": [
+    {
+     "statement": "GRANT MANAGE ON TABLE main_cat.sales.e4 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "main_cat.sales.e4",
+     "privilege": "MANAGE",
+     "self_grantable": false,
+     "grantors": [
+      "ann@example.com",
+      "data-eng",
+      "catalog-admins"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of table `main_cat.sales.e4` (`ann@example.com`) to run: GRANT MANAGE ON TABLE main_cat.sales.e4 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    }
+   ]
+  },
+  {
+   "full_name": "c.s.e5",
+   "actor": "migration-sp",
+   "status": "NEEDS_GRANT",
+   "basis": null,
+   "basis_via": null,
+   "missing": [
+    "USE_CATALOG",
+    "USE_SCHEMA",
+    "OWNER_OR_MANAGE"
+   ],
+   "self_grantable": false,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing USE CATALOG on the catalog, USE SCHEMA on the schema, and ownership or MANAGE on the table; someone who can grant it must run the grant script.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE CATALOG ON CATALOG c TO `migration-sp`",
+     "securable_type": "CATALOG",
+     "securable_name": "c",
+     "privilege": "USE CATALOG",
+     "self_grantable": false,
+     "grantors": [
+      "cat-owner"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `c` (`cat-owner`) to run: GRANT USE CATALOG ON CATALOG c TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    },
+    {
+     "statement": "GRANT USE SCHEMA ON SCHEMA c.s TO `migration-sp`",
+     "securable_type": "SCHEMA",
+     "securable_name": "c.s",
+     "privilege": "USE SCHEMA",
+     "self_grantable": false,
+     "grantors": [
+      "sch-owner",
+      "cat-owner"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of schema `c.s` (`sch-owner`) to run: GRANT USE SCHEMA ON SCHEMA c.s TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    },
+    {
+     "statement": "GRANT MANAGE ON TABLE c.s.e5 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "c.s.e5",
+     "privilege": "MANAGE",
+     "self_grantable": false,
+     "grantors": [
+      "tbl-owner",
+      "sch-owner",
+      "cat-owner"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of table `c.s.e5` (`tbl-owner`) to run: GRANT MANAGE ON TABLE c.s.e5 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    }
+   ]
+  },
+  {
+   "full_name": "c.s.e6",
+   "actor": "migration-sp",
+   "status": "NEEDS_GRANT",
+   "basis": "MANAGE_SCHEMA",
+   "basis_via": null,
+   "missing": [
+    "USE_CATALOG",
+    "MODIFY"
+   ],
+   "self_grantable": false,
+   "metastore_admin": false,
+   "reason": "`migration-sp` is missing USE CATALOG on the catalog and MODIFY on the table; someone who can grant it must run the grant script.",
+   "grant_requests": [
+    {
+     "statement": "GRANT USE CATALOG ON CATALOG c TO `migration-sp`",
+     "securable_type": "CATALOG",
+     "securable_name": "c",
+     "privilege": "USE CATALOG",
+     "self_grantable": false,
+     "grantors": [
+      "cat-owner"
+     ],
+     "grantor_hint": "any principal with MANAGE on it, or a metastore admin",
+     "ask_text": "Ask the owner of catalog `c` (`cat-owner`) to run: GRANT USE CATALOG ON CATALOG c TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."
+    },
+    {
+     "statement": "GRANT MODIFY ON TABLE c.s.e6 TO `migration-sp`",
+     "securable_type": "TABLE",
+     "securable_name": "c.s.e6",
+     "privilege": "MODIFY",
+     "self_grantable": true,
+     "grantors": [
+      "migration-sp"
+     ],
+     "grantor_hint": "Authorize can do this",
+     "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE c.s.e6 TO `migration-sp`"
+    }
+   ]
+  }
+ ],
+ "members": [
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.c0",
+   "state": "CONVERTED"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_a.c1",
+   "state": "DROPPED"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.c2",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_b.c3",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.c4",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_a.c5",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.c6",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_b.c7",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_b.c8",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_a.c9",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_b.c10",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_a.c11",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_c.c12",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_c.c13",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.c14",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_b.c15",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "ms_cat.s.m1",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "ms_cat.s.m2",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "co_cat.s.co1",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "co_cat.s.co2",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_a.e1",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "hidden_cat.sch.e2",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sales.e3",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sales.e4",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "c.s.e5",
+   "state": "ASSESSED"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "c.s.e6",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_a",
+   "full_name": "main_cat.sch_new.unchecked_1",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_b",
+   "full_name": "main_cat.sch_new.unchecked_2",
+   "state": "CONVERTING"
+  },
+  {
+   "wave_id": "wave_c",
+   "full_name": "main_cat.sch_a.c2",
+   "state": "DRY_RUN_OK"
+  },
+  {
+   "wave_id": "wave_c",
+   "full_name": "main_cat.sch_a.c4",
+   "state": "DRY_RUN_OK"
+  }
+ ],
+ "waves": [
+  {
+   "wave_id": "wave_a",
+   "convert_run_as": "migration-sp",
+   "expected": {
+    "lease_total": 13,
+    "open_lease": 10,
+    "authority_unevaluated": 1,
+    "authority_self_grantable": 7,
+    "authority_reason": "c.s.e5: `migration-sp` is missing USE CATALOG on the catalog, USE SCHEMA on the schema, and ownership or MANAGE on the table; someone who can grant it must run the grant script."
+   },
+   "expected_text": "10 of 13 table(s) still to convert are not yet authorized for `migration-sp` (1 not checked yet). For example, c.s.e5: `migration-sp` is missing USE CATALOG on the catalog, USE SCHEMA on the schema, and ownership or MANAGE on the table; someone who can grant it must run the grant script. Authorize can grant 7; the rest need their owner's grant (see the grant script)."
+  },
+  {
+   "wave_id": "wave_b",
+   "convert_run_as": null,
+   "expected": {
+    "lease_total": 13,
+    "open_lease": 10,
+    "authority_unevaluated": 1,
+    "authority_self_grantable": 6,
+    "authority_reason": "c.s.e6: `migration-sp` is missing USE CATALOG on the catalog and MODIFY on the table; someone who can grant it must run the grant script."
+   },
+   "expected_text": "10 of 13 table(s) still to convert are not yet authorized for the convert identity (1 not checked yet). For example, c.s.e6: `migration-sp` is missing USE CATALOG on the catalog and MODIFY on the table; someone who can grant it must run the grant script. Authorize can grant 6; the rest need their owner's grant (see the grant script)."
+  },
+  {
+   "wave_id": "wave_c",
+   "convert_run_as": "migration-sp",
+   "expected": {
+    "lease_total": 2,
+    "open_lease": 0,
+    "authority_unevaluated": 0,
+    "authority_self_grantable": 0,
+    "authority_reason": null
+   },
+   "expected_text": "0 of 2 table(s) still to convert are not yet authorized for `migration-sp`."
+  },
+  {
+   "wave_id": "wave_empty",
+   "convert_run_as": null,
+   "expected": {
+    "lease_total": 0,
+    "open_lease": 0,
+    "authority_unevaluated": 0,
+    "authority_self_grantable": 0,
+    "authority_reason": null
+   },
+   "expected_text": "0 of 0 table(s) still to convert are not yet authorized for the convert identity."
+  }
+ ],
+ "text_cases": [
+  {
+   "wave": {},
+   "expected": "0 table(s) still to convert are not yet authorized for the convert identity."
+  },
+  {
+   "wave": {
+    "open_lease": 3
+   },
+   "expected": "3 table(s) still to convert are not yet authorized for the convert identity."
+  },
+  {
+   "wave": {
+    "open_lease": 3,
+    "lease_total": 5,
+    "convert_run_as": "  "
+   },
+   "expected": "3 of 5 table(s) still to convert are not yet authorized for the convert identity."
+  },
+  {
+   "wave": {
+    "open_lease": 6,
+    "lease_total": 4,
+    "convert_run_as": "sp-x"
+   },
+   "expected": "6 table(s) still to convert are not yet authorized for `sp-x`."
+  },
+  {
+   "wave": {
+    "open_lease": 2,
+    "lease_total": 2,
+    "authority_unevaluated": 2,
+    "authority_self_grantable": 0
+   },
+   "expected": "2 of 2 table(s) still to convert are not yet authorized for the convert identity (2 not checked yet)."
+  },
+  {
+   "wave": {
+    "open_lease": 4,
+    "lease_total": 9,
+    "authority_unevaluated": 1,
+    "authority_self_grantable": 1,
+    "authority_reason": "c.s.t: is missing MANAGE."
+   },
+   "expected": "4 of 9 table(s) still to convert are not yet authorized for the convert identity (1 not checked yet). For example, c.s.t: is missing MANAGE. Authorize can grant 1; the rest need their owner's grant (see the grant script)."
+  },
+  {
+   "wave": {
+    "open_lease": 1,
+    "lease_total": 1,
+    "authority_self_grantable": 1
+   },
+   "expected": "1 of 1 table(s) still to convert are not yet authorized for the convert identity. Authorize can grant all of the checked ones."
+  },
+  {
+   "wave": {
+    "open_lease": 2,
+    "authority_self_grantable": 0,
+    "convert_run_as": "sp-y"
+   },
+   "expected": "2 table(s) still to convert are not yet authorized for `sp-y`. Authorize cannot grant these; their owners must run the grant script."
+  }
+ ],
+ "grant_script_cases": [
+  {
+   "full_names": [],
+   "expected": ""
+  },
+  {
+   "full_names": [
+    "main_cat.sch_a.c0",
+    "main_cat.sch_a.c1",
+    "main_cat.sch_b.c3",
+    "main_cat.sch_a.c6",
+    "main_cat.sch_b.c7",
+    "main_cat.sch_b.c8",
+    "main_cat.sch_a.c9",
+    "main_cat.sch_c.c12",
+    "main_cat.sch_a.c14",
+    "main_cat.sch_b.c15",
+    "ms_cat.s.m1",
+    "ms_cat.s.m2",
+    "co_cat.s.co1",
+    "co_cat.s.co2",
+    "main_cat.sch_a.e1",
+    "hidden_cat.sch.e2",
+    "main_cat.sales.e3",
+    "main_cat.sales.e4",
+    "c.s.e5",
+    "c.s.e6"
+   ],
+   "expected": "-- Run as `data-owner@example.com` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`;\n\n-- Authorize can do this (the convert identity can grant it itself)\nGRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\nGRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c9 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_c.c12 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_c.c12 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_a.c14 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c14 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c15 TO `migration-sp`;\nGRANT USE CATALOG ON CATALOG ms_cat TO `admin@example.com`;\nGRANT USE SCHEMA ON SCHEMA ms_cat.s TO `admin@example.com`;\nGRANT MANAGE ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT SELECT ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT MODIFY ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT MANAGE ON TABLE ms_cat.s.m2 TO `admin@example.com`;\nGRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`;\nGRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`;\nGRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`;\nGRANT SELECT ON TABLE main_cat.sales.e3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sales.e3 TO `migration-sp`;\nGRANT MODIFY ON TABLE c.s.e6 TO `migration-sp`;\n\n-- Run as `ann@example.com` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE main_cat.sales.e4 TO `migration-sp`;\n\n-- Run as `cat-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT USE CATALOG ON CATALOG c TO `migration-sp`;\n\n-- Run as `sch-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT USE SCHEMA ON SCHEMA c.s TO `migration-sp`;\n\n-- Run as `tbl-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE c.s.e5 TO `migration-sp`;\n\n-- Run as a metastore admin or a principal with MANAGE (owner could not be read)\nGRANT USE CATALOG ON CATALOG hidden_cat TO `migration-sp`;\nGRANT USE SCHEMA ON SCHEMA hidden_cat.sch TO `migration-sp`;\nGRANT MANAGE ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\nGRANT SELECT ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\nGRANT MODIFY ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_a.c0",
+    "main_cat.sch_a.c1",
+    "main_cat.sch_a.c2",
+    "main_cat.sch_b.c3",
+    "main_cat.sch_a.c4",
+    "main_cat.sch_a.c5",
+    "main_cat.sch_a.c6",
+    "main_cat.sch_b.c7",
+    "main_cat.sch_b.c8",
+    "main_cat.sch_a.c9",
+    "main_cat.sch_b.c10",
+    "main_cat.sch_a.c11",
+    "main_cat.sch_c.c12",
+    "main_cat.sch_c.c13",
+    "main_cat.sch_a.c14",
+    "main_cat.sch_b.c15",
+    "ms_cat.s.m1",
+    "ms_cat.s.m2",
+    "co_cat.s.co1",
+    "co_cat.s.co2",
+    "main_cat.sch_a.e1",
+    "hidden_cat.sch.e2",
+    "main_cat.sales.e3",
+    "main_cat.sales.e4",
+    "c.s.e5",
+    "c.s.e6"
+   ],
+   "expected": "-- Run as `data-owner@example.com` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`;\n\n-- Authorize can do this (the convert identity can grant it itself)\nGRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\nGRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c9 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_c.c12 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_c.c12 TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_a.c14 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c14 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c15 TO `migration-sp`;\nGRANT USE CATALOG ON CATALOG ms_cat TO `admin@example.com`;\nGRANT USE SCHEMA ON SCHEMA ms_cat.s TO `admin@example.com`;\nGRANT MANAGE ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT SELECT ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT MODIFY ON TABLE ms_cat.s.m1 TO `admin@example.com`;\nGRANT MANAGE ON TABLE ms_cat.s.m2 TO `admin@example.com`;\nGRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`;\nGRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`;\nGRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`;\nGRANT SELECT ON TABLE main_cat.sales.e3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sales.e3 TO `migration-sp`;\nGRANT MODIFY ON TABLE c.s.e6 TO `migration-sp`;\n\n-- Run as `ann@example.com` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE main_cat.sales.e4 TO `migration-sp`;\n\n-- Run as `cat-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT USE CATALOG ON CATALOG c TO `migration-sp`;\n\n-- Run as `sch-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT USE SCHEMA ON SCHEMA c.s TO `migration-sp`;\n\n-- Run as `tbl-owner` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE c.s.e5 TO `migration-sp`;\n\n-- Run as a metastore admin or a principal with MANAGE (owner could not be read)\nGRANT USE CATALOG ON CATALOG hidden_cat TO `migration-sp`;\nGRANT USE SCHEMA ON SCHEMA hidden_cat.sch TO `migration-sp`;\nGRANT MANAGE ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\nGRANT SELECT ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\nGRANT MODIFY ON TABLE hidden_cat.sch.e2 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_a.c0"
+   ],
+   "expected": "-- Run as `data-owner@example.com` (owner), or any principal with MANAGE on it, or a metastore admin\nGRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_a.c1"
+   ],
+   "expected": "-- Authorize can do this (the convert identity can grant it itself)\nGRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_b.c3"
+   ],
+   "expected": "-- Authorize can do this (the convert identity can grant it itself)\nGRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`;\nGRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_a.c6"
+   ],
+   "expected": "-- Authorize can do this (the convert identity can grant it itself)\nGRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_b.c7"
+   ],
+   "expected": "-- Authorize can do this (the convert identity can grant it itself)\nGRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\nGRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`;\n"
+  },
+  {
+   "full_names": [
+    "main_cat.sch_b.c8"
+   ],
+   "expected": "-- Authorize can do this (the convert identity can grant it itself)\nGRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`;\n"
+  }
+ ]
+}

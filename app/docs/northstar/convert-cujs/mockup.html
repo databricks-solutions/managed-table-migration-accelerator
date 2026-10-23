@@ -1,0 +1,1085 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Convert CUJs — redesign mockups</title>
+<style>
+  /* --- v4 palette (verbatim from app/client/src/index.css :root) ------------------- */
+  :root{
+    --db-oat-light:#F9F7F4; --db-oat-medium:#EEEDE9; --db-white:#FFFFFF;
+    --db-navy-900:#0B2026; --db-navy-800:#1B3139; --db-navy-700:#143D4A;
+    --db-navy-600:#295866; --db-navy-500:#3E6B7A; --db-navy-400:#618794;
+    --db-lava-600:#FF3621; --db-lava-700:#BD2B26; --db-lava-800:#801C17;
+    --db-green-600:#00A972; --db-yellow-600:#DE8C00; --db-blue-600:#2272B4;
+    --db-gray-text:#5A6F77; --db-gray-lines:#DCE0E2;
+
+    --surface-deep:var(--db-navy-900);
+    --fg-on-dark:var(--db-white); --fg-on-dark-2:#C4CCD6;
+    --label-on-dark:var(--db-navy-400);
+    --border-on-dark:var(--db-navy-600);
+    --brand:var(--db-lava-600); --brand-hover:var(--db-lava-700);
+
+    --foreground:var(--db-navy-800);
+    --muted-foreground:var(--db-gray-text);
+    --border:var(--db-gray-lines);
+
+    --success:var(--db-green-600); --success-foreground:#03543F;
+    --success-bg:#E8F5EF; --success-border:#A7DFC8;
+    --warning:var(--db-yellow-600); --warning-foreground:#7D5319;
+    --warning-bg:#FFF8EB; --warning-border:#FFDB96;
+    --destructive:var(--db-lava-600); --destructive-foreground:var(--db-lava-800);
+    --destructive-bg:#FDEDEB; --destructive-border:#FABFBA;
+    --info:var(--db-blue-600); --info-foreground:#0E538B; --info-bg:#EEF6FC; --info-border:#BAE1FC;
+
+    --font-sans:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --font-mono:'DM Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{
+    font-family:var(--font-sans);
+    background:var(--db-oat-medium);
+    color:var(--foreground);
+    line-height:1.45;
+    -webkit-font-smoothing:antialiased;
+  }
+  .mono{font-family:var(--font-mono)}
+
+  /* --- top chrome ------------------------------------------------------------------ */
+  header.top{
+    position:sticky;top:0;z-index:60;
+    background:var(--surface-deep);color:var(--fg-on-dark);
+    padding:14px 24px;border-bottom:1px solid var(--border-on-dark);
+  }
+  .top h1{font-size:15px;margin:0;font-weight:700;letter-spacing:.01em}
+  .top p{margin:2px 0 0;font-size:12px;color:var(--fg-on-dark-2)}
+  .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .tab{
+    appearance:none;border:1px solid var(--border-on-dark);background:transparent;
+    color:var(--fg-on-dark-2);font-family:inherit;font-size:12px;font-weight:600;
+    padding:7px 12px;border-radius:8px;cursor:pointer;transition:all .12s;
+  }
+  .tab:hover{border-color:var(--db-navy-400);color:var(--fg-on-dark)}
+  .tab[aria-selected="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+
+  main{max-width:1080px;margin:0 auto;padding:28px 24px 120px}
+  .panel{display:none}
+  .panel[data-active="true"]{display:block}
+  .caption{font-size:12px;color:var(--muted-foreground);margin:0 0 18px;max-width:78ch}
+  .caption b{color:var(--foreground)}
+
+  /* --- reusable hover tooltip (works on dark + light) ------------------------------ */
+  .hint{position:relative;display:inline-flex;align-items:center;vertical-align:middle}
+  .hint .ic{
+    width:15px;height:15px;border-radius:50%;border:1.3px solid currentColor;
+    font-size:10px;line-height:1;display:grid;place-items:center;opacity:.65;
+    font-weight:700;font-style:italic;font-family:Georgia,serif;cursor:help;
+  }
+  .hint:hover .ic,.hint:focus-within .ic{opacity:1}
+  .hint .tip{
+    position:absolute;bottom:calc(100% + 9px);left:50%;transform:translateX(-50%);
+    width:270px;background:#0B2026;color:#fff;border:1px solid var(--border-on-dark);
+    border-radius:10px;padding:11px 13px;font-size:11.5px;line-height:1.55;font-weight:400;
+    letter-spacing:0;text-transform:none;box-shadow:0 14px 34px rgba(0,0,0,.4);
+    z-index:70;display:none;text-align:left;
+  }
+  .hint .tip b{color:#fff}
+  .hint .tip .mono{color:#9ED6C4}
+  .hint .tip::after{
+    content:"";position:absolute;top:100%;left:50%;transform:translateX(-50%);
+    border:6px solid transparent;border-top-color:#0B2026;
+  }
+  .hint.right .tip{left:auto;right:0;transform:none}
+  .hint.right .tip::after{left:auto;right:14px;transform:none}
+  .hint:hover .tip,.hint:focus-within .tip{display:block}
+  .hint .ic{color:inherit}
+
+  .kicker{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--label-on-dark)}
+  button.link{background:none;border:none;color:inherit;font-family:inherit;cursor:pointer;font-size:11px;font-weight:600;text-decoration:underline;text-underline-offset:2px;padding:0}
+
+  /* ================================================================================= *
+   * SCREEN 1 — guided convert card (dark)                                              *
+   * ================================================================================= */
+  .darkcard{
+    background:var(--surface-deep);color:var(--fg-on-dark);
+    border:1px solid rgba(255,255,255,.10);border-left:4px solid var(--warning-border);
+    border-radius:14px;padding:22px;max-width:760px;
+  }
+  .darkcard .row{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+  .chip{
+    display:inline-flex;align-items:center;gap:5px;border:1px solid var(--border-on-dark);
+    padding:3px 8px;border-radius:6px;font-size:10px;font-weight:600;letter-spacing:.1em;
+    text-transform:uppercase;color:var(--label-on-dark);
+  }
+  .badge-mut{
+    display:inline-flex;align-items:center;gap:5px;background:var(--db-lava-800);
+    color:#fff;border-radius:6px;padding:3px 8px;font-size:10px;font-weight:700;
+    letter-spacing:.08em;text-transform:uppercase;
+  }
+  .recalc-wrap{margin-left:auto;display:inline-flex;align-items:center;gap:7px}
+  .btn-ghost{
+    border:1px solid var(--border-on-dark);background:transparent;color:var(--fg-on-dark-2);
+    font-family:inherit;font-size:12px;font-weight:600;padding:6px 12px;border-radius:8px;cursor:pointer;
+  }
+  .darkcard h2{font-size:22px;margin:14px 0 4px;font-weight:700}
+  .darkcard .desc{font-size:13px;color:var(--fg-on-dark-2);margin:0}
+  .darkcard .tagline{font-size:11px;color:var(--label-on-dark);margin-top:3px}
+
+  .spine{display:flex;align-items:flex-start;gap:0;margin:22px 0 4px}
+  .spine .node{flex:1;display:flex;flex-direction:column;align-items:center;position:relative;min-width:0}
+  .spine .node .dot{
+    width:26px;height:26px;border-radius:50%;display:grid;place-items:center;
+    font-size:12px;font-weight:700;border:2px solid #3E5A66;
+    background:var(--surface-deep);color:var(--label-on-dark);z-index:2;
+  }
+  .spine .node.done .dot{background:var(--success);border-color:var(--success);color:#04231b}
+  .spine .node.active .dot{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 0 0 4px rgba(255,54,33,.18)}
+  .spine .node .lbl{font-size:10px;font-weight:600;margin-top:7px;text-align:center;color:var(--fg-on-dark-2);letter-spacing:.02em}
+  .spine .node.active .lbl{color:#fff}
+  .spine .bar{position:absolute;top:12px;left:50%;width:100%;height:2px;background:#1F4653;z-index:1}
+  .spine .node.done .bar{background:var(--success)}
+  .spine .node:last-child .bar{display:none}
+  .now-pill{font-size:9px;font-weight:700;color:var(--brand);text-transform:uppercase;letter-spacing:.1em;margin-top:2px}
+
+  .verdict{
+    margin-top:20px;display:flex;gap:10px;align-items:flex-start;
+    background:rgba(255,219,150,.08);border:1px solid var(--warning-border);
+    border-radius:10px;padding:12px 14px;
+  }
+  .verdict .ico{font-size:16px;flex:0 0 auto}
+  .verdict p{margin:0;font-size:13px;color:var(--fg-on-dark);min-width:0}
+  .facts{display:grid;grid-template-columns:repeat(3,1fr);gap:14px;margin-top:16px}
+  .fact .k{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--label-on-dark);display:inline-flex;gap:5px;align-items:center}
+  .fact .v{font-size:15px;font-weight:600;margin-top:2px}
+  .fact .v small{display:block;font-size:11px;font-weight:400;color:var(--fg-on-dark-2)}
+
+  .disc{margin-top:14px;border:1px solid rgba(255,255,255,.10);border-radius:10px;background:rgba(0,0,0,.16);overflow:hidden}
+  .disc>summary{list-style:none;cursor:pointer;padding:12px 14px;display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;color:var(--label-on-dark)}
+  .disc>summary::-webkit-details-marker{display:none}
+  .disc>summary .sum{font-weight:500;text-transform:none;letter-spacing:0;color:var(--fg-on-dark-2);font-size:12px;margin-left:2px}
+  .disc>summary .caret{margin-left:auto;transition:transform .15s;color:var(--label-on-dark)}
+  .disc[open]>summary .caret{transform:rotate(90deg)}
+  .disc .body{padding:0 14px 14px}
+  .disc .body .line{font-size:12px;color:var(--fg-on-dark-2);margin:6px 0}
+  .disc .body .mini{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:6px}
+
+  .followups{display:flex;flex-wrap:wrap;gap:16px;margin-top:14px}
+  .flag{display:inline-flex;align-items:center;gap:6px;font-size:12px;color:var(--fg-on-dark-2)}
+  .flag .b{width:14px;height:14px;border-radius:4px;border:1.5px solid var(--label-on-dark);display:inline-block}
+  .flag.clear .b{border-color:var(--success);background:var(--success)}
+
+  .cta-wrap{margin-top:20px;position:relative}
+  .cta{
+    width:100%;background:var(--brand);color:#fff;border:none;border-radius:10px;
+    padding:14px;font-family:inherit;font-size:14px;font-weight:700;cursor:pointer;
+    display:flex;align-items:center;justify-content:center;gap:10px;
+  }
+  .cta:hover{background:var(--brand-hover)}
+  .foot{font-size:11px;color:var(--fg-on-dark-2);margin-top:12px}
+  .foot.dim{font-size:10px;color:var(--label-on-dark);margin-top:4px}
+
+  /* ================================================================================= *
+   * SCREEN 2 — convert gate as a process flow (light dialog)                          *
+   * ================================================================================= */
+  .dialog{background:#fff;border-radius:16px;max-width:640px;margin:0 auto;box-shadow:0 24px 60px rgba(11,32,38,.25);overflow:hidden;border:1px solid var(--border)}
+  .dialog .dhead{padding:20px 22px 14px;border-bottom:1px solid var(--border)}
+  .dialog .dhead h2{margin:0;font-size:18px;font-weight:700}
+  .dialog .dhead p{margin:4px 0 0;font-size:13px;color:var(--muted-foreground)}
+  .dialog .dhead a{font-size:12px;font-weight:600;color:var(--info-foreground);text-decoration:underline;text-underline-offset:2px}
+
+  .flow{display:flex;gap:0;padding:18px 22px;background:var(--db-oat-light);border-bottom:1px solid var(--border)}
+  .flow .fnode{flex:1;position:relative;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:none;font-family:inherit;cursor:pointer;padding:0;min-width:0}
+  .flow .fnode .fbar{position:absolute;top:17px;left:50%;width:100%;height:3px;background:var(--border);z-index:1}
+  .flow .fnode:last-child .fbar{display:none}
+  .flow .fnode.done .fbar{background:var(--success)}
+  .flow .fnode .fdot{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;z-index:2;font-size:15px;border:2px solid var(--border);background:#fff;transition:all .12s}
+  .flow .fnode.done .fdot{background:var(--success-bg);border-color:var(--success);color:var(--success-foreground)}
+  .flow .fnode.gap  .fdot{background:var(--warning-bg);border-color:var(--warning);color:var(--warning-foreground)}
+  .flow .fnode.now  .fdot{background:var(--destructive-bg);border-color:var(--brand);color:var(--destructive-foreground);font-weight:700}
+  .flow .fnode .ftitle{font-size:11px;font-weight:700;color:var(--foreground);text-align:center}
+  .flow .fnode .fstate{font-size:10px;color:var(--muted-foreground);text-align:center}
+  .flow .fnode.gap .fstate{color:var(--warning-foreground);font-weight:600}
+  .flow .fnode[aria-selected="true"] .fdot{box-shadow:0 0 0 4px rgba(34,114,180,.16)}
+  .flow .fnode[aria-selected="true"] .ftitle{text-decoration:underline;text-underline-offset:3px}
+
+  .dbody{padding:18px 22px;max-height:360px;overflow-y:auto}
+  /* capture-only: with ?cap the dialog grows full-height & disclosures open (for screenshots) */
+  body.capmode .dbody{max-height:none;overflow:visible}
+  .stagebox{display:none}
+  .stagebox[data-active="true"]{display:block}
+  .stagebox .stitle{display:flex;align-items:center;gap:8px;font-size:11px;font-weight:700;letter-spacing:.1em;text-transform:uppercase;margin:0 0 8px}
+  .box{border:1px solid var(--border);border-radius:10px;padding:12px 14px;margin-bottom:10px}
+  .box.ok{border-color:var(--success-border);background:var(--success-bg);color:var(--success-foreground)}
+  .box.warn{border-color:var(--warning-border);background:var(--warning-bg);color:var(--warning-foreground)}
+  .box .bh{display:flex;align-items:center;gap:7px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .box p{margin:6px 0 0;font-size:12.5px}
+  .box ul{margin:8px 0 0;padding-left:18px;font-size:12.5px}
+  .grid2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+  .btn{border:none;border-radius:8px;padding:9px 14px;font-family:inherit;font-size:13px;font-weight:600;cursor:pointer}
+  .btn.secondary{background:#fff;border:1px solid var(--border);color:var(--foreground)}
+  .btn.brand{background:var(--brand);color:#fff}
+  .btn.brand:disabled{background:#f0b3ab;cursor:not-allowed}
+  .confirm{margin-top:10px}
+  .confirm label{font-size:12px;color:var(--foreground)}
+  .confirm input{width:100%;margin-top:5px;border:1px solid var(--border);border-radius:8px;padding:9px 11px;font-family:var(--font-mono);font-size:13px}
+  .dfoot{padding:14px 22px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:10px;background:#fff}
+
+  /* fixed-path checklist on the Convert stage */
+  .checklist{border:1px solid var(--border);border-radius:10px;overflow:hidden;margin-bottom:12px}
+  .checklist .ci{display:flex;align-items:center;gap:10px;padding:10px 13px;border-top:1px solid var(--border);font-size:12.5px}
+  .checklist .ci:first-child{border-top:none}
+  .checklist .ci .mark{width:20px;height:20px;border-radius:50%;display:grid;place-items:center;font-size:11px;flex:0 0 auto;font-weight:700}
+  .checklist .ci.done .mark{background:var(--success-bg);color:var(--success-foreground);border:1px solid var(--success-border)}
+  .checklist .ci.gap  .mark{background:var(--warning-bg);color:var(--warning-foreground);border:1px solid var(--warning-border)}
+  .checklist .ci .ctext{flex:1}
+  .checklist .ci .ctext b{font-weight:700}
+  .checklist .ci .csub{font-size:11px;color:var(--muted-foreground)}
+  .checklist .ci .cact{margin-left:auto}
+  .ack{display:flex;gap:9px;align-items:flex-start;background:var(--warning-bg);border:1px solid var(--warning-border);border-radius:9px;padding:10px 12px;margin-bottom:10px;color:var(--warning-foreground);font-size:12px}
+  .ack input{margin-top:2px}
+  .ack.hidden{display:none}
+  .gatemsg{font-size:11.5px;color:var(--muted-foreground);margin-top:8px}
+
+  /* planned freeze mini-list embedded inside the gate's Freeze stage (gap case) */
+  .planned-embed{border:1px solid var(--border);border-radius:10px;padding:11px 13px;margin:10px 0 6px;background:#fff}
+  .planned-embed .pe-h{font-size:11px;font-weight:700;color:var(--foreground);margin:0 0 4px;display:flex;align-items:center;gap:6px}
+  .planned-embed .pe-h .tag{font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--info-foreground);background:var(--info-bg);border:1px solid var(--info-border);border-radius:5px;padding:1px 6px}
+  .planned-embed .entity{padding:7px 0}
+  .planned-embed .pe-manual{margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:11px;color:var(--destructive-foreground)}
+  .freeze-actions{display:flex;gap:12px;align-items:center;margin-top:10px;flex-wrap:wrap}
+  /* in-place (no-navigation) disclosure inside the light gate dialog */
+  .gdisc{border:1px solid var(--border);border-radius:9px;background:#fff;margin-top:10px;overflow:hidden}
+  .gdisc>summary{list-style:none;cursor:pointer;padding:9px 12px;display:flex;align-items:center;gap:8px;font-size:12px;font-weight:600;color:var(--foreground)}
+  .gdisc>summary::-webkit-details-marker{display:none}
+  .gdisc>summary .caret{margin-left:auto;transition:transform .15s;color:var(--muted-foreground)}
+  .gdisc[open]>summary .caret{transform:rotate(90deg)}
+  .gdisc .gbody{padding:2px 12px 12px}
+  /* compact chronological rail shown in-place */
+  .minirail{display:flex;align-items:center;gap:6px;margin:4px 0 10px}
+  .minirail .mr{display:flex;flex-direction:column;align-items:center;gap:2px;font-size:10px;color:var(--muted-foreground);text-align:center;min-width:60px}
+  .minirail .mr .mdot{width:20px;height:20px;border-radius:50%;border:1.5px dashed var(--warning-border);display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--warning-foreground)}
+  .minirail .mr.mid .mdot{border-style:solid;border-color:var(--border);color:var(--foreground)}
+  .minirail .mseg{flex:1;height:1.5px;background:repeating-linear-gradient(90deg,var(--border) 0 5px,transparent 5px 9px)}
+  .gate-monitor-note{font-size:11px;color:var(--muted-foreground);margin-top:10px;display:flex;gap:7px;align-items:flex-start}
+
+  /* ================================================================================= *
+   * SCREEN 3 — freeze bracket (planned + applied)                                     *
+   * ================================================================================= */
+  .fcard{background:#fff;border:1px solid var(--border);border-radius:14px;max-width:780px;overflow:hidden}
+  .fcard .fh{padding:18px 20px;border-bottom:1px solid var(--border);display:flex;justify-content:space-between;align-items:flex-start;gap:16px;flex-wrap:wrap}
+  .fcard .fh h2{margin:0;font-size:16px;font-weight:700}
+  .fcard .fh p{margin:4px 0 0;font-size:12.5px;color:var(--muted-foreground);max-width:46ch}
+  .seg{display:inline-flex;border:1px solid var(--border);border-radius:9px;overflow:hidden;flex:0 0 auto}
+  .seg button{appearance:none;background:#fff;border:none;font-family:inherit;font-size:11.5px;font-weight:600;padding:7px 13px;cursor:pointer;color:var(--muted-foreground)}
+  .seg button+button{border-left:1px solid var(--border)}
+  .seg button[aria-selected="true"]{background:var(--foreground);color:#fff}
+
+  /* structured "what turns off" explainer */
+  .explain{padding:16px 20px;background:var(--info-bg);border-bottom:1px solid var(--info-border)}
+  .explain .eh{font-size:12.5px;font-weight:700;color:var(--info-foreground);margin:0 0 4px}
+  .explain p{margin:0 0 10px;font-size:12px;color:var(--foreground)}
+  .steps{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:8px;counter-reset:s}
+  .steps li{display:flex;gap:11px;align-items:flex-start;font-size:12.5px}
+  .steps li .n{counter-increment:s;flex:0 0 auto;width:22px;height:22px;border-radius:50%;background:var(--info);color:#fff;display:grid;place-items:center;font-size:11px;font-weight:700}
+  .steps li .n::before{content:counter(s)}
+  .steps li b{font-weight:700}
+  .steps li .d{color:var(--muted-foreground);font-size:11.5px}
+
+  .bracket{display:flex;align-items:center;gap:0;padding:20px 24px;background:var(--db-oat-light)}
+  .bracket .bnode{display:flex;flex-direction:column;align-items:center;gap:6px;flex:0 0 auto}
+  .bracket .bseg{flex:1;height:3px;background:var(--border);margin:0 4px;position:relative;top:-11px}
+  .bracket .bseg.done{background:var(--success)}
+  .bracket .bseg.dashed{background:repeating-linear-gradient(90deg,var(--border) 0 6px,transparent 6px 12px)}
+  .bracket .bdot{width:22px;height:22px;border-radius:50%;display:grid;place-items:center;font-size:11px;border:2px solid var(--border);background:#fff}
+  .bracket .bnode.done .bdot{background:var(--success);border-color:var(--success);color:#fff}
+  .bracket .bnode.active .bdot{background:var(--brand);border-color:var(--brand);color:#fff;box-shadow:0 0 0 4px rgba(255,54,33,.16)}
+  .bracket .bnode.planned .bdot{background:#fff;border-color:var(--brand);color:var(--brand);border-style:dashed}
+  .bracket .blbl{font-size:11px;font-weight:600}
+  .bracket .bsub{font-size:10px;color:var(--muted-foreground)}
+
+  .fcols{display:grid;grid-template-columns:1fr 1fr;gap:0}
+  .fcol{padding:16px 20px}
+  .fcol+.fcol{border-left:1px solid var(--border)}
+  .fcol h3{margin:0 0 10px;font-size:10px;font-weight:700;letter-spacing:.1em;text-transform:uppercase}
+  .fcol.auto h3{color:var(--info-foreground)}
+  .fcol.manual h3{color:var(--destructive-foreground)}
+  .entity{display:flex;gap:10px;padding:9px 0;border-top:1px solid var(--border)}
+  .entity:first-of-type{border-top:none}
+  .entity .ei{font-size:15px;line-height:1.2;flex:0 0 auto}
+  .entity .en{font-family:var(--font-mono);font-size:12px;font-weight:600}
+  .entity .em{font-size:11px;color:var(--muted-foreground)}
+  .op{display:inline-block;font-family:var(--font-mono);font-size:10px;background:var(--db-oat-medium);border-radius:5px;padding:1px 6px;color:var(--foreground)}
+  .resume{font-size:10.5px;color:var(--success-foreground);font-weight:600}
+  .willpause{font-size:10.5px;color:var(--info-foreground);font-weight:600}
+  .noresume{font-size:10.5px;color:var(--destructive-foreground);font-weight:600}
+  /* next-run + downtime verdict */
+  .nextrun{margin-top:3px;display:flex;gap:7px;align-items:center;flex-wrap:wrap;font-size:10.5px;color:var(--muted-foreground)}
+  .hint{font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:5px;padding:1px 6px;border:1px solid;white-space:nowrap}
+  .hint.safe{color:var(--success-foreground);background:var(--success-bg);border-color:var(--success-border)}
+  .hint.heads{color:var(--warning-foreground);background:var(--warning-bg);border-color:var(--warning-border)}
+  .downtime-read{display:flex;gap:10px;align-items:flex-start;padding:12px 20px;background:#fff;border-bottom:1px solid var(--border);font-size:12px;color:var(--foreground);line-height:1.5}
+  .downtime-read .dr-ico{font-size:15px;line-height:1.2;flex:0 0 auto}
+  .pe-summary{font-size:11px;color:var(--foreground);margin:0 0 8px;display:flex;gap:7px;align-items:flex-start;flex-wrap:wrap;line-height:1.5}
+  .fbar-cta{padding:14px 20px;border-top:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+  .fbar-cta .m{font-size:11.5px;color:var(--muted-foreground)}
+  .fnote{padding:12px 20px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted-foreground)}
+  .fnote a{color:var(--info-foreground);font-weight:600}
+  .view{display:none}
+  .view[data-active="true"]{display:block}
+
+  /* ================================================================================= *
+   * SCREEN 5 — freeze status by wave (report / dashboard)                             *
+   * ================================================================================= */
+  .report{background:#fff;border:1px solid var(--border);border-radius:14px;padding:18px 20px;box-shadow:0 1px 2px rgba(11,32,38,.05)}
+  .report h2{margin:0 0 2px;font-size:18px;color:var(--foreground)}
+  .report .rsub{margin:0 0 14px;font-size:12.5px;color:var(--muted-foreground)}
+  .rkpis{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+  .rkpi{flex:1;min-width:130px;border:1px solid var(--border);border-radius:10px;padding:10px 12px;background:#f7f8f8}
+  .rkpi .n{font-size:20px;font-weight:700;color:var(--foreground)}
+  .rkpi .n.warn{color:#b42318}
+  .rkpi .l{font-size:10.5px;color:var(--muted-foreground);text-transform:uppercase;letter-spacing:.06em;margin-top:2px}
+  table.wf{width:100%;border-collapse:collapse;font-size:12.5px}
+  table.wf th{text-align:left;font-size:10px;text-transform:uppercase;letter-spacing:.07em;color:var(--muted-foreground);padding:8px 10px;border-bottom:1px solid var(--border)}
+  table.wf td{padding:11px 10px;border-bottom:1px solid var(--border);color:var(--foreground);vertical-align:middle}
+  table.wf tr:last-child td{border-bottom:none}
+  table.wf .wid{font-weight:700}
+  table.wf .sch{color:var(--muted-foreground);font-size:11.5px}
+  .stat{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;border-radius:6px;padding:2px 7px;border:1px solid;white-space:nowrap}
+  .stat.frozen{color:var(--info-foreground);background:var(--info-bg);border-color:var(--info-border)}
+  .stat.none{color:var(--muted-foreground);background:#f1f3f3;border-color:var(--border)}
+  .stat.partial{color:var(--warning-foreground);background:var(--warning-bg);border-color:var(--warning-border)}
+  .stat.stale{color:#b42318;background:#fef3f2;border-color:#fda29b}
+  .stat.done{color:var(--success-foreground);background:var(--success-bg);border-color:var(--success-border)}
+  .ract{display:flex;gap:6px;flex-wrap:wrap}
+  .rbtn{font-size:11px;font-weight:600;padding:4px 10px;border-radius:7px;border:1px solid var(--border);background:#fff;color:var(--foreground);cursor:pointer}
+  .rbtn.brand{background:var(--brand);border-color:var(--brand);color:#fff}
+  .rbtn.warn{border-color:var(--warning-border);color:var(--warning-foreground)}
+  .rbtn.danger{border-color:#fda29b;color:#b42318}
+  .rlegend{font-size:11px;color:var(--muted-foreground);margin-top:14px;display:flex;gap:16px;flex-wrap:wrap}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Convert — CUJ redesign mockups</h1>
+  <p>Static, non-functional HTML for review. Same data as today; restructured for progressive disclosure, plain-language help, and a legible process flow.</p>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" aria-selected="true"  data-tab="s1">1 · Guided convert card</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="s4">2 · Guided freeze step</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="s2">3 · Convert gate (process flow)</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="s3">4 · Freeze bracket — planned &amp; applied</button>
+    <button class="tab" role="tab" aria-selected="false" data-tab="s5">5 · Freeze status (by wave)</button>
+  </div>
+</header>
+
+<main>
+
+  <!-- ============================= SCREEN 1 ============================= -->
+  <section class="panel" data-panel="s1" data-active="true">
+    <p class="caption">
+      <b>Updated:</b> hover the small <b>ⓘ</b> on <b>Recalculate</b>, <b>Schema</b>, <b>Reversible</b>, and the big <b>Open the convert gate</b> button for a plain-language explanation. "Selector" is now labelled <b>Schema</b> (its tooltip explains why the backend calls it a selector).
+    </p>
+
+    <div class="darkcard">
+      <div class="row">
+        <span class="chip">Convert</span>
+        <span class="badge-mut">⚠ Mutates tables</span>
+        <span class="chip">This wave · one schema</span>
+        <span class="recalc-wrap">
+          <button class="btn-ghost">↻ Recalculate</button>
+          <span class="hint right" tabindex="0" style="color:var(--fg-on-dark-2)">
+            <span class="ic">i</span>
+            <span class="tip"><b>Recalculate</b> re-reads the current plan and progress, then picks the single best next step. It changes nothing — no table is touched and no conversion runs. Use it if the estate changed since this card was written.</span>
+          </span>
+        </span>
+      </div>
+
+      <h2>Convert schema</h2>
+      <p class="desc">Converts this wave to managed tables (<span class="mono">SET&nbsp;MANAGED</span>). Reversible for 14 days.</p>
+      <p class="tagline">The single best thing to do next from the current plan.</p>
+
+      <div class="spine">
+        <div class="node done"><span class="bar"></span><span class="dot">✓</span><span class="lbl">Prep</span></div>
+        <div class="node done"><span class="bar"></span><span class="dot">✓</span><span class="lbl">Freeze</span></div>
+        <div class="node active"><span class="bar"></span><span class="dot">●</span><span class="lbl">Convert</span><span class="now-pill">you are here</span></div>
+        <div class="node"><span class="bar"></span><span class="dot">3</span><span class="lbl">Validate</span></div>
+        <div class="node"><span class="dot">4</span><span class="lbl">Cleanup</span></div>
+      </div>
+
+      <div class="verdict">
+        <span class="ico">✅</span>
+        <p><b>Ready to convert.</b> Freeze bracket holds and the dry-run passed — 10 tables in <span class="mono">…e2e_real_stream</span> will be set managed. Ownership leases still needed for 10 tables (you'll confirm inside the gate).</p>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="k">Schema
+            <span class="hint" tabindex="0" style="color:var(--label-on-dark)">
+              <span class="ic">i</span>
+              <span class="tip">The schema this step converts — <span class="mono">catalog.schema</span>. <br><br><b>Why does the job call it a "selector"?</b> Because the same field can also carry a single <b>wave</b> or a <b>bucket</b> in expert mode. On this guided path it is always one schema, so we show it as <b>Schema</b>.</span>
+            </span>
+          </div>
+          <div class="v mono" style="font-size:13px">…catalog.e2e_real_stream</div>
+        </div>
+        <div class="fact">
+          <div class="k">Reversible
+            <span class="hint" tabindex="0" style="color:var(--label-on-dark)">
+              <span class="ic">i</span>
+              <span class="tip">You can undo the conversion for <b>14 days</b> with <span class="mono">UNSET MANAGED</span> — the original files are kept that whole time. After 14 days they're cleaned up and rollback is no longer possible.</span>
+            </span>
+          </div>
+          <div class="v">14 days<small>UNSET MANAGED</small></div>
+        </div>
+        <div class="fact"><div class="k">Tables</div><div class="v">10<small>ready of 10</small></div></div>
+      </div>
+
+      <details class="disc">
+        <summary>Sizing &amp; impact <span class="sum">Job · time · downtime · compute · blast radius · owners</span><span class="caret">▶</span></summary>
+        <div class="body">
+          <div class="mini">
+            <div class="fact"><div class="k">Job</div><div class="v mono" style="font-size:13px">job_04_convert</div></div>
+            <div class="fact"><div class="k">Recommended compute</div><div class="v" style="font-size:13px">X-Large (32-core)</div></div>
+            <div class="fact"><div class="k">Blast radius</div><div class="v" style="font-size:13px">~0 downstream</div></div>
+            <div class="fact"><div class="k">Copy time</div><div class="v" style="font-size:13px">~0.0 min</div></div>
+            <div class="fact"><div class="k">Max downtime</div><div class="v" style="font-size:13px">~1.5 min</div></div>
+            <div class="fact"><div class="k">Owners</div><div class="v" style="font-size:13px">—</div></div>
+          </div>
+        </div>
+      </details>
+
+      <details class="disc">
+        <summary>Previously <span class="sum">9 converted, 10 validated · last: path_access_003 · 2 days ago</span><span class="caret">▶</span></summary>
+        <div class="body">
+          <div class="line"><b style="color:#fff">Converted</b> <span class="mono">…path_access_000</span> · wave_01 · 2 days ago</div>
+          <div class="line"><b style="color:#fff">Converted</b> <span class="mono">…path_access_001</span> · wave_01 · 2 days ago</div>
+          <div class="line"><b style="color:#fff">Converted</b> <span class="mono">…path_access_003</span> · wave_01 · 2 days ago</div>
+        </div>
+      </details>
+
+      <details class="disc">
+        <summary>Waves in this convert <span class="sum">1 wave · converts first · where data moves</span><span class="caret">▶</span></summary>
+        <div class="body">
+          <div class="line"><span class="mono" style="color:#fff">…e2e_real_stream</span> (domain) · #2 · <span style="color:var(--success-border)">READY · 10 tables</span></div>
+          <div class="line">From <span class="mono">s3://…/mtm_e2e/e2e_real_stream</span></div>
+          <div class="line">To <span class="mono">s3://…/ (catalog-level)</span> — copies data to the managed root; original files stay in place, nothing is deleted now.</div>
+        </div>
+      </details>
+
+      <div style="margin-top:16px">
+        <div class="kicker">Post-convert follow-ups</div>
+        <div class="followups">
+          <span class="flag clear"><span class="b"></span>Streaming restart</span>
+          <span class="flag clear"><span class="b"></span>Re-share (D2D)</span>
+          <span class="flag clear"><span class="b"></span>Enable Compat</span>
+          <span class="flag clear"><span class="b"></span>Below-floor consumers</span>
+        </div>
+        <div class="foot" style="margin-top:8px">And then → validate <span class="mono">…e2e_real_stream</span></div>
+      </div>
+
+      <div class="cta-wrap">
+        <button class="cta">
+          Open the convert gate →
+          <span class="hint" tabindex="0" style="color:#fff">
+            <span class="ic">i</span>
+            <span class="tip"><b>Open the convert gate</b> opens the final confirmation before anything changes. Inside you'll see the safety checks (readiness, freeze, ownership), exactly which tables convert, and you type the name to confirm. <b>Nothing is converted until you confirm in there</b> — this button only opens the review.</span>
+          </span>
+        </button>
+      </div>
+      <p class="foot">You approve the step. You never assemble one. All logic runs in the backend jobs.</p>
+      <p class="foot dim"><button class="link" style="color:var(--label-on-dark)">Run it yourself instead ▾</button> · as of 9/14/2026, 3:48 PM</p>
+    </div>
+  </section>
+
+  <!-- ============================= SCREEN 4 · GUIDED FREEZE STEP ============================= -->
+  <section class="panel" data-panel="s4">
+    <p class="caption">
+      <b>Journey moment ① — the first natural sighting of the freeze.</b> When the Conductor's next step for a data-ready wave is <b>Freeze</b>, the guided card becomes this — the <i>twin</i> of the convert card. <b>Summary-first:</b> the one-line <b>downtime read</b> answers "is this safe and who do I warn?" before any detail. <b>Review freeze plan →</b> opens the full <b>Planned</b> view (Freeze page); <b>❄ Freeze first</b> runs <span class="mono">job_03c</span>. Freezing is fully reversible — unfreeze restores every item exactly.
+    </p>
+
+    <div class="darkcard">
+      <div class="row">
+        <span class="chip">Freeze</span>
+        <span class="chip" style="border-color:var(--info-border);color:var(--info-foreground)">Reversible · pauses jobs</span>
+        <span class="chip">This wave · one schema</span>
+        <span class="recalc-wrap">
+          <button class="btn-ghost">↻ Recalculate</button>
+          <span class="hint right" tabindex="0" style="color:var(--fg-on-dark-2)">
+            <span class="ic">i</span>
+            <span class="tip"><b>Recalculate</b> re-reads the current plan and progress, then picks the single best next step. It changes nothing — no job is paused and no conversion runs.</span>
+          </span>
+        </span>
+      </div>
+
+      <h2>Freeze this wave</h2>
+      <p class="desc">Pauses everything that writes to these tables so convert copies a clean, unchanging snapshot. Fully reversible — <span class="mono">unfreeze</span> restores each item exactly.</p>
+      <p class="tagline">The single best thing to do next from the current plan.</p>
+
+      <div class="spine">
+        <div class="node done"><span class="bar"></span><span class="dot">✓</span><span class="lbl">Prep</span></div>
+        <div class="node active"><span class="bar"></span><span class="dot">●</span><span class="lbl">Freeze</span><span class="now-pill">you are here</span></div>
+        <div class="node"><span class="bar"></span><span class="dot">2</span><span class="lbl">Convert</span></div>
+        <div class="node"><span class="bar"></span><span class="dot">3</span><span class="lbl">Validate</span></div>
+        <div class="node"><span class="dot">4</span><span class="lbl">Cleanup</span></div>
+      </div>
+
+      <div class="verdict">
+        <span class="ico">🕒</span>
+        <p><b>Downtime read — freeze window ≈ 15 min.</b> <b style="color:var(--success-border)">2 safe</b> (next run hours away / unscheduled) · <b style="color:var(--warning-border)">2 need a heads-up</b> — <span class="mono">orders_dlt</span> and <span class="mono">stream_writer_job_17</span> run continuously, so they're stopped until unfreeze. <b>Tell their consumers.</b></p>
+      </div>
+
+      <div class="facts">
+        <div class="fact">
+          <div class="k">Schema
+            <span class="hint" tabindex="0" style="color:var(--label-on-dark)">
+              <span class="ic">i</span>
+              <span class="tip">The schema this freeze covers — <span class="mono">catalog.schema</span>. The freeze brackets the convert for exactly this scope.</span>
+            </span>
+          </div>
+          <div class="v mono" style="font-size:13px">…catalog.e2e_real_stream</div>
+        </div>
+        <div class="fact">
+          <div class="k">Will pause
+            <span class="hint" tabindex="0" style="color:var(--label-on-dark)">
+              <span class="ic">i</span>
+              <span class="tip">4 attributed sources of writes/rewrites: 1 compaction job (<span class="mono">PAUSE_JOB</span>), Predictive Optimization (<span class="mono">DISABLE_PO</span>), 1 DLT pipeline (<span class="mono">STOP_PIPELINE</span>), 1 streaming job (<span class="mono">STOP_STREAM_JOB</span>). Non-Databricks / ad-hoc writers stay manual.</span>
+            </span>
+          </div>
+          <div class="v">4<small>auto-resumed</small></div>
+        </div>
+        <div class="fact"><div class="k">Reversible</div><div class="v">Exact<small>unfreeze restores</small></div></div>
+      </div>
+
+      <details class="disc">
+        <summary>What pauses <span class="sum">order matters: compaction → PO → pipelines → streams</span><span class="caret">▶</span></summary>
+        <div class="body">
+          <div class="line"><b style="color:#fff">nightly_optimize_sales</b> · <span class="mono">PAUSE_JOB</span> — resumes to UNPAUSED after convert · next run ~8h (safe)</div>
+          <div class="line"><b style="color:#fff">Predictive Optimization</b> · <span class="mono">DISABLE_PO</span> — re-enabled only if it was ON (it is)</div>
+          <div class="line"><b style="color:#fff">orders_dlt</b> · <span class="mono">STOP_PIPELINE</span> — restarts from checkpoint (never full-refresh) · continuous (heads-up)</div>
+          <div class="line"><b style="color:#fff">stream_writer_job_17</b> · <span class="mono">STOP_STREAM_JOB</span> — restarts from checkpoint · continuous (heads-up)</div>
+          <div class="line" style="opacity:.8">✋ You stop yourself: non-Databricks writers (Trino / Snowflake / EMR) and ad-hoc / notebook OPTIMIZE — the freeze can't see these.</div>
+        </div>
+      </details>
+
+      <div style="margin-top:16px">
+        <div class="kicker">After the freeze holds</div>
+        <div class="foot" style="margin-top:6px">→ Convert <span class="mono">…e2e_real_stream</span> · then unfreeze auto-restores every item at <span class="mono">05b</span>.</div>
+      </div>
+
+      <div class="cta-wrap" style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
+        <button class="cta" style="flex:1;min-width:220px">
+          ❄ Freeze first
+          <span class="hint" tabindex="0" style="color:#fff">
+            <span class="ic">i</span>
+            <span class="tip"><b>Freeze first</b> runs <span class="mono">job_03c</span>: it pauses the 4 items above and records each in the freeze ledger so unfreeze restores them exactly. It never runs <span class="mono">SET MANAGED</span> and never touches data — only reversible metadata.</span>
+          </span>
+        </button>
+        <button class="btn-ghost" data-goto="s3" style="font-size:13px">Review freeze plan →</button>
+      </div>
+      <p class="foot">You approve the step. You never assemble one. All logic runs in the backend jobs.</p>
+      <p class="foot dim"><button class="link" style="color:var(--label-on-dark)">Run it yourself instead ▾</button> · as of 9/14/2026, 3:48 PM</p>
+    </div>
+  </section>
+
+  <!-- ============================= SCREEN 2 ============================= -->
+  <section class="panel" data-panel="s2">
+    <p class="caption">
+      <b>One surface, no page-hops.</b> Stage ③ lands on a <b>coverage gap</b> and embeds the <b>planned mini-list</b> — the exact jobs/pipelines/streams/PO that <i>Freeze first</i> will pause, right where you decide. Extra detail (timeline, restore rules, the applied list) <b>expands in place</b> — you never navigate to another page mid-decision; the standalone <b>Freeze page</b> is reserved for monitoring/unfreezing later. Click <b>❄ Freeze first</b> to watch it flip to "bracket holds" across the rail, checklist, and stage. The <b>Before you convert</b> checklist on stage ④ gates on <i>both</i> Permissions and Freeze — resolve each or tick its acknowledgement; Convert stays disabled until all are met and you've typed <span class="mono">wave_02</span>.
+    </p>
+
+    <div class="dialog">
+      <div class="dhead">
+        <h2>Convert schema</h2>
+        <p>Convert 10 of 10 ready tables in <span class="mono">…e2e_real_stream</span> to managed tables. Reversible for 14 days. &nbsp;<a href="#">What is this? ↗</a></p>
+      </div>
+
+      <div class="flow" role="tablist" aria-label="Convert process">
+        <button class="fnode done" role="tab" data-stage="readiness">
+          <span class="fbar"></span><span class="fdot">✓</span>
+          <span class="ftitle">Readiness</span><span class="fstate">dry-run passed</span>
+        </button>
+        <button class="fnode gap" role="tab" aria-selected="false" data-stage="perms" id="node-perms">
+          <span class="fbar"></span><span class="fdot">🔑</span>
+          <span class="ftitle">Permissions</span><span class="fstate" id="perms-state">10 need a lease</span>
+        </button>
+        <button class="fnode gap" role="tab" aria-selected="true" data-stage="freeze" id="node-freeze">
+          <span class="fbar"></span><span class="fdot">❄</span>
+          <span class="ftitle">Freeze</span><span class="fstate" id="freeze-state">not frozen yet</span>
+        </button>
+        <button class="fnode now" role="tab" data-stage="convert">
+          <span class="fbar"></span><span class="fdot">●</span>
+          <span class="ftitle">Convert</span><span class="fstate">SET MANAGED</span>
+        </button>
+        <button class="fnode" role="tab" data-stage="after">
+          <span class="fdot">→</span>
+          <span class="ftitle">After</span><span class="fstate">validate · unfreeze</span>
+        </button>
+      </div>
+
+      <div class="dbody">
+        <!-- READINESS -->
+        <div class="stagebox" data-stage="readiness">
+          <p class="stitle">① Readiness — has a dry-run checked every table?</p>
+          <div class="box ok">
+            <div class="bh">✓ Last readiness check</div>
+            <p><b>PASS</b> — dry-run preview, 2 days ago by <span class="mono">owner@…</span> (past the freshness window — the job re-checks at convert).</p>
+          </div>
+        </div>
+
+        <!-- PERMISSIONS -->
+        <div class="stagebox" data-stage="perms">
+          <p class="stitle">② Permissions — can the converting identity own these tables?</p>
+          <div class="box warn" id="perms-box-gap">
+            <div class="bh">🔑 Ownership lease needed</div>
+            <p><b>10 tables</b> need a temporary, recorded, reversible ownership lease before <span class="mono">SET MANAGED</span> — the converting identity must own an external table to convert it. Restored to the original owner at cleanup.</p>
+            <ul class="mono" style="font-size:11px">
+              <li>…e2e_real_stream.streaming_000</li>
+              <li>…e2e_real_stream.streaming_001</li>
+              <li style="opacity:.75">+8 more</li>
+            </ul>
+          </div>
+          <div class="box ok" id="perms-box-done" style="display:none">
+            <div class="bh">✓ Ownership lease holds</div>
+            <p>All 10 tables now have a recorded lease — the converting identity can <span class="mono">SET MANAGED</span>. Restored to the original owner at cleanup.</p>
+          </div>
+          <button class="btn secondary" id="leaseBtn">🔑 Lease first</button>
+          <p style="font-size:11px;color:var(--muted-foreground);margin-top:8px">Only required when converting as the App SP. If <span class="mono">run_as</span> already owns these tables it's a skippable formality.</p>
+        </div>
+
+        <!-- FREEZE -->
+        <div class="stagebox" data-stage="freeze" data-active="true">
+          <p class="stitle">③ Freeze — is everything that writes to these tables paused?</p>
+
+          <!-- GAP state (default): coverage is a gap, nothing paused yet -->
+          <div id="freeze-gap">
+            <div class="box warn">
+              <div class="bh">⚠ Freeze coverage gap</div>
+              <p><b>Nothing is paused yet</b> for this scope. Convert copies the latest snapshot of each table — a compaction/OPTIMIZE or streaming write mid-copy can corrupt it (a VACUUM can even fail the conversion). Freeze first so convert copies a stable snapshot.</p>
+            </div>
+
+            <!-- The planned mini-list — the SAME data as Screen 3's "Planned" view, embedded here -->
+            <div class="planned-embed">
+              <div class="pe-h">What <b style="margin:0 3px">Freeze first</b> will pause <span class="tag">planned</span></div>
+              <div class="pe-summary">🕒 <span><b>Downtime read</b> (freeze window ≈ 15 min): <b>2 safe</b> — next run is hours away / unscheduled · <b>2 need a heads-up</b> — continuous writers stop until unfreeze, so tell their consumers.</span></div>
+              <div class="entity"><span class="ei">🗓️</span><div><div class="en">nightly_optimize_sales</div><div class="em"><span class="op">PAUSE_JOB</span> · currently UNPAUSED</div><div class="willpause">Will pause · resumes to UNPAUSED after convert</div><div class="nextrun">🕒 Next run ~8h · tonight 02:00 <span class="hint safe">Safe window</span></div></div></div>
+              <div class="entity"><span class="ei">🔁</span><div><div class="en">orders_dlt</div><div class="em"><span class="op">STOP_PIPELINE</span> · DLT · running</div><div class="willpause">Will stop · restarts from checkpoint after convert</div><div class="nextrun">🕒 Runs continuously (DLT) <span class="hint heads">Downtime until unfreeze · tell consumers</span></div></div></div>
+              <div class="entity"><span class="ei">🌊</span><div><div class="en">stream_writer_job_17</div><div class="em"><span class="op">STOP_STREAM_JOB</span> · running</div><div class="willpause">Will stop · restarts from checkpoint after convert</div><div class="nextrun">🕒 Runs continuously <span class="hint heads">Downtime until unfreeze · tell consumers</span></div></div></div>
+              <div class="entity"><span class="ei">⚙️</span><div><div class="en">Predictive Optimization (schema)</div><div class="em"><span class="op">DISABLE_PO</span> · currently ON</div><div class="willpause">Will turn off · re-enabled after convert (because it's ON now)</div><div class="nextrun">🕒 No fixed schedule · opportunistic <span class="hint safe">Won't run</span></div></div></div>
+              <div class="pe-manual">✋ <b>You must stop yourself:</b> non-Databricks writers (Trino / Snowflake / EMR) and ad-hoc / notebook OPTIMIZE — the freeze can't see these.</div>
+            </div>
+
+            <div class="freeze-actions">
+              <button class="btn secondary" id="freezeBtn">❄ Freeze first</button>
+            </div>
+
+            <!-- In-place detail: expands here, never navigates away from the gate -->
+            <details class="gdisc">
+              <summary>See the freeze timeline &amp; how each item comes back<span class="caret">›</span></summary>
+              <div class="gbody">
+                <div class="minirail">
+                  <div class="mr"><span class="mdot">❄</span><span>Freeze<br>planned</span></div>
+                  <div class="mseg"></div>
+                  <div class="mr mid"><span class="mdot">2</span><span>Convert<br>after freeze</span></div>
+                  <div class="mseg"></div>
+                  <div class="mr mid"><span class="mdot">↩</span><span>Unfreeze<br>+ verify</span></div>
+                </div>
+                <p style="font-size:11.5px;color:var(--muted-foreground);margin:0">Each paused item is recorded so it restores <b>exactly</b>: a job resumes only if it was UNPAUSED, PO re-enables only if it was ON, streams/pipelines restart from checkpoint (never a full refresh). The 4 items above are the complete plan for this scope.</p>
+              </div>
+            </details>
+
+            <p class="gate-monitor-note">🛈 <span>Freeze is normally the <b>guided step before this</b> — if you already ran it, this stage just confirms it holds (freezing again is a safe no-op). This is the <b>backstop</b> so you can't convert on a gap. Watching or releasing a freeze later happens on the <b>Freeze page</b> (left nav).</span></p>
+          </div>
+
+          <!-- HELD state (after Freeze first runs in this mock) -->
+          <div id="freeze-held" style="display:none">
+            <div class="box ok">
+              <div class="bh">✓ Freeze bracket holds</div>
+              <p>Held as of just now, per 03c_freeze. All 4 items paused and recorded so each restores exactly at unfreeze. Coverage is point-in-time — the job re-verifies before it mutates.</p>
+            </div>
+
+            <!-- In-place detail: the applied list expands here, no navigation -->
+            <details class="gdisc">
+              <summary>Show what's paused now (4)<span class="caret">›</span></summary>
+              <div class="gbody">
+                <div class="entity" style="padding:6px 0"><span class="ei">🗓️</span><div><div class="en">nightly_optimize_sales</div><div class="em"><span class="op">PAUSE_JOB</span> · was UNPAUSED · frozen just now</div><div class="resume">→ resumed to UNPAUSED after convert</div></div></div>
+                <div class="entity" style="padding:6px 0"><span class="ei">🔁</span><div><div class="en">orders_dlt</div><div class="em"><span class="op">STOP_PIPELINE</span> · DLT · frozen just now</div><div class="resume">→ restarted from checkpoint (no full refresh)</div></div></div>
+                <div class="entity" style="padding:6px 0"><span class="ei">🌊</span><div><div class="en">stream_writer_job_17</div><div class="em"><span class="op">STOP_STREAM_JOB</span> · frozen just now</div><div class="resume">→ restarted from checkpoint</div></div></div>
+                <div class="entity" style="padding:6px 0"><span class="ei">⚙️</span><div><div class="en">Predictive Optimization (schema)</div><div class="em"><span class="op">DISABLE_PO</span> · was ON · frozen just now</div><div class="resume">→ re-enabled only because it was ON before</div></div></div>
+              </div>
+            </details>
+
+            <p class="gate-monitor-note">🛈 <span>Continue to <b>④ Convert</b> below. You can watch this freeze or release it anytime from the <b>Freeze page</b> (left nav) — it's the same bracket, in monitoring view.</span></p>
+          </div>
+        </div>
+
+        <!-- CONVERT (fixed path) -->
+        <div class="stagebox" data-stage="convert">
+          <p class="stitle">④ Convert — the one step that runs SET MANAGED</p>
+
+          <div class="kicker" style="color:var(--muted-foreground);margin-bottom:6px">Before you convert</div>
+          <div class="checklist">
+            <div class="ci done"><span class="mark">✓</span><span class="ctext"><b>Readiness</b><span class="csub"> — dry-run passed</span></span></div>
+            <div class="ci gap" id="ci-perms"><span class="mark">!</span><span class="ctext"><b>Permissions</b><span class="csub" id="ci-perms-sub"> — 10 tables need an ownership lease</span></span><span class="cact"><button class="btn secondary" style="padding:5px 10px;font-size:12px" id="leaseBtn2">Lease first</button></span></div>
+            <div class="ci gap" id="ci-freeze"><span class="mark">!</span><span class="ctext"><b>Freeze</b><span class="csub" id="ci-freeze-sub"> — not frozen yet (4 items will pause)</span></span><span class="cact"><button class="btn secondary" style="padding:5px 10px;font-size:12px" id="freezeBtn2">Freeze first</button></span></div>
+          </div>
+
+          <label class="ack" id="ackRowPerms">
+            <input type="checkbox" id="ackPerms" />
+            <span>I understand <b>10 tables aren't leased yet</b>. Convert fails closed if they truly need it — proceed anyway and acknowledge this step wasn't completed.</span>
+          </label>
+          <label class="ack" id="ackRowFreeze">
+            <input type="checkbox" id="ackFreeze" />
+            <span>I understand the <b>freeze bracket isn't applied</b>. Compaction/streams could write mid-convert and the job fails closed on a gap — proceed anyway and acknowledge this step wasn't completed.</span>
+          </label>
+
+          <div class="box warn">
+            <div class="bh">⚠ Tables this will change</div>
+            <p><b>10 tables</b> in <span class="mono">…e2e_real_stream</span> — copies data to the managed root; originals stay in place, nothing is deleted now. Roll back for 14 days.</p>
+          </div>
+          <div class="confirm">
+            <label>Type the wave id <span class="mono" style="font-weight:700">wave_02</span> to confirm the conversion</label>
+            <input class="mono" id="confirmInput" placeholder="wave_02" />
+          </div>
+          <p class="gatemsg" id="gateMsg">Convert is disabled until Permissions is resolved or acknowledged, and you've typed the wave id.</p>
+        </div>
+
+        <!-- AFTER -->
+        <div class="stagebox" data-stage="after">
+          <p class="stitle">⑤ After — what convert does and doesn't touch</p>
+          <div class="grid2">
+            <div class="box">
+              <div class="bh" style="color:var(--destructive-foreground)">Disrupts</div>
+              <ul>
+                <li>Compaction / OPTIMIZE + Predictive Optimization paused (auto-resumed at unfreeze).</li>
+                <li>Attributed streams stopped, then restarted.</li>
+                <li><b>Your job:</b> stop your own writers (nightly ETL, Trino/Snowflake/EMR) — convert won't.</li>
+              </ul>
+            </div>
+            <div class="box">
+              <div class="bh" style="color:var(--success-foreground)">Does not touch</div>
+              <ul>
+                <li>Readers — name-based access keeps working through the switch.</li>
+                <li>Tables outside this scope.</li>
+              </ul>
+            </div>
+          </div>
+          <p style="font-size:11px;color:var(--muted-foreground);margin-top:8px">Releasing the freeze is a separate step the Conductor recommends; nothing unfreezes on its own.</p>
+        </div>
+      </div>
+
+      <div class="dfoot">
+        <button class="btn secondary">Cancel</button>
+        <button class="btn brand" id="convertBtn" disabled>Convert</button>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================= SCREEN 3 ============================= -->
+  <section class="panel" data-panel="s3">
+    <p class="caption">
+      <b>The Freeze page — a monitoring destination (left nav), not part of the convert task.</b> The convert gate carries the freeze plan inline; this page is where you <i>watch</i> and <i>release</i> a bracket on its own time. Toggle <b>Planned (before freeze)</b> to see exactly what the freeze step <i>will</i> pause and <b>Applied (now)</b> for what's currently paused and how each thing comes back. The structured explainer up top says, in plain terms, everything that turns off and in what order.
+    </p>
+
+    <div class="fcard">
+      <div class="fh">
+        <div>
+          <h2>Freeze bracket — <span class="mono">…e2e_real_stream</span></h2>
+          <p>Everything that could write to or rewrite these tables is paused so convert copies a clean, unchanging snapshot.</p>
+        </div>
+        <div class="seg" role="tablist" aria-label="Freeze view">
+          <button role="tab" aria-selected="true"  data-view="planned">Planned (before freeze)</button>
+          <button role="tab" aria-selected="false" data-view="applied">Applied (now)</button>
+        </div>
+      </div>
+
+      <!-- structured "what turns off" — shared by both views -->
+      <div class="explain">
+        <p class="eh">What freezing turns off — and why</p>
+        <p>Convert copies the latest snapshot of each table. Anything that writes or rewrites files mid-copy can corrupt that snapshot (a VACUUM or OPTIMIZE can even fail the conversion). So the freeze pauses each source of change, in this order:</p>
+        <ul class="steps">
+          <li><span class="n"></span><span><b>Compaction / OPTIMIZE jobs</b> — scheduled jobs that rewrite files. <span class="d">Paused via PAUSE_JOB.</span></span></li>
+          <li><span class="n"></span><span><b>Predictive Optimization</b> — Databricks auto-optimize for the schema. <span class="d">Turned off via DISABLE_PO (only re-enabled later if it was ON before).</span></span></li>
+          <li><span class="n"></span><span><b>DLT pipelines</b> writing to these tables. <span class="d">Stopped via STOP_PIPELINE; restarted from checkpoint, never full-refresh.</span></span></li>
+          <li><span class="n"></span><span><b>Structured Streaming writer jobs.</b> <span class="d">Stopped via STOP_STREAM_JOB; restarted from checkpoint.</span></span></li>
+        </ul>
+      </div>
+
+      <!-- ===================== PLANNED VIEW ===================== -->
+      <div class="view" data-view="planned" data-active="true">
+        <div class="bracket">
+          <div class="bnode planned"><span class="bdot">❄</span><span class="blbl">Freeze — planned</span><span class="bsub">not applied yet</span></div>
+          <div class="bseg dashed"></div>
+          <div class="bnode"><span class="bdot">2</span><span class="blbl">Convert</span><span class="bsub">after freeze</span></div>
+          <div class="bseg dashed"></div>
+          <div class="bnode"><span class="bdot">↩</span><span class="blbl">Unfreeze + verify</span><span class="bsub">after convert</span></div>
+        </div>
+
+        <div class="downtime-read">
+          <span class="dr-ico">🕒</span>
+          <div><b>Downtime read</b> — estimated freeze window ≈ 15 min.
+            <b>2 safe</b> — next run is hours away or unscheduled (nightly_optimize_sales, Predictive Optimization).
+            <b>2 need a heads-up</b> — orders_dlt and stream_writer_job_17 write continuously, so they're stopped until unfreeze: <b>inform their consumers of brief downtime.</b></div>
+        </div>
+
+        <div class="fcols">
+          <div class="fcol auto">
+            <h3>⏸ Will be paused — and auto-resumed after convert</h3>
+            <div class="entity"><span class="ei">🗓️</span><div><div class="en">nightly_optimize_sales</div><div class="em"><span class="op">PAUSE_JOB</span> · currently UNPAUSED</div><div class="willpause">Will pause · resumes to UNPAUSED after convert</div><div class="nextrun">🕒 Next run ~8h · tonight 02:00 <span class="hint safe">Safe window</span></div></div></div>
+            <div class="entity"><span class="ei">🔁</span><div><div class="en">orders_dlt</div><div class="em"><span class="op">STOP_PIPELINE</span> · DLT · currently running</div><div class="willpause">Will stop · restarts from checkpoint after convert</div><div class="nextrun">🕒 Runs continuously (DLT) <span class="hint heads">Downtime until unfreeze · tell consumers</span></div></div></div>
+            <div class="entity"><span class="ei">🌊</span><div><div class="en">stream_writer_job_17</div><div class="em"><span class="op">STOP_STREAM_JOB</span> · currently running</div><div class="willpause">Will stop · restarts from checkpoint after convert</div><div class="nextrun">🕒 Runs continuously <span class="hint heads">Downtime until unfreeze · tell consumers</span></div></div></div>
+            <div class="entity"><span class="ei">⚙️</span><div><div class="en">Predictive Optimization (schema)</div><div class="em"><span class="op">DISABLE_PO</span> · currently ON</div><div class="willpause">Will turn off · re-enabled after convert (because it's ON now)</div><div class="nextrun">🕒 No fixed schedule · opportunistic <span class="hint safe">Won't run</span></div></div></div>
+          </div>
+          <div class="fcol manual">
+            <h3>✋ You must stop yourself — the freeze can't</h3>
+            <div class="entity"><span class="ei">🖐️</span><div><div class="en">Non-Databricks writers</div><div class="em">Trino / Snowflake / EMR / path-based writers</div><div class="noresume">Not visible to the freeze — stop before, resume after.</div></div></div>
+            <div class="entity"><span class="ei">🖐️</span><div><div class="en">Ad-hoc / notebook OPTIMIZE</div><div class="em">Manual compaction not attributed to a job</div><div class="noresume">Stays MANUAL — surfaced, never auto-operated.</div></div></div>
+          </div>
+        </div>
+
+        <div class="fbar-cta">
+          <span class="m"><b>Nothing is paused yet.</b> Running the freeze pauses the 4 items on the left and records each so it can be restored exactly — then you return to <b>Convert</b>.</span>
+          <button class="btn brand">❄ Freeze first</button>
+        </div>
+      </div>
+
+      <!-- ===================== APPLIED VIEW ===================== -->
+      <div class="view" data-view="applied">
+        <div class="bracket">
+          <div class="bnode done"><span class="bdot">✓</span><span class="blbl">Freeze applied</span><span class="bsub">4 open · 4 min ago</span></div>
+          <div class="bseg done"></div>
+          <div class="bnode active"><span class="bdot">●</span><span class="blbl">Convert</span><span class="bsub">now</span></div>
+          <div class="bseg"></div>
+          <div class="bnode"><span class="bdot">↩</span><span class="blbl">Unfreeze + verify</span><span class="bsub">pending</span></div>
+        </div>
+
+        <div class="downtime-read">
+          <span class="dr-ico">🕒</span>
+          <div><b>Downtime read</b> — frozen 4 min ago; held until unfreeze.
+            <b>2 safe</b> — their next run is hours away or unscheduled, so pausing costs nothing (nightly_optimize_sales, Predictive Optimization).
+            <b>2 in downtime now</b> — orders_dlt and stream_writer_job_17 are continuous, so they're currently stopped: <b>consumers should expect a gap until unfreeze.</b></div>
+        </div>
+
+        <div class="fcols">
+          <div class="fcol auto">
+            <h3>⏸ Paused now → resumes automatically at unfreeze</h3>
+            <div class="entity"><span class="ei">🗓️</span><div><div class="en">nightly_optimize_sales</div><div class="em"><span class="op">PAUSE_JOB</span> · was UNPAUSED · frozen 4 min ago</div><div class="resume">→ resumed to UNPAUSED after convert</div><div class="nextrun">🕒 Next run ~8h · tonight 02:00 <span class="hint safe">Safe — no run due in window</span></div></div></div>
+            <div class="entity"><span class="ei">🔁</span><div><div class="en">orders_dlt</div><div class="em"><span class="op">STOP_PIPELINE</span> · DLT · frozen 4 min ago</div><div class="resume">→ restarted from checkpoint (no full refresh)</div><div class="nextrun">🕒 Continuous · stopped 4 min <span class="hint heads">In downtime · tell consumers</span></div></div></div>
+            <div class="entity"><span class="ei">🌊</span><div><div class="en">stream_writer_job_17</div><div class="em"><span class="op">STOP_STREAM_JOB</span> · frozen 4 min ago</div><div class="resume">→ restarted from checkpoint</div><div class="nextrun">🕒 Continuous · stopped 4 min <span class="hint heads">In downtime · tell consumers</span></div></div></div>
+            <div class="entity"><span class="ei">⚙️</span><div><div class="en">Predictive Optimization (schema)</div><div class="em"><span class="op">DISABLE_PO</span> · was ON · frozen 4 min ago</div><div class="resume">→ re-enabled only because it was ON before</div><div class="nextrun">🕒 No fixed schedule · opportunistic <span class="hint safe">Won't run</span></div></div></div>
+          </div>
+          <div class="fcol manual">
+            <h3>✋ You must stop yourself — not auto-resumed</h3>
+            <div class="entity"><span class="ei">🖐️</span><div><div class="en">Non-Databricks writers</div><div class="em">Trino / Snowflake / EMR / path-based writers</div><div class="noresume">Convert can't see or pause these — stop before, resume after.</div></div></div>
+            <div class="entity"><span class="ei">🖐️</span><div><div class="en">Ad-hoc / notebook OPTIMIZE</div><div class="em">Manual compaction not attributed to a job</div><div class="noresume">Stays MANUAL — surfaced, never auto-operated.</div></div></div>
+          </div>
+        </div>
+
+        <div class="fnote">
+          Point-in-time: each entity stays listed until its paired <span class="mono">UNFROZEN</span> row lands. Nothing unfreezes on its own — the Conductor recommends the unfreeze step. &nbsp;<a href="#">See all paused entities on the Freeze page →</a>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ============================= SCREEN 5 · FREEZE STATUS BY WAVE ============================= -->
+  <section class="panel" data-panel="s5">
+    <p class="caption">
+      <b>The fleet view — everything frozen, by wave, with the right next action.</b> Answers "what's paused across the estate, for how long, and what should I do about it?" Rows are driven by <span class="mono">freeze_ledger</span> state; the <b>Status</b> drives the recommended action (the same per-wave next step the Conductor uses). This lives as a read-only <b>dashboard</b> page (link-through to act) and as a <b>Freeze page → "By wave"</b> rollup in the app where the actions are live. <b>Stale</b> = frozen longer than the safety threshold (PO/streams paused too long) — surfaced loudly so nothing stays frozen by accident.
+    </p>
+
+    <div class="report">
+      <h2>Freeze status by wave</h2>
+      <p class="rsub">Plan <span class="mono">plan_run_id=pr_2026_09_14</span> · refreshed 1 min ago</p>
+
+      <div class="rkpis">
+        <div class="rkpi"><div class="n">2</div><div class="l">Waves frozen now</div></div>
+        <div class="rkpi"><div class="n">6</div><div class="l">Entities paused</div></div>
+        <div class="rkpi"><div class="n">3</div><div class="l">Consumers in downtime</div></div>
+        <div class="rkpi"><div class="n warn">1</div><div class="l">Stale freeze</div></div>
+      </div>
+
+      <table class="wf">
+        <thead>
+          <tr><th>Wave</th><th>Status</th><th>Paused</th><th>Held for</th><th>Heads-up</th><th>Recommended action</th></tr>
+        </thead>
+        <tbody>
+          <tr>
+            <td><div class="wid">wave_02</div><div class="sch mono">…e2e_real_stream</div></td>
+            <td><span class="stat frozen">Frozen</span></td>
+            <td>4 / 4</td>
+            <td>4 min</td>
+            <td>2 consumers</td>
+            <td><div class="ract"><button class="rbtn brand" data-goto="s2">Convert →</button><button class="rbtn" data-goto="s3">View bracket</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="wid">wave_05</div><div class="sch mono">…streaming_core</div></td>
+            <td><span class="stat partial">Partial</span></td>
+            <td>2 / 3</td>
+            <td>12 min</td>
+            <td>1 consumer</td>
+            <td><div class="ract"><button class="rbtn warn" data-goto="s3">Complete freeze</button><button class="rbtn" data-goto="s3">View bracket</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="wid">wave_04</div><div class="sch mono">…finance_marts</div></td>
+            <td><span class="stat stale">Stale · 3 days</span></td>
+            <td>1 / 1</td>
+            <td>3 days</td>
+            <td>0</td>
+            <td><div class="ract"><button class="rbtn danger" data-goto="s3">Unfreeze + verify</button><button class="rbtn" data-goto="s3">View bracket</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="wid">wave_03</div><div class="sch mono">…sales_curated</div></td>
+            <td><span class="stat none">Not frozen</span></td>
+            <td>0 / 2</td>
+            <td>—</td>
+            <td>—</td>
+            <td><div class="ract"><button class="rbtn" data-goto="s4">Freeze first</button><button class="rbtn" data-goto="s3">Preview plan</button></div></td>
+          </tr>
+          <tr>
+            <td><div class="wid">wave_01</div><div class="sch mono">…path_access</div></td>
+            <td><span class="stat done">Unfrozen</span></td>
+            <td>0 / 3</td>
+            <td>restored 2d ago</td>
+            <td>—</td>
+            <td><div class="ract"><button class="rbtn" data-goto="s3">View history</button></div></td>
+          </tr>
+        </tbody>
+      </table>
+
+      <div class="rlegend">
+        <span><b>Frozen</b> — all sources paused, safe to convert</span>
+        <span><b>Partial</b> — some sources still writing</span>
+        <span><b>Stale</b> — held past threshold; release it</span>
+        <span><b>Unfrozen</b> — restored exactly from the ledger</span>
+      </div>
+    </div>
+  </section>
+
+</main>
+
+<script>
+  // ---- activation helpers (also driven by the URL hash, for deep-linked capture) --
+  function activateTab(id){
+    document.querySelectorAll('.tab').forEach(function(x){ x.setAttribute('aria-selected', x.getAttribute('data-tab')===id ? 'true':'false'); });
+    document.querySelectorAll('.panel').forEach(function(p){ p.setAttribute('data-active', p.getAttribute('data-panel')===id ? 'true':'false'); });
+  }
+  function activateStage(stage){
+    document.querySelectorAll('.flow .fnode').forEach(function(x){ x.setAttribute('aria-selected', x.getAttribute('data-stage')===stage ? 'true':'false'); });
+    document.querySelectorAll('.stagebox').forEach(function(s){ s.setAttribute('data-active', s.getAttribute('data-stage')===stage ? 'true':'false'); });
+  }
+  function activateView(view){
+    document.querySelectorAll('.seg [data-view]').forEach(function(x){ x.setAttribute('aria-selected', x.getAttribute('data-view')===view ? 'true':'false'); });
+    document.querySelectorAll('.view[data-view]').forEach(function(s){ s.setAttribute('data-active', s.getAttribute('data-view')===view ? 'true':'false'); });
+  }
+
+  // tab switching (click)
+  document.querySelectorAll('.tab').forEach(function(t){
+    t.addEventListener('click', function(){ activateTab(t.getAttribute('data-tab')); window.scrollTo({top:0,behavior:'smooth'}); });
+  });
+  // cross-link (freeze detail -> screen 3)
+  document.querySelectorAll('[data-goto]').forEach(function(b){
+    b.addEventListener('click', function(){
+      var dest = b.getAttribute('data-goto');
+      activateTab(dest);
+      if (dest === 's3') activateView('planned');   // "Review freeze plan" always lands on Planned
+      window.scrollTo({top:0,behavior:'smooth'});
+    });
+  });
+  // process-flow node selection (screen 2)
+  document.querySelectorAll('.flow .fnode').forEach(function(n){
+    n.addEventListener('click', function(){ activateStage(n.getAttribute('data-stage')); });
+  });
+
+  // hash routing: #s1 · #s2 · #s2/convert · #s3 · #s3/applied  (deep-linkable states)
+  function applyHash(){
+    var parts = (location.hash || '#s1').replace('#','').split('/');
+    var tab = parts[0] || 's1';
+    activateTab(tab);
+    if (tab === 's2' && parts[1]) activateStage(parts[1]);
+    if (tab === 's3' && parts[1]) activateView(parts[1]);
+  }
+  window.addEventListener('hashchange', applyHash);
+
+  // ---- Fixed-path Convert gating (screen 2) --------------------------------------
+  var leased = false, frozen = false;
+  var convertBtn = document.getElementById('convertBtn');
+  var ackPerms = document.getElementById('ackPerms');
+  var ackFreeze = document.getElementById('ackFreeze');
+  var ackRowPerms = document.getElementById('ackRowPerms');
+  var ackRowFreeze = document.getElementById('ackRowFreeze');
+  var confirmInput = document.getElementById('confirmInput');
+  var gateMsg = document.getElementById('gateMsg');
+
+  function refreshGate(){
+    var permsOk  = leased || (ackPerms && ackPerms.checked);
+    var freezeOk = frozen || (ackFreeze && ackFreeze.checked);
+    var typed    = confirmInput && confirmInput.value.trim() === 'wave_02';
+    convertBtn.disabled = !(permsOk && freezeOk && typed);
+
+    var missing = [];
+    if (!permsOk)  missing.push('Permissions (Lease first, or acknowledge)');
+    if (!freezeOk) missing.push('Freeze (Freeze first, or acknowledge)');
+    if (!typed)    missing.push('type the wave id \u201cwave_02\u201d');
+    gateMsg.textContent = missing.length
+      ? 'Convert disabled — still needed: ' + missing.join('; ') + '.'
+      : 'All prerequisites met or acknowledged — Convert is enabled.';
+  }
+
+  function doLease(){
+    leased = true;
+    document.getElementById('perms-box-gap').style.display = 'none';
+    document.getElementById('perms-box-done').style.display = 'block';
+    document.getElementById('perms-state').textContent = 'lease holds';
+    var pn = document.getElementById('node-perms');
+    pn.className = 'fnode done'; pn.querySelector('.fdot').textContent = '✓';
+    var ci = document.getElementById('ci-perms');
+    ci.className = 'ci done'; ci.querySelector('.mark').textContent = '✓';
+    document.getElementById('ci-perms-sub').textContent = ' — lease holds';
+    if (ci.querySelector('.cact')) ci.querySelector('.cact').remove();
+    if (ackRowPerms) ackRowPerms.classList.add('hidden');
+    refreshGate();
+  }
+
+  function doFreeze(){
+    frozen = true;
+    // swap the Freeze stage gap -> held
+    document.getElementById('freeze-gap').style.display = 'none';
+    document.getElementById('freeze-held').style.display = 'block';
+    // flow rail node
+    var fn = document.getElementById('node-freeze');
+    fn.className = 'fnode done'; fn.querySelector('.fdot').textContent = '✓';
+    document.getElementById('freeze-state').textContent = 'bracket holds';
+    // convert checklist item
+    var ci = document.getElementById('ci-freeze');
+    ci.className = 'ci done'; ci.querySelector('.mark').textContent = '✓';
+    document.getElementById('ci-freeze-sub').textContent = ' — bracket holds';
+    if (ci.querySelector('.cact')) ci.querySelector('.cact').remove();
+    if (ackRowFreeze) ackRowFreeze.classList.add('hidden');
+    refreshGate();
+  }
+
+  ['leaseBtn','leaseBtn2'].forEach(function(id){ var b=document.getElementById(id); if(b) b.addEventListener('click', doLease); });
+  ['freezeBtn','freezeBtn2'].forEach(function(id){ var b=document.getElementById(id); if(b) b.addEventListener('click', doFreeze); });
+  if (ackPerms)  ackPerms.addEventListener('change', refreshGate);
+  if (ackFreeze) ackFreeze.addEventListener('change', refreshGate);
+  if (confirmInput) confirmInput.addEventListener('input', refreshGate);
+  refreshGate();
+
+  // ---- Freeze planned/applied toggle (screen 3) ----------------------------------
+  document.querySelectorAll('.seg [data-view]').forEach(function(b){
+    b.addEventListener('click', function(){ activateView(b.getAttribute('data-view')); });
+  });
+
+  // apply any deep-link hash on first load
+  applyHash();
+
+  // capture-only mode (?cap): expand the modal & open disclosures so a static
+  // screenshot can show the full stage. No effect on normal viewing.
+  if (/(?:\?|&)cap\b/.test(location.search)) {
+    document.body.classList.add('capmode');
+    document.querySelectorAll('details').forEach(function(d){ d.open = true; });
+  }
+</script>
+</body>
+</html>

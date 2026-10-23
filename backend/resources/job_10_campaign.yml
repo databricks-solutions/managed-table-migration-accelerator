@@ -1,0 +1,74 @@
+# Stage 10 — Gated campaign: prep ONE schema then STOP (no convert).
+#
+# Chains resolve -> dry-run -> conductor -> decide for a single `target_schema`, so a
+# headless/scheduled run can advance a schema to DRY_RUN_OK and refresh the Conductor's
+# recommendation WITHOUT ever mutating tables. Conversion stays a deliberate operator
+# step (job_04_convert). This job NEVER runs SET MANAGED.
+resources:
+  jobs:
+    job_10_campaign:
+      name: "[${bundle.target}] ${bundle.name} :: 10 campaign (gated)"
+      tags:
+        project: managed-migration
+        stage: "10-campaign"
+      max_concurrent_runs: 1
+      parameters:
+        - name: target_schema
+          default: ""
+        - name: confirm_compaction_paused
+          default: "false"
+        - name: recent_optimize_minutes
+          default: "120"
+        - name: include_streaming
+          default: "false"
+        # This workspace's numeric id so the campaign's dry-run Check 13 (ownership) can
+        # predict the convert guard rather than run blind (deterministic on serverless).
+        - name: current_workspace_id
+          default: ${var.workspace_id}
+      tasks:
+        - task_key: resolve
+          notebook_task:
+            notebook_path: ../notebooks/08_campaign_gate.py
+            base_parameters:
+              mode: resolve
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              target_schema: "{{job.parameters.target_schema}}"
+              include_streaming: "{{job.parameters.include_streaming}}"
+        - task_key: dry_run
+          depends_on:
+            - task_key: resolve
+          notebook_task:
+            notebook_path: ../notebooks/03_dry_run.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              catalog_filter: "{{tasks.resolve.values.catalog_filter}}"
+              schema_filter: "{{tasks.resolve.values.schema_filter}}"
+              size_band_filter: "*"
+              recent_optimize_minutes: "{{job.parameters.recent_optimize_minutes}}"
+              current_workspace_id: "{{job.parameters.current_workspace_id}}"
+        - task_key: conductor
+          depends_on:
+            - task_key: dry_run
+          notebook_task:
+            notebook_path: ../notebooks/08_conductor.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              parallelism: ${var.parallelism}
+              include_streaming: "{{job.parameters.include_streaming}}"
+        - task_key: decide
+          depends_on:
+            - task_key: conductor
+          notebook_task:
+            notebook_path: ../notebooks/08_campaign_gate.py
+            base_parameters:
+              mode: decide
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              target_schema: "{{job.parameters.target_schema}}"
+              include_streaming: "{{job.parameters.include_streaming}}"
+              confirm_compaction_paused: "{{job.parameters.confirm_compaction_paused}}"

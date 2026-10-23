@@ -1,0 +1,94 @@
+# Stage 11 — BULK CONVERT: SET MANAGED across a parallel-SAFE batch of waves, bounded.
+# select_batch re-verifies the batch is still conflict-free (fails on drift) + reconciles the
+# manifest schema once; convert_batch then runs the UNCHANGED 04_convert per wave at
+# concurrency=bulk_max_parallel. Each wave re-asserts its own gates at mutation time. Requires
+# the batch to be frozen first (job_11b) — 04_convert fails on open blocking PRE_CONVERT actions.
+resources:
+  jobs:
+    job_11_bulk_convert:
+      name: "[${bundle.target}] ${bundle.name} :: 11 bulk convert"
+      tags:
+        project: managed-migration
+        stage: "11-bulk-convert"
+      max_concurrent_runs: 1
+      parameters:
+        - name: plan_run_id
+          default: ""
+        - name: batch_id
+          default: ""
+        - name: confirm_compaction_paused
+          default: "false"
+        - name: convert_max_tables_per_wave
+          default: "300"
+        - name: recent_optimize_minutes
+          default: "120"
+        - name: require_pre_convert_actions_cleared
+          default: "true"
+        - name: require_compaction_frozen
+          default: "true"
+        - name: require_streams_stopped
+          default: "true"
+        - name: owning_workspace
+          default: ""
+        - name: require_owning_workspace
+          default: "true"
+        # Server-injected by the app/MCP for the bulk aliases (OPERATOR_ALIASES); blank = the
+        # fanned-out notebook's current_user().
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: select_batch
+          notebook_task:
+            notebook_path: ../notebooks/11_select_batch.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              plan_run_id: "{{job.parameters.plan_run_id}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              bulk_max_parallel: ${var.bulk_max_parallel}
+              convert_remaining_only: "true"
+        - task_key: convert_batch
+          depends_on:
+            - task_key: select_batch
+          for_each_task:
+            inputs: "{{tasks.select_batch.values.wave_targets}}"
+            concurrency: ${var.bulk_max_parallel}
+            task:
+              task_key: convert_one_wave
+              notebook_task:
+                notebook_path: ../notebooks/04_convert.py
+                base_parameters:
+                  # Usage telemetry opt-out (deploy-fixed; false = no pings).
+                  telemetry_enabled: ${var.telemetry_enabled}
+                  manifest_catalog: ${var.manifest_catalog}
+                  manifest_schema: ${var.manifest_schema}
+                  job_id: "{{job.id}}"
+                  job_run_id: "{{job.run_id}}"
+                  plan_run_id: "{{input.plan_run_id}}"
+                  wave_id: "{{input.wave_id}}"
+                  confirm_compaction_paused: "{{job.parameters.confirm_compaction_paused}}"
+                  max_tables: "{{job.parameters.convert_max_tables_per_wave}}"
+                  recent_optimize_minutes: "{{job.parameters.recent_optimize_minutes}}"
+                  require_pre_convert_actions_cleared: "{{job.parameters.require_pre_convert_actions_cleared}}"
+                  require_compaction_frozen: "{{job.parameters.require_compaction_frozen}}"
+                  require_streams_stopped: "{{job.parameters.require_streams_stopped}}"
+                  # Pinned to job_04_convert's defaults: an omitted parameter falls back to the
+                  # notebook widget, and a blank current_workspace_id probes the runtime, which
+                  # returns None on serverless and fails the owning-workspace guard closed.
+                  # table_owner_group stays unpassed (bulk design §8 Q3: blank).
+                  require_writers_stopped: "true"
+                  require_ownership_leased: "true"
+                  owning_workspace: "{{job.parameters.owning_workspace}}"
+                  require_owning_workspace: "{{job.parameters.require_owning_workspace}}"
+                  current_workspace_id: ${var.workspace_id}
+                  writer_schedule_safety_margin_min: "15"
+                  recheck_writer_schedule_live: "false"
+                  parallelism: ${var.parallelism}
+                  allow_restart: "false"
+                  operator: "{{job.parameters.operator}}"
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: convert_batch
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

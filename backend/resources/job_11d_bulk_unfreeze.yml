@@ -1,0 +1,61 @@
+# Stage 11d — BULK UNFREEZE + VERIFY: restore compaction/streaming for a batch after validate.
+# Separate launch (SR11 — nothing auto-releases). Fans the UNCHANGED 05b_unfreeze_verify out
+# over the batch's waves. Run ONLY after job_11c shows the batch fully VALIDATED. Dry-run default.
+resources:
+  jobs:
+    job_11d_bulk_unfreeze:
+      name: "[${bundle.target}] ${bundle.name} :: 11d bulk unfreeze + verify"
+      tags:
+        project: managed-migration
+        stage: "11d-bulk-unfreeze"
+      max_concurrent_runs: 1
+      parameters:
+        - name: plan_run_id
+          default: ""
+        - name: batch_id
+          default: ""
+        - name: confirm_execute
+          default: ${var.confirm_execute}
+        # Server-injected by the app/MCP for the bulk aliases (OPERATOR_ALIASES); blank = the
+        # fanned-out notebook's current_user().
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: select_batch
+          notebook_task:
+            notebook_path: ../notebooks/11_select_batch.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              plan_run_id: "{{job.parameters.plan_run_id}}"
+              batch_id: "{{job.parameters.batch_id}}"
+              bulk_max_parallel: ${var.bulk_max_parallel}
+        - task_key: unfreeze_batch
+          depends_on:
+            - task_key: select_batch
+          for_each_task:
+            inputs: "{{tasks.select_batch.values.wave_targets}}"
+            concurrency: ${var.bulk_max_parallel}
+            task:
+              task_key: unfreeze_one_wave
+              notebook_task:
+                notebook_path: ../notebooks/05b_unfreeze_verify.py
+                base_parameters:
+                  # Usage telemetry opt-out (deploy-fixed; false = no pings).
+                  telemetry_enabled: ${var.telemetry_enabled}
+                  manifest_catalog: ${var.manifest_catalog}
+                  manifest_schema: ${var.manifest_schema}
+                  job_id: "{{job.id}}"
+                  job_run_id: "{{job.run_id}}"
+                  plan_run_id: "{{input.plan_run_id}}"
+                  wave_id: "{{input.wave_id}}"
+                  target_schema: ""
+                  confirm_execute: "{{job.parameters.confirm_execute}}"
+                  parallelism: ${var.parallelism}
+                  operator: "{{job.parameters.operator}}"
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: unfreeze_batch
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

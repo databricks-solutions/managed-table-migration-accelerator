@@ -1,0 +1,536 @@
+{
+  "_doc": "Golden cases for migration.authority.evaluate. The c*/m*/co* cases are the live scratch matrix (two workspaces: DBSQL 2026.38 and 2026.39, serverless SQL warehouses, 2026-10-08) with principals anonymized; `observed` is what SET MANAGED did with exactly these facts. e* cases are derived edges. Grants are [securable_level, privilege, grantee]. Each expected request pins its grantors and the verbatim ask_text every interface renders.",
+  "cases": [
+    {
+      "id": "c0_data_only",
+      "observed": "FAIL: User is not an owner of Table",
+      "facts": {
+        "full_name": "main_cat.sch_a.c0", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "SELECT", "migration-sp"], ["TABLE", "MODIFY", "migration-sp"]]
+      },
+      "expected": {
+        "status": "NEEDS_GRANT", "basis": null, "basis_via": null, "missing": ["OWNER_OR_MANAGE"], "self_grantable": false,
+        "requests": [
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c0", "self_grantable": false,
+           "grantors": ["data-owner@example.com", "catalog-admins"],
+           "ask_text": "Ask the owner of table `main_cat.sch_a.c0` (`data-owner@example.com`) to run: GRANT MANAGE ON TABLE main_cat.sch_a.c0 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."}
+        ]
+      }
+    },
+    {
+      "id": "c1_manage_only",
+      "observed": "FAIL: User does not have SELECT on Table",
+      "facts": {
+        "full_name": "main_cat.sch_a.c1", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "MANAGE", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_TABLE", "basis_via": null, "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c1", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_a.c1 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c1", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c1 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c2_manage_select_modify",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_a.c2", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "MANAGE", "migration-sp"], ["TABLE", "SELECT", "migration-sp"], ["TABLE", "MODIFY", "migration-sp"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "MANAGE_TABLE", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c3_schema_manage_no_use_schema",
+      "observed": "FAIL: User does not have USE SCHEMA on Schema",
+      "facts": {
+        "full_name": "main_cat.sch_b.c3", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": ["USE_SCHEMA", "SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "main_cat.sch_b", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA main_cat.sch_b TO `migration-sp`"},
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c3", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_b.c3 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c3", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c3 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c4_actor_owns_table",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_a.c4", "actor": "migration-sp",
+        "table_owner": "migration-sp", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "TABLE_OWNER", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c5_schema_owner_with_inherited_catalog_manage_all_privileges",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_a.c5", "actor": "data-owner@example.com",
+        "table_owner": "migration-sp", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "MANAGE", "data-owner@example.com"], ["CATALOG", "ALL PRIVILEGES", "data-owner@example.com"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "SCHEMA_OWNER", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c6_manage_select",
+      "observed": "FAIL: User does not have MODIFY on Table",
+      "facts": {
+        "full_name": "main_cat.sch_a.c6", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "MANAGE", "migration-sp"], ["TABLE", "SELECT", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_TABLE", "basis_via": null, "missing": ["MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c6", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c6 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c7_schema_manage_use_schema",
+      "observed": "FAIL: User does not have SELECT on Table",
+      "facts": {
+        "full_name": "main_cat.sch_b.c7", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c7", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_b.c7 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c7", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c7 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c8_schema_manage_use_schema_select",
+      "observed": "FAIL: User does not have MODIFY on Table",
+      "facts": {
+        "full_name": "main_cat.sch_b.c8", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["SCHEMA", "SELECT", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": ["MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c8", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c8 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c9_group_manage_select",
+      "observed": "FAIL: User does not have MODIFY on Table",
+      "facts": {
+        "full_name": "main_cat.sch_a.c9", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": ["account users"], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "MANAGE", "account users"], ["TABLE", "SELECT", "account users"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_TABLE", "basis_via": "account users", "missing": ["MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c9", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c9 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c10_schema_manage_use_select_modify",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_b.c10", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["SCHEMA", "SELECT", "migration-sp"], ["SCHEMA", "MODIFY", "migration-sp"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c11_group_manage_select_modify",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_a.c11", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": ["account users"], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["TABLE", "MANAGE", "account users"], ["TABLE", "SELECT", "account users"], ["TABLE", "MODIFY", "account users"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "MANAGE_TABLE", "basis_via": "account users", "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c12_schema_owner_no_table_grants",
+      "observed": "FAIL: User does not have SELECT on Table",
+      "facts": {
+        "full_name": "main_cat.sch_c.c12", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "migration-sp", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "SCHEMA_OWNER", "basis_via": null, "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sch_c.c12", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_c.c12 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_c.c12", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_c.c12 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c13_schema_owner_select_modify",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "main_cat.sch_c.c13", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "migration-sp", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["TABLE", "SELECT", "migration-sp"], ["TABLE", "MODIFY", "migration-sp"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "SCHEMA_OWNER", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "c14_table_manage_before_self_grant",
+      "observed": "PASS after the actor granted itself SELECT, MODIFY (and revoked them after)",
+      "facts": {
+        "full_name": "main_cat.sch_a.c14", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"], ["TABLE", "MANAGE", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_TABLE", "basis_via": null, "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c14", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sch_a.c14 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_a.c14", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_a.c14 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "c15_tier2_before_self_grant_modify",
+      "observed": "PASS after the actor granted itself table MODIFY (and revoked it after)",
+      "facts": {
+        "full_name": "main_cat.sch_b.c15", "actor": "migration-sp",
+        "table_owner": "data-owner@example.com", "schema_owner": "data-owner@example.com", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "USE SCHEMA", "migration-sp"],
+                   ["SCHEMA", "SELECT", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": ["MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sch_b.c15", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sch_b.c15 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "m1_metastore_admin_no_grants",
+      "observed": "FAIL: User does not have USE CATALOG on Catalog",
+      "facts": {
+        "full_name": "ms_cat.s.m1", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "inert-sp",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": []
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": null, "basis_via": null,
+        "missing": ["USE_CATALOG", "USE_SCHEMA", "OWNER_OR_MANAGE", "SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "USE CATALOG", "securable_type": "CATALOG", "securable_name": "ms_cat", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT USE CATALOG ON CATALOG ms_cat TO `admin@example.com`"},
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "ms_cat.s", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA ms_cat.s TO `admin@example.com`"},
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "ms_cat.s.m1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT MANAGE ON TABLE ms_cat.s.m1 TO `admin@example.com`"},
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "ms_cat.s.m1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE ms_cat.s.m1 TO `admin@example.com`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "ms_cat.s.m1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE ms_cat.s.m1 TO `admin@example.com`"}
+        ]
+      }
+    },
+    {
+      "id": "m2_metastore_admin_usage_select_modify",
+      "observed": "FAIL: User is not an owner of Table",
+      "facts": {
+        "full_name": "ms_cat.s.m2", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "inert-sp",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "admin@example.com"], ["SCHEMA", "USE SCHEMA", "admin@example.com"],
+                   ["TABLE", "SELECT", "admin@example.com"], ["TABLE", "MODIFY", "admin@example.com"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": null, "basis_via": null, "missing": ["OWNER_OR_MANAGE"], "self_grantable": true,
+        "requests": [
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "ms_cat.s.m2", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT MANAGE ON TABLE ms_cat.s.m2 TO `admin@example.com`"}
+        ]
+      }
+    },
+    {
+      "id": "m3_metastore_admin_after_self_granting_manage",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "ms_cat.s.m2", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "inert-sp",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "admin@example.com"], ["SCHEMA", "USE SCHEMA", "admin@example.com"],
+                   ["TABLE", "SELECT", "admin@example.com"], ["TABLE", "MODIFY", "admin@example.com"],
+                   ["TABLE", "MANAGE", "admin@example.com"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "MANAGE_TABLE", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "co1_catalog_owner_no_grants",
+      "observed": "FAIL: User does not have USE SCHEMA on Schema",
+      "facts": {
+        "full_name": "co_cat.s.co1", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "admin@example.com",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": []
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "CATALOG_OWNER", "basis_via": null, "missing": ["USE_SCHEMA", "SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "co_cat.s", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`"},
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "co_cat.s.co1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "co_cat.s.co1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`"}
+        ]
+      }
+    },
+    {
+      "id": "co2_catalog_owner_select_modify",
+      "observed": "FAIL: User does not have USE SCHEMA on Schema",
+      "facts": {
+        "full_name": "co_cat.s.co2", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "admin@example.com",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": [["TABLE", "SELECT", "admin@example.com"], ["TABLE", "MODIFY", "admin@example.com"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "CATALOG_OWNER", "basis_via": null, "missing": ["USE_SCHEMA"], "self_grantable": true,
+        "requests": [
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "co_cat.s", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT USE SCHEMA ON SCHEMA co_cat.s TO `admin@example.com`"}
+        ]
+      }
+    },
+    {
+      "id": "co3_catalog_owner_use_schema_no_table_grants",
+      "observed": "FAIL: User does not have MODIFY and SELECT on Table",
+      "facts": {
+        "full_name": "co_cat.s.co1", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "admin@example.com",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": [["SCHEMA", "USE SCHEMA", "admin@example.com"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "CATALOG_OWNER", "basis_via": null, "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "co_cat.s.co1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE co_cat.s.co1 TO `admin@example.com`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "co_cat.s.co1", "self_grantable": true,
+           "grantors": ["admin@example.com"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE co_cat.s.co1 TO `admin@example.com`"}
+        ]
+      }
+    },
+    {
+      "id": "co4_catalog_owner_use_schema_select_modify",
+      "observed": "PASS (SET and UNSET)",
+      "facts": {
+        "full_name": "co_cat.s.co2", "actor": "admin@example.com",
+        "table_owner": "inert-sp", "schema_owner": "inert-sp", "catalog_owner": "admin@example.com",
+        "actor_groups": [], "metastore_admin": true, "reads_ok": true,
+        "grants": [["SCHEMA", "USE SCHEMA", "admin@example.com"], ["TABLE", "SELECT", "admin@example.com"], ["TABLE", "MODIFY", "admin@example.com"]]
+      },
+      "expected": {"status": "AUTHORIZED", "basis": "CATALOG_OWNER", "basis_via": null, "missing": [], "self_grantable": true, "requests": []}
+    },
+    {
+      "id": "e1_reads_failed",
+      "observed": "derived: a permissions read errored",
+      "facts": {
+        "full_name": "main_cat.sch_a.e1", "actor": "migration-sp",
+        "table_owner": null, "schema_owner": null, "catalog_owner": null,
+        "actor_groups": [], "metastore_admin": null, "reads_ok": false, "note": "PERMISSION_DENIED on system.information_schema",
+        "grants": []
+      },
+      "expected": {"status": "UNKNOWN", "basis": null, "basis_via": null, "missing": [], "self_grantable": false, "requests": []}
+    },
+    {
+      "id": "e2_table_not_visible",
+      "observed": "derived: no row in information_schema for the convert identity",
+      "facts": {
+        "full_name": "hidden_cat.sch.e2", "actor": "migration-sp",
+        "table_owner": null, "schema_owner": null, "catalog_owner": null,
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": []
+      },
+      "expected": {
+        "status": "UNKNOWN", "basis": null, "basis_via": null,
+        "missing": ["USE_CATALOG", "USE_SCHEMA", "OWNER_OR_MANAGE", "SELECT", "MODIFY"], "self_grantable": false,
+        "requests": [
+          {"privilege": "USE CATALOG", "securable_type": "CATALOG", "securable_name": "hidden_cat", "self_grantable": false, "grantors": [],
+           "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT USE CATALOG ON CATALOG hidden_cat TO `migration-sp`"},
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "hidden_cat.sch", "self_grantable": false, "grantors": [],
+           "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT USE SCHEMA ON SCHEMA hidden_cat.sch TO `migration-sp`"},
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "hidden_cat.sch.e2", "self_grantable": false, "grantors": [],
+           "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT MANAGE ON TABLE hidden_cat.sch.e2 TO `migration-sp`"},
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "hidden_cat.sch.e2", "self_grantable": false, "grantors": [],
+           "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT SELECT ON TABLE hidden_cat.sch.e2 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "hidden_cat.sch.e2", "self_grantable": false, "grantors": [],
+           "ask_text": "Ask the owner of catalog `hidden_cat` (could not be read by the convert identity), any principal with MANAGE on it, or a metastore admin to run: GRANT MODIFY ON TABLE hidden_cat.sch.e2 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "e3_group_owned_schema",
+      "observed": "derived: schema owned by a group the actor belongs to",
+      "facts": {
+        "full_name": "main_cat.sales.e3", "actor": "migration-sp",
+        "table_owner": "ann@example.com", "schema_owner": "data-eng", "catalog_owner": "catalog-admins",
+        "actor_groups": ["data-eng"], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"]]
+      },
+      "expected": {
+        "status": "SELF_AUTHORIZABLE", "basis": "SCHEMA_OWNER", "basis_via": "data-eng", "missing": ["SELECT", "MODIFY"], "self_grantable": true,
+        "requests": [
+          {"privilege": "SELECT", "securable_type": "TABLE", "securable_name": "main_cat.sales.e3", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT SELECT ON TABLE main_cat.sales.e3 TO `migration-sp`"},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "main_cat.sales.e3", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE main_cat.sales.e3 TO `migration-sp`"}
+        ]
+      }
+    },
+    {
+      "id": "e4_all_privileges_is_not_manage",
+      "observed": "derived: ALL PRIVILEGES covers SELECT/MODIFY/USE but never MANAGE",
+      "facts": {
+        "full_name": "main_cat.sales.e4", "actor": "migration-sp",
+        "table_owner": "ann@example.com", "schema_owner": "data-eng", "catalog_owner": "catalog-admins",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["CATALOG", "USE CATALOG", "migration-sp"], ["SCHEMA", "ALL PRIVILEGES", "migration-sp"]]
+      },
+      "expected": {
+        "status": "NEEDS_GRANT", "basis": null, "basis_via": null, "missing": ["OWNER_OR_MANAGE"], "self_grantable": false,
+        "requests": [
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "main_cat.sales.e4", "self_grantable": false,
+           "grantors": ["ann@example.com", "data-eng", "catalog-admins"],
+           "ask_text": "Ask the owner of table `main_cat.sales.e4` (`ann@example.com`) to run: GRANT MANAGE ON TABLE main_cat.sales.e4 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."}
+        ]
+      }
+    },
+    {
+      "id": "e5_usage_grantors_by_level",
+      "observed": "derived: each grant names only principals who can grant at that level",
+      "facts": {
+        "full_name": "c.s.e5", "actor": "migration-sp",
+        "table_owner": "tbl-owner", "schema_owner": "sch-owner", "catalog_owner": "cat-owner",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["TABLE", "SELECT", "migration-sp"], ["TABLE", "MODIFY", "migration-sp"]]
+      },
+      "expected": {
+        "status": "NEEDS_GRANT", "basis": null, "basis_via": null, "missing": ["USE_CATALOG", "USE_SCHEMA", "OWNER_OR_MANAGE"], "self_grantable": false,
+        "requests": [
+          {"privilege": "USE CATALOG", "securable_type": "CATALOG", "securable_name": "c", "self_grantable": false,
+           "grantors": ["cat-owner"],
+           "ask_text": "Ask the owner of catalog `c` (`cat-owner`) to run: GRANT USE CATALOG ON CATALOG c TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."},
+          {"privilege": "USE SCHEMA", "securable_type": "SCHEMA", "securable_name": "c.s", "self_grantable": false,
+           "grantors": ["sch-owner", "cat-owner"],
+           "ask_text": "Ask the owner of schema `c.s` (`sch-owner`) to run: GRANT USE SCHEMA ON SCHEMA c.s TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."},
+          {"privilege": "MANAGE", "securable_type": "TABLE", "securable_name": "c.s.e5", "self_grantable": false,
+           "grantors": ["tbl-owner", "sch-owner", "cat-owner"],
+           "ask_text": "Ask the owner of table `c.s.e5` (`tbl-owner`) to run: GRANT MANAGE ON TABLE c.s.e5 TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."}
+        ]
+      }
+    },
+    {
+      "id": "e6_mixed_self_and_ask",
+      "observed": "derived: schema MANAGE but no USE CATALOG - Authorize alone cannot finish",
+      "facts": {
+        "full_name": "c.s.e6", "actor": "migration-sp",
+        "table_owner": "tbl-owner", "schema_owner": "sch-owner", "catalog_owner": "cat-owner",
+        "actor_groups": [], "metastore_admin": false, "reads_ok": true,
+        "grants": [["SCHEMA", "USE SCHEMA", "migration-sp"], ["SCHEMA", "SELECT", "migration-sp"], ["SCHEMA", "MANAGE", "migration-sp"]]
+      },
+      "expected": {
+        "status": "NEEDS_GRANT", "basis": "MANAGE_SCHEMA", "basis_via": null, "missing": ["USE_CATALOG", "MODIFY"], "self_grantable": false,
+        "requests": [
+          {"privilege": "USE CATALOG", "securable_type": "CATALOG", "securable_name": "c", "self_grantable": false,
+           "grantors": ["cat-owner"],
+           "ask_text": "Ask the owner of catalog `c` (`cat-owner`) to run: GRANT USE CATALOG ON CATALOG c TO `migration-sp`; or ask any principal with MANAGE on it, or a metastore admin."},
+          {"privilege": "MODIFY", "securable_type": "TABLE", "securable_name": "c.s.e6", "self_grantable": true,
+           "grantors": ["migration-sp"],
+           "ask_text": "Authorize can do this: GRANT MODIFY ON TABLE c.s.e6 TO `migration-sp`"}
+        ]
+      }
+    }
+  ]
+}

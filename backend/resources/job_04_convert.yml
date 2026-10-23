@@ -1,0 +1,117 @@
+# Stage 04 — Convert: SET MANAGED, one WAVE at a time, plan-pinned + no partial waves.
+#
+# The `select_waves` task resolves the selector (target_schema / wave_ids / bucket) into an
+# ordered list of {plan_run_id, wave_id} objects and publishes it as a task value. The
+# `convert_waves` for_each then runs 04_convert.py once PER WAVE (concurrency 1). A wave is
+# atomic: the converter accepts the whole remaining wave or fails before mutating anything.
+# There is NO implicit "convert all" — a selector is required. Serverless runtime satisfies
+# SET MANAGED (17.0+) / TRUNCATE UNIFORM HISTORY (17.2+); no DBR pin needed.
+resources:
+  jobs:
+    job_04_convert:
+      name: "[${bundle.target}] ${bundle.name} :: 04 convert"
+      tags:
+        project: managed-migration
+        stage: "04-convert"
+      max_concurrent_runs: 1
+      parameters:
+        - name: target_schema
+          default: ""
+        - name: wave_ids
+          default: ""
+        - name: bucket
+          default: ""
+        - name: include_streaming
+          default: "false"
+        - name: confirm_compaction_paused
+          default: "false"
+        - name: convert_max_tables_per_wave
+          default: "300"
+        - name: recent_optimize_minutes
+          default: "120"
+        - name: require_pre_convert_actions_cleared
+          default: "true"
+        - name: require_compaction_frozen
+          default: "true"
+        - name: require_streams_stopped
+          default: "true"
+        - name: require_writers_stopped
+          default: "true"
+        - name: require_ownership_leased
+          default: "true"
+        - name: table_owner_group
+          default: ${var.table_owner_group}
+        - name: owning_workspace
+          default: ""
+        - name: require_owning_workspace
+          default: "true"
+        # This workspace's numeric id for the ownership guard's CURRENT side (deterministic on
+        # serverless). Distinct from owning_workspace, which is the operator's federation override.
+        - name: current_workspace_id
+          default: ${var.workspace_id}
+        # Writer-schedule advisory re-check (F2). Both are ADVISORY — they never gate/raise.
+        - name: writer_schedule_safety_margin_min
+          default: "15"
+        - name: recheck_writer_schedule_live
+          default: "false"
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: select_waves
+          notebook_task:
+            notebook_path: ../notebooks/04_select_waves.py
+            base_parameters:
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              target_schema: "{{job.parameters.target_schema}}"
+              wave_ids: "{{job.parameters.wave_ids}}"
+              bucket: "{{job.parameters.bucket}}"
+              include_streaming: "{{job.parameters.include_streaming}}"
+              operator: "{{job.parameters.operator}}"
+        - task_key: convert_waves
+          depends_on:
+            - task_key: select_waves
+          for_each_task:
+            inputs: "{{tasks.select_waves.values.wave_targets}}"
+            concurrency: 1
+            task:
+              task_key: convert_one_wave
+              notebook_task:
+                notebook_path: ../notebooks/04_convert.py
+                base_parameters:
+                  # Usage telemetry opt-out (deploy-fixed; false = no pings).
+                  telemetry_enabled: ${var.telemetry_enabled}
+                  manifest_catalog: ${var.manifest_catalog}
+                  job_id: "{{job.id}}"
+                  job_run_id: "{{job.run_id}}"
+                  manifest_schema: ${var.manifest_schema}
+                  plan_run_id: "{{input.plan_run_id}}"
+                  wave_id: "{{input.wave_id}}"
+                  confirm_compaction_paused: "{{job.parameters.confirm_compaction_paused}}"
+                  max_tables: "{{job.parameters.convert_max_tables_per_wave}}"
+                  recent_optimize_minutes: "{{job.parameters.recent_optimize_minutes}}"
+                  require_pre_convert_actions_cleared: "{{job.parameters.require_pre_convert_actions_cleared}}"
+                  require_compaction_frozen: "{{job.parameters.require_compaction_frozen}}"
+                  require_streams_stopped: "{{job.parameters.require_streams_stopped}}"
+                  require_writers_stopped: "{{job.parameters.require_writers_stopped}}"
+                  require_ownership_leased: "{{job.parameters.require_ownership_leased}}"
+                  table_owner_group: "{{job.parameters.table_owner_group}}"
+                  owning_workspace: "{{job.parameters.owning_workspace}}"
+                  require_owning_workspace: "{{job.parameters.require_owning_workspace}}"
+                  current_workspace_id: "{{job.parameters.current_workspace_id}}"
+                  writer_schedule_safety_margin_min: "{{job.parameters.writer_schedule_safety_margin_min}}"
+                  recheck_writer_schedule_live: "{{job.parameters.recheck_writer_schedule_live}}"
+                  parallelism: ${var.parallelism}
+                  allow_restart: "false"
+                  operator: "{{job.parameters.operator}}"
+        # Auto-refresh the recommendation. The conductor is READ-ONLY, so re-running it after a
+        # mutating convert leaves migration_next_actions current (VALIDATE / RESUME / next wave)
+        # instead of stale on "convert" — the staleness that made a fully-migrated wave still
+        # read "Convert schema". run_if ALL_DONE so the refresh also happens after a partial or
+        # failed convert (the failed wave still fails the run and surfaces).
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: convert_waves
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

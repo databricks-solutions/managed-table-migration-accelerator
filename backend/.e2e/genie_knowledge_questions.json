@@ -1,0 +1,864 @@
+{
+  "_doc": "Genie knowledge question set. Scored by migration.genie_eval (each `must` entry is an any-of group; a question passes when every group appears in a majority of runs, and fails if any `must_not` phrase appears in any run). `home` is the knowledge doc that should ground the answer. Driver: backend/.e2e/e2e_genie_knowledge.py.",
+  "homes": [
+    "overview_and_glossary",
+    "stages_and_gates",
+    "job_commands",
+    "planning_and_eligibility",
+    "freeze_streams_and_writers",
+    "finish_steps",
+    "rollback_and_cleanup",
+    "next_step_and_operations",
+    "reading_the_control_tables",
+    "platform_reference",
+    "troubleshooting"
+  ],
+  "questions": [
+    {
+      "id": "ov_what_and_who",
+      "home": "overview_and_glossary",
+      "question": "What does this migration tool do, and who actually runs the conversion?",
+      "must": [
+        [
+          "SET MANAGED",
+          "in place"
+        ],
+        [
+          "external"
+        ],
+        [
+          "managed"
+        ],
+        [
+          "human",
+          "operator",
+          "a person",
+          "you run",
+          "deployed job",
+          "Workflow job"
+        ]
+      ],
+      "must_not": [
+        "Genie runs the conversion",
+        "converts automatically on deploy"
+      ]
+    },
+    {
+      "id": "ov_lifecycle_states",
+      "home": "overview_and_glossary",
+      "question": "What lifecycle states does a table move through in this migration, in order?",
+      "must": [
+        [
+          "DISCOVERED"
+        ],
+        [
+          "ASSESSED"
+        ],
+        [
+          "DRY_RUN_OK"
+        ],
+        [
+          "CONVERTED"
+        ],
+        [
+          "VALIDATED"
+        ],
+        [
+          "ROLLED_BACK",
+          "ROLLING_BACK"
+        ],
+        [
+          "CLEANED"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "ov_what_is_a_wave",
+      "home": "overview_and_glossary",
+      "question": "What is a wave in this migration?",
+      "must": [
+        [
+          "group of tables",
+          "set of tables",
+          "batch of tables",
+          "tables converted together",
+          "tables that are converted together"
+        ],
+        [
+          "plan_run_id",
+          "wave plan",
+          "wave_plan",
+          "planner"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "sg_dry_run_checks",
+      "home": "stages_and_gates",
+      "question": "What does the dry run check before a table is converted?",
+      "must": [
+        [
+          "DESCRIBE DETAIL",
+          "corrupt",
+          "accessib"
+        ],
+        [
+          "name-based",
+          "path-based",
+          "path based"
+        ],
+        [
+          "managed location",
+          "managed storage location"
+        ],
+        [
+          "compaction",
+          "OPTIMIZE"
+        ],
+        [
+          "runtime"
+        ]
+      ],
+      "must_not": [
+        "columnMapping check"
+      ]
+    },
+    {
+      "id": "sg_no_managed_location",
+      "home": "stages_and_gates",
+      "question": "What happens if a schema has no managed storage location configured?",
+      "must": [
+        [
+          "no_managed_location"
+        ],
+        [
+          "block",
+          "blocked",
+          "cannot convert",
+          "can't convert",
+          "will not convert"
+        ],
+        [
+          "schema",
+          "catalog",
+          "metastore"
+        ]
+      ],
+      "must_not": [
+        "falls back to the external location"
+      ]
+    },
+    {
+      "id": "sg_authorize",
+      "home": "stages_and_gates",
+      "question": "What does Authorize grant, and does it change the table's owner?",
+      "must": [
+        [
+          "MANAGE",
+          "SELECT",
+          "MODIFY",
+          "missing privileges",
+          "only what is missing",
+          "missing grants"
+        ],
+        [
+          "never changes",
+          "does not change",
+          "doesn't change",
+          "not change",
+          "unchanged",
+          "no ownership change"
+        ],
+        [
+          "revoke",
+          "revoked"
+        ]
+      ],
+      "must_not": [
+        "transfers ownership",
+        "changes the owner to"
+      ]
+    },
+    {
+      "id": "sg_validate_checks",
+      "home": "stages_and_gates",
+      "question": "What does the validate stage check after a conversion?",
+      "must": [
+        [
+          "MANAGED",
+          "type"
+        ],
+        [
+          "row count",
+          "rowcount",
+          "rows"
+        ],
+        [
+          "readab",
+          "read back"
+        ],
+        [
+          "history"
+        ],
+        [
+          "stream"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "jc_convert_one_wave",
+      "home": "job_commands",
+      "question": "What is the exact command to convert one wave from the command line?",
+      "must": [
+        [
+          "job_04_convert"
+        ],
+        [
+          "wave_ids"
+        ],
+        [
+          "databricks bundle run"
+        ]
+      ],
+      "must_not": [
+        "convert all tables with no selector"
+      ]
+    },
+    {
+      "id": "jc_skip_clustering_cli",
+      "home": "job_commands",
+      "question": "How do I skip liquid clustering for now from the command line but still finish the optimize step?",
+      "must": [
+        [
+          "job_08c_enable_optimization"
+        ],
+        [
+          "auto_liquid_policy=recommend"
+        ],
+        [
+          "enable_po_on_convert=false"
+        ],
+        [
+          "confirm_execute=true"
+        ]
+      ],
+      "must_not": [
+        "auto_liquid_policy=off is the skip",
+        "Finish without Predictive Optimization"
+      ]
+    },
+    {
+      "id": "jc_rollback_wave",
+      "home": "job_commands",
+      "question": "How do I roll back a converted wave from the command line?",
+      "must": [
+        [
+          "job_06_rollback"
+        ],
+        [
+          "wave_id",
+          "wave_ids"
+        ],
+        [
+          "plan_run_id"
+        ],
+        [
+          "14 days",
+          "14-day"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "pe_streaming_own_wave",
+      "home": "planning_and_eligibility",
+      "question": "Why is a streaming table always put in its own wave?",
+      "must": [
+        [
+          "stream"
+        ],
+        [
+          "restart",
+          "stop"
+        ],
+        [
+          "isolat",
+          "own wave",
+          "separate wave",
+          "never mixed",
+          "never lands"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "pe_path_access_review",
+      "home": "planning_and_eligibility",
+      "question": "Why is a table with path-based access marked NEEDS_REVIEW, and how is it released?",
+      "must": [
+        [
+          "path"
+        ],
+        [
+          "name-based",
+          "catalog.schema.table",
+          "by name"
+        ],
+        [
+          "lineage",
+          "source scan",
+          "scan"
+        ],
+        [
+          "opt-in",
+          "opt in",
+          "redirect",
+          "CLEAN"
+        ]
+      ],
+      "must_not": [
+        "BLOCKED permanently"
+      ]
+    },
+    {
+      "id": "pe_pilot_wave",
+      "home": "planning_and_eligibility",
+      "question": "What is the pilot wave, and how many tables can it hold?",
+      "must": [
+        [
+          "pilot"
+        ],
+        [
+          "15"
+        ],
+        [
+          "one schema",
+          "single schema",
+          "a single catalog.schema",
+          "one catalog.schema",
+          "single catalog.schema"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "pe_absence_of_evidence",
+      "home": "planning_and_eligibility",
+      "question": "If lineage shows no readers for a table, is it safe to convert?",
+      "must": [
+        [
+          "no evidence",
+          "absence of evidence",
+          "not proof",
+          "never safe",
+          "not the same as safe",
+          "does not mean"
+        ],
+        [
+          "90",
+          "sampled",
+          "retention"
+        ]
+      ],
+      "must_not": [
+        "yes, it is safe"
+      ]
+    },
+    {
+      "id": "fz_what_freeze_pauses",
+      "home": "freeze_streams_and_writers",
+      "question": "What does the freeze step pause, and how does unfreeze restore it?",
+      "must": [
+        [
+          "OPTIMIZE",
+          "compaction"
+        ],
+        [
+          "stream"
+        ],
+        [
+          "freeze_ledger",
+          "ledger"
+        ],
+        [
+          "Predictive Optimization",
+          "PO"
+        ],
+        [
+          "retire",
+          "forward"
+        ]
+      ],
+      "must_not": [
+        "deletes the job"
+      ]
+    },
+    {
+      "id": "fz_recent_vacuum",
+      "home": "freeze_streams_and_writers",
+      "question": "Why can a recent VACUUM block a conversion?",
+      "must": [
+        [
+          "FILE_VALIDATION_FAILED"
+        ],
+        [
+          "recent_vacuum_activity",
+          "120 minutes",
+          "recent VACUUM",
+          "recent vacuum"
+        ],
+        [
+          "files",
+          "deletes"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "fz_checkpoints",
+      "home": "freeze_streams_and_writers",
+      "question": "What happens to streaming checkpoints during the migration?",
+      "must": [
+        [
+          "checkpoint"
+        ],
+        [
+          "never",
+          "not touched",
+          "untouched",
+          "not deleted",
+          "kept",
+          "preserved"
+        ],
+        [
+          "restart"
+        ]
+      ],
+      "must_not": [
+        "checkpoint is deleted",
+        "reset the checkpoint"
+      ]
+    },
+    {
+      "id": "fs_finish_optimize",
+      "home": "finish_steps",
+      "question": "How do I finish the optimize step for a converted wave?",
+      "must": [
+        [
+          "Turn on liquid clustering"
+        ],
+        [
+          "CLUSTER BY AUTO"
+        ],
+        [
+          "Review plan"
+        ],
+        [
+          "Skip clustering for now"
+        ],
+        [
+          "Predictive Optimization",
+          "PO"
+        ]
+      ],
+      "must_not": [
+        "Turn on upkeep",
+        "Finish without Predictive Optimization",
+        "Turn on Predictive Optimization"
+      ]
+    },
+    {
+      "id": "fs_zorder",
+      "home": "finish_steps",
+      "question": "What happens to a ZORDERed table at the optimize step, and what does rollback do to it?",
+      "must": [
+        [
+          "zOrderBy",
+          "ZORDER columns",
+          "ZORDER hints"
+        ],
+        [
+          "CLUSTER BY AUTO"
+        ],
+        [
+          "CLUSTER BY NONE"
+        ]
+      ],
+      "must_not": [
+        "restores the ZORDER",
+        "re-applies ZORDER",
+        "reapplies the ZORDER"
+      ]
+    },
+    {
+      "id": "fs_manual_keys",
+      "home": "finish_steps",
+      "question": "What does the clustering step do to a table that already has manual clustering keys?",
+      "must": [
+        [
+          "CLUSTER BY AUTO"
+        ],
+        [
+          "starting keys",
+          "keeps those keys",
+          "keeps the keys",
+          "keeps its keys",
+          "keeps them",
+          "starting clustering keys",
+          "as the starting point",
+          "as the start"
+        ]
+      ],
+      "must_not": [
+        "held manual because it has keys",
+        "CLUSTER BY (keys) THEN AUTO"
+      ]
+    },
+    {
+      "id": "fs_partitioned",
+      "home": "finish_steps",
+      "question": "Does the clustering step change a partitioned table?",
+      "must": [
+        [
+          "manual",
+          "held back",
+          "not changed",
+          "never run"
+        ],
+        [
+          "REPLACE PARTITIONED BY"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "fs_delta_sharing",
+      "home": "finish_steps",
+      "question": "Do Delta Sharing recipients see a converted table automatically?",
+      "must": [
+        [
+          "not",
+          "no"
+        ],
+        [
+          "re-share",
+          "reshare",
+          "re-add",
+          "REMOVE"
+        ],
+        [
+          "ALTER SHARE",
+          "with history"
+        ]
+      ],
+      "must_not": [
+        "recipients are updated automatically"
+      ]
+    },
+    {
+      "id": "fs_compat_mode",
+      "home": "finish_steps",
+      "question": "When is Compatibility Mode needed after conversion?",
+      "must": [
+        [
+          "open APIs",
+          "Iceberg REST",
+          "Unity REST",
+          "credential vending"
+        ],
+        [
+          "external",
+          "non-Databricks"
+        ],
+        [
+          "location",
+          "empty"
+        ]
+      ],
+      "must_not": [
+        "Compatibility Mode works on external tables"
+      ]
+    },
+    {
+      "id": "fs_retire_job",
+      "home": "finish_steps",
+      "question": "After conversion, what happens to the scheduled OPTIMIZE job that the freeze paused?",
+      "must": [
+        [
+          "RETIRE_MAINTENANCE_JOB",
+          "retire"
+        ],
+        [
+          "Predictive Optimization",
+          "PO"
+        ],
+        [
+          "never deletes",
+          "not delete",
+          "doesn't delete",
+          "does not delete",
+          "leave the job paused",
+          "left paused",
+          "never deleted",
+          "is not deleted",
+          "isn't deleted"
+        ]
+      ],
+      "must_not": [
+        "deletes the job"
+      ]
+    },
+    {
+      "id": "rb_window",
+      "home": "rollback_and_cleanup",
+      "question": "How long can I roll back a converted table, and what happens after that window?",
+      "must": [
+        [
+          "14 days",
+          "14-day"
+        ],
+        [
+          "permanent",
+          "cannot be rolled back",
+          "can no longer",
+          "no longer possible",
+          "nothing left to roll back",
+          "no longer be rolled back"
+        ],
+        [
+          "Predictive Optimization",
+          "VACUUM",
+          "cleanup",
+          "clean up"
+        ]
+      ],
+      "must_not": [
+        "30 days",
+        "rollback is possible at any time"
+      ]
+    },
+    {
+      "id": "rb_clustering",
+      "home": "rollback_and_cleanup",
+      "question": "What does rollback do to the liquid clustering that the optimize step turned on?",
+      "must": [
+        [
+          "from_state",
+          "recorded",
+          "layout"
+        ],
+        [
+          "CLUSTER BY NONE"
+        ],
+        [
+          "prior keys",
+          "previous keys",
+          "manual keys",
+          "CLUSTER BY (<prior keys>)",
+          "earlier keys"
+        ]
+      ],
+      "must_not": [
+        "restores the ZORDER",
+        "clustering is left on"
+      ]
+    },
+    {
+      "id": "rb_no_vacuum_in_window",
+      "home": "rollback_and_cleanup",
+      "question": "Can I run VACUUM on a converted table inside the rollback window?",
+      "must": [
+        [
+          "no",
+          "never",
+          "do not",
+          "don't"
+        ],
+        [
+          "14 days",
+          "14-day"
+        ]
+      ],
+      "must_not": [
+        "yes, you can vacuum"
+      ]
+    },
+    {
+      "id": "op_what_next",
+      "home": "next_step_and_operations",
+      "question": "How do I find out what to do next in the migration?",
+      "must": [
+        [
+          "migration_next_actions"
+        ],
+        [
+          "next_step_kind",
+          "next step",
+          "exact_command",
+          "directive"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "op_deferred",
+      "home": "next_step_and_operations",
+      "question": "What is a DEFERRED action, and which actions can be deferred?",
+      "must": [
+        [
+          "DEFERRED"
+        ],
+        [
+          "RESHARE_D2D",
+          "re-share",
+          "reshare"
+        ],
+        [
+          "ENABLE_COMPAT",
+          "Compatibility",
+          "external readers"
+        ],
+        [
+          "reopen",
+          "OPEN"
+        ]
+      ],
+      "must_not": [
+        "restart streams can be deferred"
+      ]
+    },
+    {
+      "id": "op_team_pins",
+      "home": "next_step_and_operations",
+      "question": "How do team pins change the next-step recommendation?",
+      "must": [
+        [
+          "pin"
+        ],
+        [
+          "after",
+          "in flight",
+          "started wave",
+          "in-flight"
+        ],
+        [
+          "never",
+          "not a gate",
+          "no gate",
+          "recommendation"
+        ]
+      ],
+      "must_not": [
+        "pins override the gates"
+      ]
+    },
+    {
+      "id": "ct_current_state",
+      "home": "reading_the_control_tables",
+      "question": "Which control table holds a table's current migration state?",
+      "must": [
+        [
+          "table_manifest"
+        ],
+        [
+          "state",
+          "lifecycle"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "ct_manual_statements",
+      "home": "reading_the_control_tables",
+      "question": "Where do I find the exact manual statements I still need to run?",
+      "must": [
+        [
+          "migration_runbook",
+          "runbook"
+        ],
+        [
+          "statement",
+          "remediation_sql",
+          "SQL"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "pl_set_managed_runtime",
+      "home": "platform_reference",
+      "question": "Which Databricks runtime is needed to run SET MANAGED?",
+      "must": [
+        [
+          "17.3"
+        ],
+        [
+          "Serverless",
+          "serverless"
+        ]
+      ],
+      "must_not": [
+        "15.4 is enough for SET MANAGED"
+      ]
+    },
+    {
+      "id": "pl_reader_runtime",
+      "home": "platform_reference",
+      "question": "What runtime do readers and writers need to keep working after a table is converted?",
+      "must": [
+        [
+          "15.4"
+        ],
+        [
+          "16.4",
+          "14.3"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "ts_file_validation_failed",
+      "home": "troubleshooting",
+      "question": "Why did my convert fail with FILE_VALIDATION_FAILED?",
+      "must": [
+        [
+          "VACUUM",
+          "vacuum"
+        ],
+        [
+          "concurrent",
+          "while",
+          "during",
+          "same time"
+        ],
+        [
+          "re-run",
+          "rerun",
+          "resume",
+          "again"
+        ]
+      ],
+      "must_not": []
+    },
+    {
+      "id": "ts_wave_not_ready",
+      "home": "troubleshooting",
+      "question": "Why is my wave not READY?",
+      "must": [
+        [
+          "wave_status"
+        ],
+        [
+          "AWAITING_ACTIONS",
+          "BLOCKED",
+          "open actions",
+          "blocker"
+        ]
+      ],
+      "must_not": []
+    }
+  ]
+}

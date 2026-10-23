@@ -1,0 +1,44 @@
+# Stage 05 — Validate: confirm CONVERTED tables and advance to VALIDATED.
+resources:
+  jobs:
+    job_05_validate:
+      name: "[${bundle.target}] ${bundle.name} :: 05 validate"
+      tags:
+        project: managed-migration
+        stage: "05-validate"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Run-now params: scope filters let an operator validate a specific slice. Read-only
+      # stage. confirm_streaming=true and refresh_uniform=false stay deploy-fixed on
+      # purpose — exposing either would weaken the only post-conversion verification step.
+      # manifest_catalog/schema stay deploy-fixed so a run-now caller cannot redirect
+      # writes to another control plane.
+      parameters:
+        - name: catalog_filter
+          default: ${var.catalog_filter}
+        - name: schema_filter
+          default: ${var.schema_filter}
+        - name: operator
+          default: ""
+      tasks:
+        - task_key: validate
+          notebook_task:
+            notebook_path: ../notebooks/05_validate.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              catalog_filter: "{{job.parameters.catalog_filter}}"
+              schema_filter: "{{job.parameters.schema_filter}}"
+              operator: "{{job.parameters.operator}}"
+              confirm_streaming: "true"
+              refresh_uniform: "false"
+        # Auto-refresh the recommendation after validate advances tables to VALIDATED, so
+        # migration_next_actions moves to the next wave / DONE instead of staying on "validate".
+        # Conductor is READ-ONLY; run_if ALL_DONE refreshes even if validate failed.
+        - task_key: recompute_next_step
+          depends_on:
+            - task_key: validate
+          run_if: ALL_DONE
+          run_job_task:
+            job_id: ${resources.jobs.job_08_conductor.id}

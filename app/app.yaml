@@ -1,0 +1,9 @@
+# App RUNTIME spec — used only by `databricks apps run-local` (local dev proxy).
+#
+# For DEPLOYED runs, the bundle's `config` block in app/resources/app.yml is
+# authoritative: Databricks docs state a bundle `config.env` overrides app.yaml's env,
+# and `config` is treated as the whole app spec. To avoid a stale duplicate that someone
+# later edits expecting it to matter, the env list lives ONLY in app/resources/app.yml
+# (command + all 16 value_from bindings + MIGRATION_CATALOG/MIGRATION_SCHEMA). Keep this
+# file command-only.
+command: ['npm', 'run', 'start']

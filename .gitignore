@@ -1,5 +1,49 @@
-*conf*.json
+# Databricks Asset Bundle local state (also self-ignored via .databricks/.gitignore)
+.databricks/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.eggs/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Notebooks
+.ipynb_checkpoints/
+
+# OS / editor
 .DS_Store
-__pycache__
+*.swp
 .idea/
+
+# Local environment
 .env
+
+# Do not add a `*conf*.json` pattern: it would untrack app/tsconfig*.json.
+
+# Local working notes / agent tool artifacts (kept locally, out of the repo)
+cursor_prompts.md
+*.plan.md
+.cursor/
+.superpowers/
+.isaac/
+.claude/
+
+# Superpowers plans/specs and dated design plans (local working notes, not part of the repo)
+backend/docs/superpowers/
+docs/superpowers/
+app/docs/plans/
+
+# Local e2e workspace settings (template: .env.e2e.example)
+.env.e2e
+
+.worktrees/
+
+# e2e UI screenshots (e2e_app_ui.py --screenshots)
+backend/.e2e/artifacts/

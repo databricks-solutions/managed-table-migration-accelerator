@@ -1,0 +1,583 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Overview — progressive disclosure mockup</title>
+<style>
+  /* --- v4 palette (verbatim from app/client/src/index.css :root, as in convert-cujs) ------ */
+  :root{
+    --db-oat-light:#F9F7F4; --db-oat-medium:#EEEDE9; --db-white:#FFFFFF;
+    --db-navy-900:#0B2026; --db-navy-800:#1B3139; --db-navy-700:#143D4A;
+    --db-navy-600:#295866; --db-navy-500:#3E6B7A; --db-navy-400:#618794;
+    --db-lava-600:#FF3621; --db-lava-700:#BD2B26; --db-lava-800:#801C17;
+    --db-green-600:#00A972; --db-yellow-600:#DE8C00; --db-blue-600:#2272B4;
+    --db-gray-text:#5A6F77; --db-gray-lines:#DCE0E2;
+
+    --surface-deep:var(--db-navy-900); --surface-deep-2:#10303A;
+    --fg-on-dark:var(--db-white); --fg-on-dark-2:#C4CCD6;
+    --label-on-dark:var(--db-navy-400);
+    --border-on-dark:var(--db-navy-600);
+    --brand:var(--db-lava-600);
+
+    --foreground:var(--db-navy-800);
+    --muted-foreground:var(--db-gray-text);
+    --border:var(--db-gray-lines);
+
+    --success:var(--db-green-600); --success-foreground:#03543F;
+    --success-bg:#E8F5EF; --success-border:#A7DFC8;
+    --warning-foreground:#7D5319; --warning-bg:#FFF8EB; --warning-border:#FFDB96;
+    --destructive-foreground:var(--db-lava-800); --destructive-bg:#FDEDEB; --destructive-border:#FABFBA;
+    --info-foreground:#0E538B; --info-bg:#EEF6FC; --info-border:#BAE1FC;
+
+    /* the shared motion vocabulary (today only in pages/how/how.css:17-19) */
+    --ease-out:cubic-bezier(0.23, 1, 0.32, 1);
+    --ease-in-out:cubic-bezier(0.77, 0, 0.175, 1);
+
+    --font-sans:'DM Sans',system-ui,-apple-system,Segoe UI,Roboto,sans-serif;
+    --font-mono:'DM Mono',ui-monospace,SFMono-Regular,Menlo,monospace;
+  }
+  *{box-sizing:border-box}
+  html,body{margin:0}
+  body{font-family:var(--font-sans);background:var(--db-oat-medium);color:var(--foreground);line-height:1.45;-webkit-font-smoothing:antialiased}
+  .mono{font-family:var(--font-mono)}
+
+  /* --- top chrome ----------------------------------------------------------------------- */
+  header.top{position:sticky;top:0;z-index:60;background:var(--surface-deep);color:var(--fg-on-dark);padding:14px 24px;border-bottom:1px solid var(--border-on-dark)}
+  .top h1{font-size:15px;margin:0;font-weight:700}
+  .top p{margin:2px 0 0;font-size:12px;color:var(--fg-on-dark-2)}
+  .tabs{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap;align-items:center}
+  .tab{appearance:none;border:1px solid var(--border-on-dark);background:transparent;color:var(--fg-on-dark-2);font:600 12px var(--font-sans);padding:7px 12px;border-radius:8px;cursor:pointer}
+  .tab:hover{border-color:var(--db-navy-400);color:var(--fg-on-dark)}
+  .tab[aria-selected="true"]{background:var(--brand);border-color:var(--brand);color:#fff}
+  .tabs label{margin-left:auto;font-size:12px;color:var(--fg-on-dark-2);display:flex;gap:6px;align-items:center;cursor:pointer}
+
+  main{max-width:1100px;margin:0 auto;padding:28px 24px 120px}
+  .panel{display:none}
+  .panel[data-active="true"]{display:block}
+  .caption{font-size:12.5px;color:var(--muted-foreground);margin:0 0 18px;max-width:86ch}
+  .caption b{color:var(--foreground)}
+  .stack{display:flex;flex-direction:column;gap:20px}
+
+  /* --- light card ------------------------------------------------------------------------ */
+  .card{background:var(--db-white);border:1px solid var(--border);border-radius:14px;padding:22px}
+  .card-h{display:flex;justify-content:space-between;gap:16px;align-items:flex-start}
+  .card-h h2{margin:0;font-size:17px;font-weight:700}
+  .sub{margin:3px 0 0;font-size:13px;color:var(--muted-foreground)}
+  .btn{display:inline-flex;align-items:center;gap:6px;font:600 13px var(--font-sans);border-radius:8px;padding:8px 13px;border:1px solid var(--border);background:var(--db-white);color:var(--foreground);cursor:pointer;white-space:nowrap;transition:transform 160ms var(--ease-out)}
+  .btn:active{transform:scale(0.97)}
+  .btn.primary{background:var(--brand);border-color:var(--brand);color:#fff}
+  .btn.danger{background:var(--db-lava-700);border-color:var(--db-lava-700);color:#fff}
+  .btn.ghost-dark{background:transparent;border-color:rgba(255,255,255,.22);color:var(--fg-on-dark)}
+  .btn.secondary-dark{background:#E8ECEE;border-color:#E8ECEE;color:var(--foreground)}
+  .help{font-size:11px;color:var(--muted-foreground);margin-top:4px;text-align:right}
+  a.lk{color:var(--info-foreground);font-weight:600;text-decoration:none}
+  a.lk:hover{text-decoration:underline}
+
+  .tiles{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:20px}
+  .tile{border:1px solid var(--border);border-radius:10px;padding:14px 16px}
+  .tile .l{font-size:9px;font-weight:600;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground)}
+  .tile .v{font:600 24px var(--font-mono);margin-top:4px}
+  .tile .v small{font:500 13px var(--font-sans);color:var(--muted-foreground);margin-left:4px}
+  .tile .c{font-size:11.5px;color:var(--muted-foreground);margin-top:2px}
+  .subline{font-size:12.5px;color:var(--muted-foreground);margin:14px 0 0}
+  .subline b{color:var(--foreground);font-weight:600}
+  .row{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+  .spread{justify-content:space-between}
+
+  /* --- disclosures (native <details>; reveal = opacity + 4px, 200ms ease-out) ------------- */
+  details{border:1px solid var(--border);border-radius:10px;background:var(--db-white)}
+  details > summary{list-style:none;cursor:pointer;padding:10px 14px;font-size:13px;font-weight:600;display:flex;align-items:center;gap:8px}
+  details > summary::-webkit-details-marker{display:none}
+  details > summary::before{content:"";width:7px;height:7px;border-right:1.6px solid currentColor;border-bottom:1.6px solid currentColor;transform:rotate(-45deg);transition:transform 200ms var(--ease-out);opacity:.7;flex:none}
+  details[open] > summary::before{transform:rotate(45deg)}
+  details > summary .meta{font-weight:400;color:var(--muted-foreground);font-size:12px}
+  details > .body{padding:0 14px 14px}
+  details[open] > .body{animation:reveal 200ms var(--ease-out)}
+  @keyframes reveal{from{opacity:0;transform:translateY(-4px)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){
+    details[open] > .body{animation:fade 150ms linear}
+    details > summary::before{transition:none}
+    @keyframes fade{from{opacity:0}to{opacity:1}}
+  }
+  .dark details{background:var(--surface-deep-2);border-color:var(--border-on-dark);color:var(--fg-on-dark)}
+  .dark details > summary{color:var(--fg-on-dark-2);font-size:12px;letter-spacing:.02em}
+  .dark details > summary .meta{color:var(--label-on-dark)}
+
+  table.t{width:100%;border-collapse:collapse;font-size:12px}
+  table.t th{font-size:9px;letter-spacing:.12em;text-transform:uppercase;color:var(--muted-foreground);font-weight:600;text-align:right;padding:8px 10px;border-bottom:1px solid var(--border)}
+  table.t th:first-child,table.t td:first-child{text-align:left}
+  table.t td{padding:8px 10px;border-bottom:1px solid #EEF0F1;text-align:right;font-variant-numeric:tabular-nums}
+  table.t td.n{font-family:var(--font-mono)}
+  table.t tr.foot td{background:var(--warning-bg);color:var(--warning-foreground);border-bottom:none}
+  .open{color:var(--info-foreground);font-weight:600;font-size:11.5px;white-space:nowrap}
+  .cat{font-size:10px;color:var(--muted-foreground);display:block}
+
+  /* --- picker popover (static) ----------------------------------------------------------- */
+  .picker{position:relative}
+  .picker > details{border-radius:8px}
+  .picker > details > summary{padding:8px 12px}
+  .picker .pop{position:absolute;top:calc(100% + 6px);left:0;width:420px;background:var(--db-white);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 34px rgba(11,32,38,.16);z-index:20;padding:6px}
+  .picker details[open] .pop{animation:pop 180ms var(--ease-out);transform-origin:top left}
+  @keyframes pop{from{opacity:0;transform:scale(.97)}to{opacity:1;transform:none}}
+  @media (prefers-reduced-motion: reduce){.picker details[open] .pop{animation:fade 120ms linear}}
+  .pop input{width:100%;border:none;border-bottom:1px solid var(--border);padding:9px 10px;font:13px var(--font-sans);outline:none}
+  .pop .g{font-size:10px;font-weight:600;letter-spacing:.08em;text-transform:uppercase;color:var(--muted-foreground);padding:9px 10px 3px}
+  .pop .it{display:flex;justify-content:space-between;align-items:center;padding:6px 10px;border-radius:6px;font-size:12px}
+  .pop .it:hover{background:var(--db-oat-light)}
+  .pop .it .r{font-size:11px;color:var(--muted-foreground)}
+
+  /* --- stepper --------------------------------------------------------------------------- */
+  .steps{display:flex;justify-content:space-between;position:relative;padding:8px 0 2px}
+  .steps::before{content:"";position:absolute;top:21px;left:6%;right:6%;height:1px;background:var(--border)}
+  .st{position:relative;text-align:center;flex:1;font-size:12px}
+  .st .dot{width:26px;height:26px;border-radius:50%;margin:0 auto 6px;display:grid;place-items:center;font:600 11px var(--font-mono);background:#EEF0F1;color:var(--muted-foreground);border:1px solid var(--border)}
+  .st.done .dot{background:var(--success);color:#fff;border-color:var(--success)}
+  .st.now .dot{background:var(--brand);color:#fff;border-color:var(--brand)}
+  .st .s{font:11px var(--font-mono);color:var(--muted-foreground)}
+
+  /* --- dark guided card ------------------------------------------------------------------ */
+  .dark{background:var(--surface-deep);color:var(--fg-on-dark);border:1px solid rgba(255,255,255,.1);border-left:4px solid var(--warning-border);border-radius:14px;padding:22px}
+  .dark.safe{border-left-color:var(--success-border)}
+  .eyebrow{font-size:10px;font-weight:700;letter-spacing:.14em;text-transform:uppercase;color:var(--label-on-dark)}
+  .dark .sub{color:var(--fg-on-dark-2)}
+  .chips{display:flex;gap:6px;flex-wrap:wrap;margin-top:14px}
+  .chip{border:1px solid var(--border-on-dark);border-radius:6px;padding:3px 8px;font-size:10px;font-weight:600;letter-spacing:.1em;text-transform:uppercase;color:var(--fg-on-dark-2)}
+  .chip.mut{background:var(--db-lava-800);border-color:var(--db-lava-800);color:#fff}
+  .chip.ok{background:var(--success-bg);border-color:var(--success-bg);color:var(--success-foreground)}
+  .dark h3{font-size:22px;margin:12px 0 4px}
+  .dark p.d{margin:0;color:var(--fg-on-dark-2);font-size:14px}
+  .spine{display:flex;gap:6px;align-items:center;margin:16px 0 0;font-size:11.5px;color:var(--fg-on-dark-2);flex-wrap:wrap}
+  .spine .p{border:1px solid var(--border-on-dark);border-radius:999px;padding:3px 10px}
+  .spine .p.done{color:var(--success-border);border-color:#2E6B57}
+  .spine .p.now{background:var(--fg-on-dark);color:var(--surface-deep);border-color:var(--fg-on-dark);font-weight:700}
+  .spine .p.opt{border-style:dashed}
+  .spine .a{color:var(--label-on-dark)}
+  .verdict{margin-top:16px;border-radius:10px;padding:11px 14px;font-size:13.5px;background:#0F3B30;border:1px solid #2E6B57;color:#D6F5E8}
+  .verdict b{color:#fff}
+  .facts{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-top:14px}
+  .fact{border:1px solid var(--border-on-dark);border-radius:10px;padding:10px 12px}
+  .fact .l{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--label-on-dark)}
+  .fact .v{font-size:14px;margin-top:3px}
+  .fact .v.m{font-family:var(--font-mono);font-size:12.5px}
+  .cta{display:flex;align-items:center;gap:14px;margin-top:18px;flex-wrap:wrap}
+  .then{font-size:13px;color:var(--fg-on-dark-2)}
+  .then b{color:var(--fg-on-dark);font-weight:600}
+  .fine{font-size:11px;color:var(--fg-on-dark-2);margin:10px 0 0}
+  .asof{font-size:10px;color:var(--label-on-dark)}
+  .layers{display:flex;flex-direction:column;gap:8px;margin-top:18px}
+  .grid3{display:grid;grid-template-columns:repeat(3,1fr);gap:10px 18px;font-size:12.5px}
+  .grid3 .l{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--label-on-dark)}
+  .grid3 .v{font-family:var(--font-mono);font-size:12px;color:var(--fg-on-dark);word-break:break-all}
+  .tech{font:11.5px var(--font-mono);color:var(--fg-on-dark-2);background:rgba(0,0,0,.25);border-radius:8px;padding:10px;margin:0;white-space:pre-wrap}
+  .lbl{font-size:9px;font-weight:700;letter-spacing:.12em;text-transform:uppercase;color:var(--label-on-dark);margin:12px 0 4px}
+
+  /* --- "today" wireframe ----------------------------------------------------------------- */
+  .wire{display:flex;flex-direction:column;gap:6px}
+  .wb{border:1px dashed var(--border-on-dark);border-radius:8px;padding:8px 12px;font-size:12px;color:var(--fg-on-dark-2);display:flex;justify-content:space-between;gap:10px}
+  .wb b{color:var(--fg-on-dark)}
+  .wb.cta{border-style:solid;border-color:var(--brand);color:#fff}
+  .lightwire .wb{border-color:var(--border);color:var(--muted-foreground)}
+  .lightwire .wb b{color:var(--foreground)}
+
+  /* --- annotations ----------------------------------------------------------------------- */
+  .ann{display:inline-grid;place-items:center;min-width:19px;height:19px;border-radius:50%;background:var(--brand);color:#fff;font:700 10.5px var(--font-sans);flex:none;padding:0 4px}
+  .legend{margin-top:18px;border:1px solid var(--border);background:var(--db-oat-light);border-radius:12px;padding:14px 18px}
+  .legend h4{margin:0 0 8px;font-size:13px}
+  .legend ol{margin:0;padding-left:0;list-style:none;display:flex;flex-direction:column;gap:7px;font-size:12.5px}
+  .legend li{display:flex;gap:9px;align-items:flex-start}
+  .legend code,.caption code{font:11.5px var(--font-mono);background:#E8E6E1;border-radius:4px;padding:1px 4px}
+
+  .placeholder{border:1px dashed var(--border);border-radius:14px;padding:18px;color:var(--muted-foreground);font-size:12.5px;text-align:center;background:rgba(255,255,255,.5)}
+  .two{display:grid;grid-template-columns:1fr 1fr;gap:20px}
+
+  /* --- focus strip ----------------------------------------------------------------------- */
+  .strip{display:flex;gap:8px;margin-top:12px;flex-wrap:wrap}
+  .wv{border:1px solid var(--border);border-radius:10px;padding:8px 12px;min-width:150px;font-size:12px}
+  .wv .id{font:600 12px var(--font-mono)}
+  .wv .m{color:var(--muted-foreground);font-size:11px}
+  .wv.cur{border-color:var(--brand);box-shadow:0 0 0 1px var(--brand) inset}
+  .wv .tag{font-size:9.5px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--brand)}
+  .pill{font-size:11px;border:1px solid var(--border);border-radius:999px;padding:2px 9px;color:var(--muted-foreground)}
+
+  /* --- blocked groups -------------------------------------------------------------------- */
+  .grp > summary{justify-content:flex-start}
+  .grp > summary .cnt{font:600 12px var(--font-mono);background:var(--warning-bg);color:var(--warning-foreground);border:1px solid var(--warning-border);border-radius:999px;padding:1px 8px}
+  .grp > summary .fix{margin-left:auto;font-weight:400;font-size:12px;color:var(--muted-foreground);text-align:right}
+  .tlist{font:12px var(--font-mono);display:flex;flex-direction:column;gap:4px;margin:4px 0 0;padding:0;list-style:none}
+  .tlist li{display:flex;justify-content:space-between;border-bottom:1px solid #EEF0F1;padding:5px 0}
+  .tlist li span:last-child{font-family:var(--font-sans);color:var(--muted-foreground);font-size:11.5px}
+  .ok-line{font-size:13px;color:var(--success-foreground);background:var(--success-bg);border:1px solid var(--success-border);border-radius:10px;padding:10px 14px}
+
+  table.guard{width:100%;border-collapse:collapse;font-size:12.5px;background:var(--db-white);border-radius:12px;overflow:hidden}
+  table.guard th{text-align:left;font-size:10px;letter-spacing:.1em;text-transform:uppercase;color:var(--muted-foreground);padding:10px 12px;border-bottom:1px solid var(--border);background:var(--db-oat-light)}
+  table.guard td{padding:10px 12px;border-bottom:1px solid #EEF0F1;vertical-align:top}
+  table.guard code{font:11.5px var(--font-mono);background:#EEF0F1;border-radius:4px;padding:1px 4px}
+</style>
+</head>
+<body>
+
+<header class="top">
+  <h1>Overview — progressive disclosure (northstar mockup)</h1>
+  <p>Static HTML for review only. Not wired to anything. Real values from the e2e estate as of 2026-10-15 04:38 UTC. Builds on <span class="mono">convert-cujs/SPEC.md</span> Screen 1 ("everything else is one disclosure away").</p>
+  <div class="tabs" role="tablist">
+    <button class="tab" role="tab" data-tab="today" aria-selected="false">1 · Overview today</button>
+    <button class="tab" role="tab" data-tab="proposed" aria-selected="true">2 · Overview proposed</button>
+    <button class="tab" role="tab" data-tab="focus" aria-selected="false">3 · Focus mode (gold)</button>
+    <button class="tab" role="tab" data-tab="blocked" aria-selected="false">4 · Blocked &amp; review</button>
+    <button class="tab" role="tab" data-tab="guard" aria-selected="false">5 · Regression guard</button>
+    <label><input type="checkbox" id="openAll" /> Open every disclosure</label>
+  </div>
+</header>
+
+<main>
+
+<!-- ======================================================================================= -->
+<!-- 1 · TODAY                                                                               -->
+<!-- ======================================================================================= -->
+<section class="panel" data-panel="today">
+  <p class="caption"><b>What renders today, top to bottom, with every section open.</b> The same data as the proposed tabs. The numbered problems map to the legend below. The only button on the card is the last block.</p>
+  <div class="two">
+    <div class="card lightwire">
+      <div class="eyebrow" style="color:var(--muted-foreground)">Where the migration stands</div>
+      <div class="wire" style="margin-top:10px">
+        <div class="wb"><span>Tiles: <b>Migrated 0.0%</b> · <b>Validated 0.0%</b> · <b>Remaining 121</b> · <b>Schemas blocked (in-plan) 0</b></span><span class="ann">4</span></div>
+        <div class="wb"><span>"121 planned of 132 discovered across 10 schemas — 0 migrated · 121 remaining — <b>see Blocked &amp; review</b>"</span><span class="ann">3</span></div>
+        <div class="wb"><span><b>By schema →</b> (link to Waves) right above <b>By schema (10) ▾</b> (expands a table)</span><span class="ann">2</span></div>
+        <div class="wb"><span>Schema table · column <b>Blocked</b> (planned tables only) · rows link to focus, no visible cue</span><span class="ann">5</span></div>
+        <div class="wb"><span>Migration journey · Profiled 132 · Planned 121 · Freezing <b>337 to freeze</b> · …</span><span class="ann">3</span></div>
+      </div>
+    </div>
+    <div class="dark">
+      <div class="eyebrow">Your next step</div>
+      <div class="wire" style="margin-top:10px">
+        <div class="wb"><span>Chips · title · description</span></div>
+        <div class="wb"><span><b>What happened last</b> (census + up to 25 events)</span></div>
+        <div class="wb"><span><b>What this step does</b>: "NEXT: Convert schema … Set confirm_convert=true, then action=advance."</span><span class="ann">1</span></div>
+        <div class="wb"><span>Fact grid: Job · Selector · Reversible · Time · Max downtime · Compute · Blast radius · Owners · Tables</span><span class="ann">1</span></div>
+        <div class="wb"><span><b>Waves in this convert</b> breakdown</span></div>
+        <div class="wb"><span><b>After this step</b> follow-ups</span></div>
+        <div class="wb"><span><b>After that</b> → validate …</span></div>
+        <div class="wb"><span><b>Run it yourself</b> ▾ (already collapsed)</span></div>
+        <div class="wb cta"><span><b>Open the convert gate</b> ← the one thing to do</span><span class="ann">1</span></div>
+        <div class="wb"><span>"You approve the step…" · as of …</span></div>
+      </div>
+    </div>
+  </div>
+  <div class="card lightwire" style="margin-top:20px">
+    <div class="wire">
+      <div class="wb"><span><b>Work on one schema</b> picker: below the tall dark card, usually off screen</span><span class="ann">5</span></div>
+      <div class="wb"><span>Team priorities (only with pins) · Burndown · Effort · Parallel work</span></div>
+    </div>
+  </div>
+  <div class="legend">
+    <h4>What gets in the way</h4>
+    <ol>
+      <li><span class="ann">1</span><span><b>The button is last, after about 10 open sections.</b> The spec says three decision facts and collapsed detail; the freeze card already does this, the general card never did.</span></li>
+      <li><span class="ann">2</span><span><b>Two different things are called "By schema".</b> One navigates to Waves, the other expands in place.</span></li>
+      <li><span class="ann">3</span><span><b>Two misleading numbers.</b> "337 to freeze" counts actions, not tables, beside table counts. "11 held back" is dropped because the subline type-checks for a number and AppKit sends a string (<code>estateSubline.pure.ts:51</code>).</span></li>
+      <li><span class="ann">4</span><span><b>Tiles have no "out of what".</b> Percentages and a count side by side, none with a total.</span></li>
+      <li><span class="ann">5</span><span><b>Focus mode is hard to find.</b> The picker is off screen and the schema rows don't look clickable.</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ======================================================================================= -->
+<!-- 2 · PROPOSED                                                                            -->
+<!-- ======================================================================================= -->
+<section class="panel" data-panel="proposed" data-active="true">
+  <p class="caption"><b>Same data, same order, same buttons.</b> Only what is open by default changes. Layer 1 answers "what next, is it safe, what does it touch". Layer 2 is one click. Layer 3 (CLI) stays where it is. Try the disclosures; they reveal in 200 ms with opacity only under reduced motion.</p>
+
+  <div class="stack">
+    <!-- Where the migration stands -->
+    <div class="card">
+      <div class="card-h">
+        <div><h2>Where the migration stands</h2><p class="sub">Tables converted, tables checked, and tables still to go.</p></div>
+        <div><button class="btn">⟳ Rescan estate</button><div class="help">Finds new tables. Can take up to 40 minutes.</div></div>
+      </div>
+      <div class="tiles">
+        <div class="tile"><div class="l">Migrated</div><div class="v">0<small>of 121</small></div><div class="c">0%</div></div>
+        <div class="tile"><div class="l">Validated</div><div class="v">0<small>of 121</small></div><div class="c">0%</div></div>
+        <div class="tile"><div class="l">Remaining</div><div class="v">121<small>tables</small></div><div class="c">in 14 waves</div></div>
+        <div class="tile"><div class="l">Schemas blocked in plan</div><div class="v">0<small>of 10</small></div><div class="c">none yet</div></div>
+      </div>
+      <p class="subline">121 planned of <b>132 discovered</b> across 10 schemas · 0 migrated · 121 remaining · <b>11 held back</b> <a class="lk" href="#" data-goto="blocked">Review →</a> <span class="ann">3</span></p>
+
+      <div class="row spread" style="margin-top:14px;align-items:flex-start">
+        <div class="row" style="align-items:flex-start;flex:1">
+          <details style="flex:1;min-width:0">
+            <summary>By schema <span class="meta">10 schemas · open one to work on it</span> <span class="ann">2</span></summary>
+            <div class="body">
+              <table class="t">
+                <thead><tr><th>Schema</th><th>Total</th><th>Converted</th><th>Validated</th><th>Remaining</th><th>Blocked in plan</th><th>Migrated</th><th></th></tr></thead>
+                <tbody>
+                  <tr><td class="n">e2e_dlt<span class="cat">main</span></td><td>1</td><td>0</td><td>0</td><td>1</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_bronze<span class="cat">main</span></td><td>35</td><td>0</td><td>0</td><td>35</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_compat<span class="cat">main</span></td><td>7</td><td>0</td><td>0</td><td>7</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_dlt<span class="cat">main</span></td><td>10</td><td>0</td><td>0</td><td>10</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_gold<span class="cat">main</span></td><td>15</td><td>0</td><td>0</td><td>15</td><td>0</td><td>0%</td><td><a class="open" href="#" data-goto="focus">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_pathaccess<span class="cat">main</span></td><td>10</td><td>0</td><td>0</td><td>10</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_share<span class="cat">main</span></td><td>7</td><td>0</td><td>0</td><td>7</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_silver<span class="cat">main</span></td><td>24</td><td>0</td><td>0</td><td>24</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_stream<span class="cat">main</span></td><td>10</td><td>0</td><td>0</td><td>10</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr><td class="n">e2e_real_writer<span class="cat">main</span></td><td>2</td><td>0</td><td>0</td><td>2</td><td>0</td><td>0%</td><td><a class="open" href="#">Open →</a></td></tr>
+                  <tr class="foot"><td colspan="7">11 tables are not in the plan · they need review before they can be planned</td><td><a class="open" href="#" data-goto="blocked">Review →</a></td></tr>
+                </tbody>
+              </table>
+            </div>
+          </details>
+          <div class="picker">
+            <details>
+              <summary>◫ Work on one schema <span class="ann">5</span></summary>
+              <div class="pop">
+                <input placeholder="Search by schema or catalog…" />
+                <div class="g">Ready to start</div>
+                <div class="it"><span class="mono">e2e_real_gold</span><span class="r">Convert · wave 1 of 4</span></div>
+                <div class="it"><span class="mono">e2e_real_silver</span><span class="r">Check · wave 1 of 2</span></div>
+                <div class="it"><span class="mono">e2e_real_bronze</span><span class="r">Check · 1 wave</span></div>
+                <div class="it"><span class="mono">e2e_real_compat</span><span class="r">Check · 1 wave</span></div>
+                <div class="it"><span class="r">… 5 more</span><span></span></div>
+                <div class="g">Handled elsewhere</div>
+                <div class="it"><span class="mono">e2e_dlt</span><span class="r">Streaming workstream</span></div>
+              </div>
+            </details>
+          </div>
+        </div>
+        <a class="lk" href="#" style="font-size:12px;padding-top:10px">All waves →</a>
+      </div>
+
+      <details style="margin-top:10px">
+        <summary>Migration journey <span class="meta">now at: Planned · 2 of 6</span></summary>
+        <div class="body">
+          <div class="steps">
+            <div class="st done"><div class="dot">✓</div>Profiled<div class="s">132 discovered</div></div>
+            <div class="st now"><div class="dot">2</div>Planned<div class="s">121 planned</div></div>
+            <div class="st"><div class="dot">3</div>Freezing<div class="s">337 items to pause <span class="ann">3</span></div></div>
+            <div class="st"><div class="dot">4</div>Converting<div class="s">0 converted</div></div>
+            <div class="st"><div class="dot">5</div>Validated<div class="s">0 validated</div></div>
+            <div class="st"><div class="dot">6</div>Finishing<div class="s"></div></div>
+          </div>
+        </div>
+      </details>
+    </div>
+
+    <!-- Your next step -->
+    <div class="dark">
+      <div class="row spread" style="align-items:flex-start">
+        <div><div class="eyebrow">Your next step</div><p class="sub" style="margin-top:4px;font-size:13px">The step we recommend now. Press the button to continue.</p></div>
+        <div style="text-align:right"><button class="btn secondary-dark">⟳ Refresh recommendation</button><div class="help" style="color:var(--fg-on-dark-2)">Picks the next step again. Changes no tables.</div></div>
+      </div>
+      <div class="chips"><span class="chip">Convert</span><span class="chip mut">⚠ Changes tables</span><span class="chip">This wave · one schema</span></div>
+      <h3>Convert schema</h3>
+      <p class="d">Converts this wave to managed tables. Reversible for 14 days.</p>
+      <div class="spine"><span class="p done">Prep ✓</span><span class="a">→</span><span class="p opt">Freeze · optional</span><span class="a">→</span><span class="p now">Convert · you are here</span><span class="a">→</span><span class="p">Validate</span><span class="a">→</span><span class="p">Cleanup</span></div>
+      <div class="verdict"><b>Ready.</b> 1 of 1 tables passed the readiness check.</div>
+      <div class="facts">
+        <div class="fact"><div class="l">Schema · wave</div><div class="v m">e2e_real_gold · wave_04</div></div>
+        <div class="fact"><div class="l">Tables</div><div class="v">1</div></div>
+        <div class="fact"><div class="l">Reversible</div><div class="v">14 days (UNSET MANAGED)</div></div>
+        <div class="fact"><div class="l">Max downtime</div><div class="v">1.5 min</div></div>
+      </div>
+      <div class="cta">
+        <button class="btn danger">Open the convert gate</button>
+        <span class="then">After that → <b>validate e2e_real_gold</b></span>
+        <span class="ann">1</span>
+      </div>
+      <p class="fine">You approve the step. You never assemble one. All logic runs in the backend jobs. <span class="asof">· as of 2026-10-15 04:38 UTC</span></p>
+
+      <div class="layers">
+        <details>
+          <summary>What happened last <span class="meta">0 converted, 0 validated</span></summary>
+          <div class="body"><p style="margin:0;font-size:13px;color:var(--fg-on-dark-2)">So far: 0 converted, 0 validated across 10 schemas.</p></div>
+        </details>
+        <details>
+          <summary>Details <span class="meta">job, owners, sizing, waves, follow-ups</span></summary>
+          <div class="body">
+            <div class="grid3">
+              <div><div class="l">Job</div><div class="v">job_04_convert</div></div>
+              <div><div class="l">Selector</div><div class="v">wave_04</div></div>
+              <div><div class="l">Owners</div><div class="v">owner@…</div></div>
+              <div><div class="l">Time</div><div class="v">0.0 min copy</div></div>
+              <div><div class="l">Recommended compute</div><div class="v">2X-Large (64-core)</div></div>
+              <div><div class="l">Blast radius</div><div class="v">~1 downstream</div></div>
+            </div>
+            <div class="lbl">Waves in this convert</div>
+            <div style="font-size:12.5px;color:var(--fg-on-dark-2)"><span class="mono" style="color:#fff">wave_04</span> · normal · 1 table · data moves from the external location to the schema's managed location</div>
+            <div class="lbl">After this step</div>
+            <div style="font-size:12.5px;color:var(--fg-on-dark-2)">✓ All clear: nothing owed after this step for this scope.</div>
+            <div class="lbl">Technical (the engine's own summary)</div>
+            <p class="tech">NEXT: Convert schema main.e2e_real_gold — ~0.0 min copy + 1.5 min downtime on 2X-Large (64-core). MUTATES (reversible &lt;=14d). Set confirm_convert=true, then action=advance.</p>
+          </div>
+        </details>
+        <details>
+          <summary>Run it yourself</summary>
+          <div class="body"><div class="lbl" style="margin-top:0">Databricks CLI</div><p class="tech">databricks bundle run job_04_convert -t dev --params target_schema=main.e2e_real_gold,confirm_compaction_paused=true</p></div>
+        </details>
+      </div>
+    </div>
+
+    <div class="placeholder">Team priorities: shown only when the team has pins (as today)</div>
+    <div class="two">
+      <div class="placeholder">Burndown: unchanged</div>
+      <div class="placeholder">Effort bands: unchanged</div>
+    </div>
+    <div class="placeholder">Parallel work: unchanged</div>
+  </div>
+
+  <div class="legend">
+    <h4>What changed, and what didn't</h4>
+    <ol>
+      <li><span class="ann">1</span><span><b>Decide layer first.</b> Chips, title, the lifecycle spine, one verdict line, four facts (downtime is its own), then the button. Everything else moves into three collapsed sections. Nothing is deleted. The engine's "Set action=advance" text is labelled Technical, inside Details.</span></li>
+      <li><span class="ann">2</span><span><b>One "By schema".</b> The expanding list keeps the name; the link to the Waves page becomes "All waves →".</span></li>
+      <li><span class="ann">3</span><span><b>Honest counts.</b> "11 held back" is shown (the string-vs-number fix) with a Review link, and the journey reads "337 items to pause".</span></li>
+      <li><span class="ann">4</span><span><b>Every tile says "of what".</b> The labels keep the words the e2e checks read ("Migrated", "Validated", "Remaining", "Schemas blocked").</span></li>
+      <li><span class="ann">5</span><span><b>Focus mode is beside the list.</b> Each row has a visible "Open →", and the held-back tables appear as a footer row instead of vanishing.</span></li>
+    </ol>
+  </div>
+</section>
+
+<!-- ======================================================================================= -->
+<!-- 3 · FOCUS                                                                               -->
+<!-- ======================================================================================= -->
+<section class="panel" data-panel="focus">
+  <p class="caption"><b>Focus mode on gold.</b> The header is unchanged apart from grouping its actions. The card below is the same layered card as the estate view, pinned to this schema's wave. Gold is also everyone's current recommendation, so the header says so instead of warning.</p>
+  <div class="stack">
+    <div class="card">
+      <div class="card-h">
+        <div><h2>Working on one schema</h2><p class="sub">Only this schema's waves, one at a time. The recommendation for everyone stays the same.</p></div>
+        <div class="row">
+          <button class="btn">◫ e2e_real_gold ▾</button>
+          <button class="btn">📌 Pin for the team</button>
+          <a class="lk" href="#" data-goto="proposed" style="font-size:13px">← Back to the recommended step</a>
+        </div>
+      </div>
+      <div class="row" style="margin-top:14px">
+        <span class="mono" style="font-size:15px;font-weight:600">e2e_real_gold</span>
+        <span class="pill">main</span>
+        <span class="pill">Wave 1 of 4</span>
+        <span class="pill" style="color:var(--success-foreground);border-color:var(--success-border);background:var(--success-bg)">Also everyone's next step</span>
+      </div>
+      <div class="lbl" style="color:var(--muted-foreground)">Waves in this schema</div>
+      <div class="strip">
+        <div class="wv cur"><div class="tag">Current</div><div class="id">wave_04</div><div class="m">normal · 1 table · ready</div></div>
+        <div class="wv"><div class="id">wave_05</div><div class="m">normal · 12 tables · open items</div></div>
+        <div class="wv"><div class="id">wave_12</div><div class="m">final_large · 1 table</div></div>
+        <div class="wv"><div class="id">wave_13</div><div class="m">final_large · 1 table</div></div>
+      </div>
+    </div>
+
+    <div class="dark">
+      <div class="eyebrow">Your next step · e2e_real_gold</div>
+      <div class="chips"><span class="chip">Convert</span><span class="chip mut">⚠ Changes tables</span><span class="chip">wave_04 only</span></div>
+      <h3>Convert schema</h3>
+      <p class="d">Converts this wave to managed tables. Reversible for 14 days.</p>
+      <div class="verdict"><b>Ready.</b> 1 of 1 tables passed the readiness check.</div>
+      <div class="facts">
+        <div class="fact"><div class="l">Wave</div><div class="v m">wave_04 · 1 of 4</div></div>
+        <div class="fact"><div class="l">Tables</div><div class="v">1</div></div>
+        <div class="fact"><div class="l">Reversible</div><div class="v">14 days (UNSET MANAGED)</div></div>
+        <div class="fact"><div class="l">Max downtime</div><div class="v">1.5 min</div></div>
+      </div>
+      <div class="cta"><button class="btn danger">Open the convert gate</button><span class="then">After that → <b>validate wave_04</b>, then wave_05</span></div>
+      <p class="fine">You approve the step. You never assemble one. All logic runs in the backend jobs.</p>
+      <div class="layers">
+        <details><summary>What happened last <span class="meta">this schema only</span></summary><div class="body"><p style="margin:0;font-size:13px;color:var(--fg-on-dark-2)">Readiness check passed for wave_04 (1 table).</p></div></details>
+        <details><summary>Details <span class="meta">job, owners, sizing, waves, follow-ups</span></summary><div class="body"><p style="margin:0;font-size:12.5px;color:var(--fg-on-dark-2)">Same contents as the estate card, pinned to wave_04.</p></div></details>
+        <details><summary>Run it yourself</summary><div class="body"><p class="tech">databricks bundle run job_04_convert … wave_id=wave_04</p></div></details>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ======================================================================================= -->
+<!-- 4 · BLOCKED & REVIEW                                                                    -->
+<!-- ======================================================================================= -->
+<section class="panel" data-panel="blocked">
+  <p class="caption"><b>Grouped by reason, with the fix on the group line.</b> Today this page is one seven-column table that mixes blocked and needs-review tables. The table names, writers and full remediation are still one click away, and the scoped re-scan button stays where it is.</p>
+  <div class="card">
+    <div class="card-h">
+      <div><h2>Blocked &amp; review</h2><p class="sub">Tables that can't be planned yet, and what to do about each.</p></div>
+      <div><button class="btn">⟳ Re-scan a schema</button><div class="help">After you fix something, re-check just that schema.</div></div>
+    </div>
+
+    <div class="lbl" style="color:var(--muted-foreground);margin-top:20px">Needs review · 11 tables · held out of the plan, nothing is broken</div>
+    <div class="stack" style="gap:8px">
+      <details class="grp">
+        <summary>Not a Delta table <span class="cnt">7</span><span class="fix">Only Delta tables can be converted. Leave them external, or rewrite as Delta.</span></summary>
+        <div class="body"><ul class="tlist">
+          <li><span>e2e_real_nondelta.non_delta_000</span><span>non_delta_format</span></li>
+          <li><span>e2e_real_nondelta.non_delta_001</span><span>non_delta_format</span></li>
+          <li><span>… 5 more</span><span></span></li>
+        </ul></div>
+      </details>
+      <details class="grp">
+        <summary>Read by file path <span class="cnt">3</span><span class="fix">Switch readers to catalog.schema.table, then re-scan. <a class="lk" href="#">Path-based access →</a></span></summary>
+        <div class="body"><ul class="tlist">
+          <li><span>e2e_real_pathaccess.events_by_path</span><span>path_based_access_blocks_managed</span></li>
+          <li><span>e2e_real_pathaccess.metrics_by_path</span><span>path_based_access_blocks_managed</span></li>
+          <li><span>e2e_real_pathaccess.orders_by_path</span><span>path_based_access_blocks_managed</span></li>
+        </ul></div>
+      </details>
+      <details class="grp" open>
+        <summary>A Databricks job reads it by path <span class="cnt">1</span><span class="fix">Make the job name-based, or opt in to path redirect. <a class="lk" href="#">Path-based access →</a></span></summary>
+        <div class="body"><ul class="tlist">
+          <li><span>e2e_stream.src_01</span><span>path_redirect_requires_name_based_or_opt_in</span></li>
+        </ul></div>
+      </details>
+    </div>
+
+    <div class="lbl" style="color:var(--muted-foreground);margin-top:20px">Blocked · 0 tables</div>
+    <div class="ok-line">No table is unreadable. A planned table shows up here if the readiness check finds a hard problem, such as no managed storage location.</div>
+  </div>
+</section>
+
+<!-- ======================================================================================= -->
+<!-- 5 · REGRESSION GUARD                                                                    -->
+<!-- ======================================================================================= -->
+<section class="panel" data-panel="guard">
+  <p class="caption"><b>What the redesign must not break, and the check that proves it.</b> These come from the browser e2e (<code>backend/.e2e/e2e_app_ui.py</code>), the tour tests, and the copy rules. A closed Radix <code>Collapsible</code> removes its content from the page, so anything a check reads stays in the always-visible layer.</p>
+  <table class="guard">
+    <thead><tr><th>Must keep</th><th>Who relies on it</th><th>Rule in this design</th></tr></thead>
+    <tbody>
+      <tr><td>"You approve the step" footer line</td><td>e2e C1.2 and F1 (card mounted)</td><td>Stays in the decide layer, under the button.</td></tr>
+      <tr><td>Buttons by name: "Open the convert gate", "Convert anyway", "Run the check", "Pause jobs first", "Convert without pausing"</td><td>e2e C1.3, gate and freeze walks</td><td>Every step's button stays in the decide layer; same labels.</td></tr>
+      <tr><td>Tile words "Migrated", "Validated", "Remaining", "Schemas blocked"</td><td>e2e C1.1</td><td>New labels contain the same words; only the values gain "of N".</td></tr>
+      <tr><td><code>job_00_profiler</code> Job fact on the first-run card</td><td>e2e A3 (<code>:138</code>)</td><td>The first-run card is out of scope; its Job fact stays visible.</td></tr>
+      <tr><td>"Working on one schema", "Waves in this schema", the exact wave id, "Back to the recommended step"</td><td>e2e F0–F3</td><td>The focus header is unchanged.</td></tr>
+      <tr><td>Tour anchors <code>overview-situation</code>, <code>overview-next</code>, <code>focus-picker</code>, <code>focus-header</code>, <code>focus-pin</code>, <code>team-pins</code></td><td><code>tours/tourSteps.test.ts</code></td><td>Same anchors on the same components. Moving the picker updates the tour step order in the same change.</td></tr>
+      <tr><td>Decision logic in <code>*.pure.ts</code></td><td>Unit tests</td><td>Untouched, except two wording/bug fixes (held-back count, "items to pause"), each with a new test case.</td></tr>
+      <tr><td>Copy rules (titles of five words or fewer)</td><td><code>npm run copy:export</code> → <code>copy-review.md</code></td><td>Regenerate and review the diff.</td></tr>
+      <tr><td>The design record</td><td><code>app/docs/design-deltas.md</code></td><td>One new row describing the layered card.</td></tr>
+      <tr><td>What the user actually sees</td><td>The gate screenshot walks</td><td>Re-run <code>--focus</code>, <code>--replan</code> and pins; compare before/after folders.</td></tr>
+    </tbody>
+  </table>
+  <div class="legend">
+    <h4>Suggested order (one small change each)</h4>
+    <ol>
+      <li><span class="ann">1</span><span>Text-only fixes: "All waves →", "items to pause", the held-back count, "Blocked in plan", tile "of N".</span></li>
+      <li><span class="ann">2</span><span>The layered next-step card (tab 2), following convert-cujs Screen 1.</span></li>
+      <li><span class="ann">3</span><span>Move the focus picker beside the list, add "Open →", update the tour.</span></li>
+      <li><span class="ann">4</span><span>Group Blocked &amp; review by reason (tab 4).</span></li>
+    </ol>
+  </div>
+</section>
+
+</main>
+
+<script>
+  const tabs = document.querySelectorAll('.tab');
+  const panels = document.querySelectorAll('.panel');
+  function show(name){
+    tabs.forEach(t => t.setAttribute('aria-selected', String(t.dataset.tab === name)));
+    panels.forEach(p => p.dataset.active = String(p.dataset.panel === name));
+    window.scrollTo({top:0});
+  }
+  tabs.forEach(t => t.addEventListener('click', () => show(t.dataset.tab)));
+  document.querySelectorAll('[data-goto]').forEach(a => a.addEventListener('click', e => { e.preventDefault(); show(a.dataset.goto); }));
+  // capture-only: open every disclosure so a static screenshot shows the whole layer stack
+  const openAll = document.getElementById('openAll');
+  openAll.addEventListener('change', () => document.querySelectorAll('main details:not(.picker details)').forEach(d => d.open = openAll.checked));
+  if (new URLSearchParams(location.search).has('cap')) { openAll.checked = true; openAll.dispatchEvent(new Event('change')); }
+</script>
+</body>
+</html>

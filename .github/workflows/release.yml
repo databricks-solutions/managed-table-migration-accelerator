@@ -1,0 +1,92 @@
+name: Release
+
+on:
+  push:
+    tags: ["v*"]
+
+permissions:
+  contents: read
+
+jobs:
+  check-version:
+    name: check-version
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.check.outputs.version }}
+      prerelease: ${{ steps.check.outputs.prerelease }}
+    steps:
+      - uses: actions/checkout@v4
+      - id: check
+        name: Tag must equal the version in every versioned file
+        env:
+          TAG: ${{ github.ref_name }}
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          tag = os.environ["TAG"]
+          if not re.fullmatch(r"v\d+\.\d+\.\d+(-[0-9A-Za-z.]+)?", tag):
+              sys.exit(f"::error::tag {tag!r} is not vMAJOR.MINOR.PATCH[-PRERELEASE]")
+          want = tag[1:]
+
+          def grab(path, pattern):
+              m = re.search(pattern, open(path, encoding="utf-8").read(), re.M)
+              return m.group(1) if m else None
+
+          lock = json.load(open("app/package-lock.json", encoding="utf-8"))
+          found = {
+              "backend/src/uc_ext2managed/__init__.py": grab(
+                  "backend/src/uc_ext2managed/__init__.py", r'^__version__ = "([^"]+)"'),
+              "app/package.json": json.load(open("app/package.json", encoding="utf-8"))["version"],
+              "app/package-lock.json (top level)": lock.get("version"),
+              'app/package-lock.json (packages[""])': lock.get("packages", {}).get("", {}).get("version"),
+              "app/server/telemetry/product.ts": grab(
+                  "app/server/telemetry/product.ts", r"^export const VERSION = '([^']+)'"),
+              "CHANGELOG.md heading": want if re.search(
+                  rf"^## \[{re.escape(want)}\] - \d{{4}}-\d{{2}}-\d{{2}}$",
+                  open("CHANGELOG.md", encoding="utf-8").read(), re.M) else None,
+          }
+          bad = {k: v for k, v in found.items() if v != want}
+          for k, v in found.items():
+              print(f"{'ok ' if v == want else 'BAD'} {k}: {v}")
+          if bad:
+              sys.exit(f"::error::tag {tag} does not match: {', '.join(bad)}")
+          with open(os.environ["GITHUB_OUTPUT"], "a", encoding="utf-8") as out:
+              out.write(f"version={want}\nprerelease={'true' if '-' in want else 'false'}\n")
+          PY
+
+  ci:
+    needs: check-version
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    name: publish
+    needs: [check-version, ci]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - name: Extract this version's changelog section
+        env:
+          VERSION: ${{ needs.check-version.outputs.version }}
+        run: |
+          awk -v v="$VERSION" '
+            index($0, "## [" v "]") == 1 { on = 1; next }
+            on && /^## \[/ { exit }
+            on && /^\[[^]]+\]: / { next }
+            on { print }
+          ' CHANGELOG.md > notes.md
+          if ! grep -q '[^[:space:]]' notes.md; then
+            echo "::error::CHANGELOG.md has no notes for $VERSION"; exit 1
+          fi
+          cat notes.md
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.ref_name }}
+          PRERELEASE: ${{ needs.check-version.outputs.prerelease }}
+        run: |
+          flags=()
+          if [ "$PRERELEASE" = "true" ]; then flags+=(--prerelease); else flags+=(--latest); fi
+          gh release create "$TAG" --verify-tag --title "$TAG" --notes-file notes.md "${flags[@]}"

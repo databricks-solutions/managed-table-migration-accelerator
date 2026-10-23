@@ -1,0 +1,262 @@
+/* =====================================================================================
+ * How It Works — Academy motion system (scoped)
+ *
+ * All rules are scoped under `.how-academy` so nothing leaks into the rest of the app and
+ * the global v4 token block in index.css stays untouched. Motion follows the craft rules:
+ *   - only animate transform / opacity (GPU, no layout)
+ *   - enter from scale(0.96)+opacity, never scale(0)
+ *   - ease-out for entrances (starts fast = feels responsive), custom curves (stronger
+ *     than the built-in CSS easings)
+ *   - keep UI motion under ~300ms; exits faster than enters
+ *   - respect prefers-reduced-motion: keep opacity/colour, drop movement
+ * Scroll reveal is driven by `data-inview` toggled from useInView (IntersectionObserver),
+ * so there are no scroll listeners and the reveal is interruptible (transition, not keyframe).
+ * ===================================================================================== */
+
+.how-academy {
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-in-out: cubic-bezier(0.77, 0, 0.175, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+/* -- Scroll reveal ------------------------------------------------------------------- */
+.how-academy .how-reveal {
+  opacity: 0;
+  transform: translateY(10px) scale(0.985);
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+  will-change: transform, opacity;
+}
+.how-academy .how-reveal[data-inview='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* Stagger children of a revealed group (40-70ms apart). The parent gets `.how-stagger`;
+ * each child reads its own index via the custom property `--i`. */
+.how-academy .how-stagger[data-inview='true'] > * {
+  animation: howRise 300ms var(--ease-out) both;
+  animation-delay: calc(var(--i, 0) * 55ms);
+}
+@keyframes howRise {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.985);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* -- Pressable feedback --------------------------------------------------------------- */
+.how-academy .how-press {
+  transition: transform 160ms var(--ease-out);
+}
+@media (hover: hover) and (pointer: fine) {
+  .how-academy .how-press:hover {
+    transform: translateY(-2px);
+  }
+}
+.how-academy .how-press:active {
+  transform: scale(0.985);
+}
+
+/* -- Active/inactive step crossfade (scrollytelling, swimlane, flow nodes) ------------ */
+.how-academy .how-step {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out),
+    border-color 220ms var(--ease-out),
+    background-color 220ms var(--ease-out);
+}
+.how-academy .how-step[data-active='false'] {
+  opacity: 0.5;
+}
+.how-academy .how-step[data-active='true'] {
+  opacity: 1;
+}
+
+/* -- clip-path code reveal (path-based -> name-based) --------------------------------- */
+.how-academy .how-clip {
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 520ms var(--ease-in-out);
+}
+.how-academy .how-clip[data-revealed='true'] {
+  clip-path: inset(0 0 0 0);
+}
+
+/* -- Popover on a flow node ----------------------------------------------------------- */
+.how-academy .how-pop {
+  transform-origin: var(--pop-origin, center bottom);
+  transition:
+    opacity 160ms var(--ease-out),
+    transform 160ms var(--ease-out);
+}
+.how-academy .how-pop[data-open='false'] {
+  opacity: 0;
+  transform: scale(0.96);
+  pointer-events: none;
+}
+.how-academy .how-pop[data-open='true'] {
+  opacity: 1;
+  transform: scale(1);
+}
+
+/* =====================================================================================
+ * Explanatory motion — the bird's-eye "estate map" on the landing.
+ *
+ * Unlike the decorative reveal above, these transitions ENCODE meaning: the table-dot
+ * travels the spine, the freeze bracket clamps around convert, the gate opens once its
+ * blockers drop, the state ribbon fills. All transform/opacity (GPU). Under reduced motion
+ * we keep the FINAL state of each step (so the diagram still teaches) and only zero the
+ * duration — we must NOT force `transform: none`, which would erase the clamped/open state.
+ * ===================================================================================== */
+
+/* Actor swimlane — the responsible lane(s) light for the active step. */
+.how-academy .how-lane {
+  transition:
+    opacity 240ms var(--ease-out),
+    border-color 240ms var(--ease-out),
+    background-color 240ms var(--ease-out);
+}
+.how-academy .how-lane[data-active='false'] {
+  opacity: 0.4;
+}
+.how-academy .how-lane[data-active='true'] {
+  opacity: 1;
+}
+
+/* Flow-spine node — the active stage node lifts and accents. */
+.how-academy .how-spine-node {
+  transition:
+    transform 240ms var(--ease-out),
+    border-color 240ms var(--ease-out),
+    background-color 240ms var(--ease-out),
+    color 240ms var(--ease-out);
+}
+.how-academy .how-spine-node[data-active='true'] {
+  transform: translateY(-3px);
+}
+
+/* Table-dot travelling the spine — position (`--dot-left`) set inline per active stage. */
+.how-academy .how-dot {
+  left: var(--dot-left, 0%);
+  transition:
+    left 460ms var(--ease-in-out),
+    background-color 240ms var(--ease-out);
+}
+
+/* Freeze / ownership-lease brackets clamping around convert (scaleX from the centre).
+ * The base rule drives transform+opacity by data-state; colour is set inline via Tailwind
+ * (freeze = --info, lease = --brand). `.how-bracket--lease` is the wider, outer hold that
+ * stays clamped through validate and releases only at cleanup (see estateMap.pure.ts). */
+.how-academy .how-bracket {
+  transform-origin: center;
+  transition:
+    transform 320ms var(--ease-drawer),
+    opacity 240ms var(--ease-out);
+}
+.how-academy .how-bracket[data-state='none'] {
+  transform: scaleX(0.15);
+  opacity: 0;
+}
+.how-academy .how-bracket[data-state='clamped'] {
+  transform: scaleX(1);
+  opacity: 1;
+}
+.how-academy .how-bracket[data-state='released'] {
+  transform: scaleX(1);
+  opacity: 0.35;
+}
+/* The Authorize (lease) bracket keeps a touch more presence when released — it is held far longer than
+ * freeze, so it should not fade back as far while it is still visually the outer hold.
+ * Declared AFTER the base released rule (equal specificity) so source order lets it win. */
+.how-academy .how-bracket--lease[data-state='released'] {
+  opacity: 0.5;
+}
+
+/* Freeze op chips snapping in when the bracket clamps. */
+.how-academy .how-freeze-chip {
+  transition:
+    opacity 220ms var(--ease-out),
+    transform 220ms var(--ease-out);
+}
+.how-academy .how-freeze-chip[data-on='false'] {
+  opacity: 0;
+  transform: translateY(4px) scale(0.9);
+}
+.how-academy .how-freeze-chip[data-on='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* The convert gate: blocker chips hold it shut, then drop so it opens. */
+.how-academy .how-gate {
+  transition:
+    border-color 240ms var(--ease-out),
+    background-color 240ms var(--ease-out);
+}
+.how-academy .how-blocker {
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+}
+.how-academy .how-gate[data-state='open'] .how-blocker {
+  opacity: 0;
+  transform: translateY(10px) scale(0.85);
+}
+
+/* State ribbon fill — scaleX from the left edge to the reached state. */
+.how-academy .how-ribbon-fill {
+  transform-origin: left center;
+  transform: scaleX(var(--fill, 0));
+  transition: transform 460ms var(--ease-in-out);
+}
+
+/* Rollback branch appears only inside the 14-day window. */
+.how-academy .how-rollback {
+  transition:
+    opacity 260ms var(--ease-out),
+    transform 260ms var(--ease-out);
+}
+.how-academy .how-rollback[data-show='false'] {
+  opacity: 0;
+  transform: translateY(-4px);
+}
+.how-academy .how-rollback[data-show='true'] {
+  opacity: 1;
+  transform: none;
+}
+
+/* -- Reduced motion: keep meaning (opacity/colour), remove movement ------------------- */
+@media (prefers-reduced-motion: reduce) {
+  .how-academy .how-reveal,
+  .how-academy .how-reveal[data-inview='true'],
+  .how-academy .how-stagger[data-inview='true'] > *,
+  .how-academy .how-press,
+  .how-academy .how-press:hover,
+  .how-academy .how-press:active,
+  .how-academy .how-step,
+  .how-academy .how-pop {
+    transition-duration: 1ms;
+    animation-duration: 1ms;
+    transform: none !important;
+  }
+  .how-academy .how-clip {
+    transition-duration: 1ms;
+  }
+  /* Explanatory motion: snap to each step's FINAL state (keep transforms, zero duration). */
+  .how-academy .how-lane,
+  .how-academy .how-spine-node,
+  .how-academy .how-dot,
+  .how-academy .how-bracket,
+  .how-academy .how-freeze-chip,
+  .how-academy .how-gate,
+  .how-academy .how-blocker,
+  .how-academy .how-ribbon-fill,
+  .how-academy .how-rollback {
+    transition-duration: 1ms;
+  }
+}

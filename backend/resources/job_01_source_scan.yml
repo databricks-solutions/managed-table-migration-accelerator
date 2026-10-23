@@ -1,0 +1,41 @@
+# Stage 01 — Source scan (tier 2, OPTIONAL): find storage-path literals in notebook/job
+# source for tables flagged with path-based access. Read-only; OFF by default
+# (scan_source=false -> no-op). Independent of the wave planner (02); complements the
+# tier-1 "who" signal (path_access_entities) written by the profiler (00) with tier-2
+# "where" (exact source path + line) in the path_access_locations control table.
+resources:
+  jobs:
+    job_01_source_scan:
+      name: "[${bundle.target}] ${bundle.name} :: 01 source scan (optional)"
+      tags:
+        project: managed-migration
+        stage: "01-source-scan"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      # Run-now params: scan_source + scan_mode are the primary toggles; the broad-mode
+      # walk params (workspace_paths / exclude_paths / max_notebooks) are advanced and
+      # only take effect when scan_mode=broad. manifest_catalog/schema stay deploy-fixed
+      # so a run-now caller cannot redirect writes to another control plane.
+      parameters:
+        - name: scan_source
+          default: ${var.scan_source}
+        - name: scan_mode
+          default: ${var.scan_mode}
+        # Advanced — broad-mode workspace walk only:
+        - name: workspace_paths
+          default: ${var.scan_workspace_paths}
+        - name: exclude_paths
+          default: ${var.scan_exclude_paths}
+        - name: max_notebooks
+          default: ${var.scan_max_notebooks}
+      tasks:
+        - task_key: source_scan
+          notebook_task:
+            notebook_path: ../notebooks/01_source_scan.py
+            base_parameters:
+              scan_source: "{{job.parameters.scan_source}}"
+              scan_mode: "{{job.parameters.scan_mode}}"
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              workspace_paths: "{{job.parameters.workspace_paths}}"
+              exclude_paths: "{{job.parameters.exclude_paths}}"
+              max_notebooks: "{{job.parameters.max_notebooks}}"

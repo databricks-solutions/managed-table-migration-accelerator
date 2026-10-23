@@ -1,0 +1,51 @@
+# Stage 99 — Setup: provision the admin App's consumers (Genie space + control-plane grants).
+#
+# INSTALL-TIME job, split out of the profiler so the profiler stays a standalone deliverable
+# (a customer can run it against their estate with NO app installed). This job:
+#   - ensure_control_plane (idempotent — makes it self-sufficient; the Genie create API needs
+#     the control tables to EXIST, not to have rows),
+#   - creates/updates the read-only Genie space over the control tables (SDK),
+#   - grants the App SP CAN_RUN on the space + the least-privilege UC control-plane grants,
+#   - persists genie_space_id + dashboard_id into migration_control_config (PARTIAL upsert),
+#   - publishes the Genie knowledge docs (Markdown) to the genie_knowledge volume BEFORE the space
+#     update, removes retired doc files (exact names only), sets the volume description, and
+#     attaches the volume to the space (data_sources.volumes).
+#
+# ORDER-INDEPENDENT: run this BEFORE or AFTER the profiler. It calls ensure_control_plane
+# itself, and the config write is a partial upsert, so neither job blanks the other's fields.
+#
+# NOT bound to the app: nothing in the app UI triggers it (it is install-time). The app keeps
+# its 15 job bindings unchanged. app_name reaches this job as a plain ${var.app_name}
+# substitution (default ${bundle.name}), NOT a ${resources.apps...} reference — the App binds
+# the profiler job, so this job must not bind the App back; the plain substitution creates no cycle.
+resources:
+  jobs:
+    job_99_setup:
+      name: "[${bundle.target}] ${bundle.name} :: 99 setup"
+      tags:
+        project: managed-migration
+        stage: "99-setup"
+      # Serverless compute — runtime is managed by serverless (no DBR pin needed).
+      tasks:
+        - task_key: setup
+          notebook_task:
+            notebook_path: ../notebooks/99_setup.py
+            base_parameters:
+              # Usage telemetry opt-out (deploy-fixed; false = no pings).
+              telemetry_enabled: ${var.telemetry_enabled}
+              manifest_catalog: ${var.manifest_catalog}
+              manifest_schema: ${var.manifest_schema}
+              # Deployed AI/BI dashboard id — resolved by DABs from the bundle resource so this
+              # job can persist it into migration_control_config.dashboard_id.
+              dashboard_id: ${resources.dashboards.migration_scope.id}
+              # Genie space (read-only Q&A) — created/updated here via the SDK.
+              ensure_genie: ${var.ensure_genie}
+              genie_warehouse_id: ${var.warehouse_id}
+              genie_parent_path: /Shared
+              genie_grant_users: ${var.genie_grant_users}
+              # App NAME (not a resource ref) so this job resolves the App's service principal
+              # at RUNTIME (w.apps.get) and grants it CAN_RUN on the Genie space + the UC
+              # control-plane grants. ${var.app_name} defaults to ${bundle.name} — a
+              # bundle-level substitution, NOT a resource reference — so it creates no deploy
+              # cycle. Blank app_name skips the grant.
+              app_name: ${var.app_name}

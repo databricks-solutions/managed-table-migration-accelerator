@@ -1,0 +1,31 @@
+# Stage 09 — Get started: the non-mutating discover→plan→conduct chain for a first run.
+#
+# Runs the profiler, then the wave planner (which itself tails the conductor, stage 02), so a
+# single click takes a fresh control plane from "nothing" to a recommended next step WITHOUT
+# ever mutating a table. This job NEVER runs SET MANAGED. Conversion stays a deliberate operator
+# step. Optional catalog_filter/schema_filter narrow the first scan (blank = all catalogs).
+resources:
+  jobs:
+    job_09_get_started:
+      name: "[${bundle.target}] ${bundle.name} :: 09 get started (discover→plan→conduct)"
+      tags:
+        project: managed-migration
+        stage: "09-get-started"
+      max_concurrent_runs: 1
+      parameters:
+        - name: catalog_filter
+          default: ""
+        - name: schema_filter
+          default: ""
+      tasks:
+        - task_key: profiler
+          run_job_task:
+            job_id: ${resources.jobs.job_00_profiler.id}
+            job_parameters:
+              catalog_filter: "{{job.parameters.catalog_filter}}"
+              schema_filter: "{{job.parameters.schema_filter}}"
+        - task_key: wave_planner
+          depends_on:
+            - task_key: profiler
+          run_job_task:
+            job_id: ${resources.jobs.job_02_wave_planner.id}

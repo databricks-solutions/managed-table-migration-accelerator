@@ -20,6 +20,7 @@ import {
   scopesQuery,
   selectAll,
   toggleScope,
+  visibleTier2,
 } from './grantsPanel.pure';
 
 const CASES = JSON.parse(
@@ -118,6 +119,18 @@ function memoryStorage(initial: Record<string, string> = {}) {
     },
   };
 }
+
+describe('visibleTier2', () => {
+  const groups = [
+    { catalog: 'm', schema: 'scan', source: 'scan' as const },
+    { catalog: 'm', schema: 'kept', source: 'selected' as const },
+    { catalog: 'm', schema: 'dropped', source: 'selected' as const },
+  ];
+
+  it('keeps profiled groups and only the picked groups still ticked', () => {
+    expect(visibleTier2(groups, { typed: [], selected: ['m.kept'] }).map((g) => g.schema)).toEqual(['scan', 'kept']);
+  });
+});
 
 describe('loadSelection / saveSelection', () => {
   it('round-trips a selection', () => {

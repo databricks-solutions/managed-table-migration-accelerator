@@ -33,6 +33,7 @@ import {
   scopeKey,
   selectAll,
   toggleScope,
+  visibleTier2,
   type MergedScope,
   type OboDiscoveryLite,
   type ScopeSelection,
@@ -202,7 +203,7 @@ export function GrantsPanel() {
         />
         {plan ? (
           <>
-            <Tier2Section plan={plan} busy={planBusy} selectedCount={selection.selected.length} />
+            <Tier2Section plan={plan} busy={planBusy} selection={selection} />
             <OwnershipSection plan={plan} />
           </>
         ) : null}
@@ -289,8 +290,10 @@ function PresentBadge({ present }: { present: Present }) {
   );
 }
 
-function Tier2Section({ plan, busy, selectedCount }: { plan: GrantsPlan; busy: boolean; selectedCount: number }) {
-  if (plan.tier2.length === 0) {
+function Tier2Section({ plan, busy, selection }: { plan: GrantsPlan; busy: boolean; selection: ScopeSelection }) {
+  const groups = visibleTier2(plan.tier2, selection);
+  const selectedCount = selection.selected.length;
+  if (groups.length === 0) {
     return (
       <Alert>
         <AlertTitle>Tier 2 — pick the schemas to grant</AlertTitle>
@@ -309,7 +312,7 @@ function Tier2Section({ plan, busy, selectedCount }: { plan: GrantsPlan; busy: b
           Only the first {MAX_SELECTED_SCOPES} selected schemas, in name order, get grants here.
         </p>
       ) : null}
-      {plan.tier2.map((t) => {
+      {groups.map((t) => {
         const copy = t.source === 'selected' ? SECTION_COPY.settings.grantsTier2Selected : SECTION_COPY.settings.grantsTier2;
         return (
           <GrantGroup

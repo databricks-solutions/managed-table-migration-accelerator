@@ -124,6 +124,15 @@ export function scopesQuery(sel: ScopeSelection): string {
     .join(',');
 }
 
+/**
+ * Tier 2 groups to render now: profiled (`scan`) groups always, picked (`selected`) groups only
+ * while still ticked, so an unticked or removed scope's grants vanish before the refetch lands.
+ */
+export function visibleTier2<T extends Scope & { source: 'scan' | 'selected' }>(groups: T[], sel: ScopeSelection): T[] {
+  const ticked = new Set(sel.selected);
+  return groups.filter((g) => g.source === 'scan' || ticked.has(scopeKey(g)));
+}
+
 export function planUrl(sel: ScopeSelection): string {
   const q = scopesQuery(sel);
   return q ? `/api/grants/plan?scopes=${encodeURIComponent(q)}` : '/api/grants/plan';

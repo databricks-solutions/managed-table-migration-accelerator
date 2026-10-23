@@ -4,12 +4,19 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
   EMPTY_SELECTION,
+  MAX_SELECTED_SCOPES,
   SELECTION_STORAGE_KEY,
   addTyped,
+  capacityLeft,
+  catalogSql,
+  catalogTickState,
   clearSelection,
   copyBlock,
   coverageText,
   discoveryState,
+  filterScopes,
+  groupScopesByCatalog,
+  groupTier2ByCatalog,
   loadSelection,
   mergeScopes,
   parseTypedScope,
@@ -21,8 +28,17 @@ import {
   scopesQuery,
   selectAll,
   selectableKeys,
+  tier2Sql,
+  tier2Summary,
+  toggleCatalog,
   toggleScope,
   visibleTier2,
+  withRefresh,
+  wouldPassLimit,
+  type GrantLite,
+  type MergedScope,
+  type Present,
+  type Tier2GroupLite,
 } from './grantsPanel.pure';
 
 const CASES = JSON.parse(
@@ -250,5 +266,143 @@ describe('copyBlock', () => {
 
   it('is empty string for no grants', () => {
     expect(copyBlock([])).toBe('');
+  });
+});
+
+function g(securableType: 'CATALOG' | 'SCHEMA', fqn: string, privilege: string, present: Present): GrantLite {
+  return { privilege, securableType, securableFqn: fqn, stmt: `GRANT ${privilege} ON ${securableType} ${fqn} TO \`sp\``, present };
+}
+
+function group(catalog: string, schema: string, statuses: [Present, Present, Present, Present], source: 'scan' | 'selected' = 'scan'): Tier2GroupLite {
+  const fqn = `${catalog}.${schema}`;
+  return {
+    catalog,
+    schema,
+    source,
+    grants: [
+      g('CATALOG', catalog, 'USE CATALOG', statuses[0]),
+      g('SCHEMA', fqn, 'USE SCHEMA', statuses[1]),
+      g('SCHEMA', fqn, 'SELECT', statuses[2]),
+      g('SCHEMA', fqn, 'MANAGE', statuses[3]),
+    ],
+  };
+}
+
+describe('Step 2 at scale', () => {
+  const groups = [
+    group('sales', 'orders', ['no', 'yes', 'yes', 'no']),
+    group('sales', 'ref', ['no', 'yes', 'yes', 'yes']),
+    group('hr', 'people', ['yes', 'yes', 'yes', 'yes']),
+    group('hr', 'payroll', ['yes', 'unknown', 'yes', 'yes'], 'selected'),
+  ];
+
+  it('tier2Summary counts a shared catalog grant once', () => {
+    expect(tier2Summary(groups)).toEqual({ schemas: 4, landed: 11, missing: 2, unknown: 1, fullyGranted: 2 });
+  });
+
+  it('groupTier2ByCatalog sorts by name and pulls USE CATALOG out once per catalog', () => {
+    const all = groupTier2ByCatalog(groups, 'all');
+    expect(all.map((c) => c.catalog)).toEqual(['hr', 'sales']);
+    expect(all[1].useCatalog?.privilege).toBe('USE CATALOG');
+    expect(all[1].schemas.map((s) => s.schema)).toEqual(['orders', 'ref']);
+    expect(all[1].schemas.every((s) => s.grants.every((x) => x.securableType === 'SCHEMA'))).toBe(true);
+    expect(all.map((c) => [c.catalog, c.schemaCount, c.open])).toEqual([
+      ['hr', 2, 1],
+      ['sales', 2, 2],
+    ]);
+  });
+
+  it('the missing view keeps unknown grants, drops landed ones and empty schemas', () => {
+    const missing = groupTier2ByCatalog(groups, 'missing');
+    expect(missing.map((c) => [c.catalog, c.useCatalog?.privilege ?? null, c.schemas.map((s) => s.schema)])).toEqual([
+      ['hr', null, ['payroll']],
+      ['sales', 'USE CATALOG', ['orders']],
+    ]);
+    expect(missing[0].schemas[0].grants.map((x) => x.privilege)).toEqual(['USE SCHEMA']);
+  });
+
+  it('the missing view drops a catalog with nothing left to grant', () => {
+    expect(groupTier2ByCatalog([group('hr', 'people', ['yes', 'yes', 'yes', 'yes'])], 'missing')).toEqual([]);
+  });
+
+  it('tier2Sql emits every statement for the view with USE CATALOG once per catalog', () => {
+    const sql = tier2Sql(groups, 'missing').split('\n');
+    expect(sql).toEqual([
+      'GRANT USE SCHEMA ON SCHEMA hr.payroll TO `sp`;',
+      'GRANT USE CATALOG ON CATALOG sales TO `sp`;',
+      'GRANT MANAGE ON SCHEMA sales.orders TO `sp`;',
+    ]);
+    const full = tier2Sql(groups, 'all').split('\n');
+    expect(full.filter((l) => l.includes('USE CATALOG'))).toHaveLength(2);
+    expect(full).toHaveLength(2 + 4 * 3);
+  });
+
+  it('catalogSql is one catalog of tier2Sql', () => {
+    const [hr, sales] = groupTier2ByCatalog(groups, 'all');
+    expect(`${catalogSql(hr)}\n${catalogSql(sales)}`).toBe(tier2Sql(groups, 'all'));
+  });
+});
+
+describe('picker at scale', () => {
+  const scope = (catalog: string, schema: string, over: Partial<MergedScope> = {}): MergedScope => ({
+    catalog,
+    schema,
+    source: 'obo',
+    externalTableCount: 1,
+    selected: false,
+    covered: false,
+    ...over,
+  });
+  const scopes = [
+    scope('hr', 'people', { covered: true }),
+    scope('hr', 'payroll', { selected: true }),
+    scope('sales', 'orders'),
+    scope('sales', 'ref', { selected: true }),
+  ];
+
+  it('filterScopes: open hides covered, ticked shows picks, the query is a case-insensitive substring', () => {
+    expect(filterScopes(scopes, '', 'open').map(scopeKeyOf)).toEqual(['hr.payroll', 'sales.orders', 'sales.ref']);
+    expect(filterScopes(scopes, '', 'ticked').map(scopeKeyOf)).toEqual(['hr.payroll', 'sales.ref']);
+    expect(filterScopes(scopes, ' SALES.O ', 'all').map(scopeKeyOf)).toEqual(['sales.orders']);
+  });
+
+  it('groupScopesByCatalog counts ticked (uncovered), covered and the selectable keys', () => {
+    expect(groupScopesByCatalog(scopes).map((c) => [c.catalog, c.ticked, c.covered, c.selectable])).toEqual([
+      ['hr', 1, 1, ['hr.payroll']],
+      ['sales', 1, 0, ['sales.orders', 'sales.ref']],
+    ]);
+  });
+
+  it('catalogTickState is all, some or none over the uncovered schemas', () => {
+    const [hr, sales] = groupScopesByCatalog(scopes);
+    expect(catalogTickState(hr)).toBe('all');
+    expect(catalogTickState(sales)).toBe('some');
+    expect(catalogTickState(groupScopesByCatalog([scope('x', 'y', { covered: true })])[0])).toBe('none');
+  });
+
+  it('toggleCatalog ticks the rest of a partial catalog and unticks a full one', () => {
+    const sel = { typed: [], selected: ['hr.payroll', 'sales.ref'] };
+    const [hr, sales] = groupScopesByCatalog(scopes);
+    expect(toggleCatalog(sel, sales).selected.sort()).toEqual(['hr.payroll', 'sales.orders', 'sales.ref']);
+    expect(toggleCatalog(sel, hr).selected).toEqual(['sales.ref']);
+  });
+
+  it('capacityLeft and wouldPassLimit guard the per-plan limit; already-ticked keys cost nothing', () => {
+    const full = { typed: [], selected: Array.from({ length: MAX_SELECTED_SCOPES - 1 }, (_, i) => `c.s${i}`) };
+    expect(capacityLeft(full)).toBe(1);
+    expect(wouldPassLimit(full, ['c.s0', 'c.new'])).toBe(false);
+    expect(wouldPassLimit(full, ['c.new', 'c.other'])).toBe(true);
+    expect(capacityLeft({ typed: [], selected: Array.from({ length: 60 }, (_, i) => `c.s${i}`) })).toBe(0);
+  });
+});
+
+function scopeKeyOf(s: { catalog: string; schema: string }): string {
+  return `${s.catalog}.${s.schema}`;
+}
+
+describe('withRefresh', () => {
+  it('adds refresh=1 to a bare or a scoped plan URL', () => {
+    expect(withRefresh('/api/grants/plan')).toBe('/api/grants/plan?refresh=1');
+    expect(withRefresh(planUrl({ typed: [], selected: ['a.b'] }))).toBe('/api/grants/plan?scopes=a.b&refresh=1');
   });
 });

@@ -885,15 +885,17 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 
 | Field | Text |
 | --- | --- |
-| Title | Step 2 · {scope} |
-| Subtitle | Schema grants that cover every table in the schema. |
+| Title | Step 2 · Schemas |
+| Subtitle | Schema grants that cover every table in each schema, grouped by catalog. |
+| Tooltip | Missing only hides the grants already in place. Copy and Download take every grant in the current view, not only the open groups. |
+| Technical detail | USE CATALOG is listed once per catalog. Each catalog and schema is checked once with SHOW GRANTS, and the result is reused for up to a minute. Refresh checks again. |
 
 ### `grantsTier2Selected`
 
 | Field | Text |
 | --- | --- |
-| Title | Step 2 · {scope} |
-| Subtitle | You picked this schema. Its grants cover every table in it. |
+| Title | you picked it |
+| Subtitle | The estate scan has not listed this schema yet. Its grants cover every table in it. |
 | Technical detail | From the scopes ticked or typed in the panel, before the estate scan lists the schema. |
 
 ### `grantsOwnership`

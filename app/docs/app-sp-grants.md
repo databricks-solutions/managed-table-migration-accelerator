@@ -405,6 +405,19 @@ it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 down
   the convert-permission grant script is the only per-table artifact, grouped by who must run
   each statement.
 - **Copy button** for Tier 1 + the schema-level Tier 2 grants (short, static-shaped).
+- **Built for large estates.** Tier 2 opens on a summary (schemas, landed, missing, not
+  checked) and a **Missing only** view by default; schemas whose schema grants have all landed
+  collapse into one "N schemas with every schema grant landed" line. Grants are grouped by
+  catalog with `USE CATALOG` once per catalog; groups start closed past three catalogs and show
+  ten schemas at a time. **Copy all missing**, **Copy all** and **Download .sql** always take every
+  grant in the view, never only the open groups. The scope picker is grouped by catalog (a
+  three-state tick-all per catalog), filterable, defaults to the schemas the scan does not cover,
+  and scrolls inside a fixed height; a catalog tick or "Select all" that would pass the
+  50-scope limit is disabled with the reason shown. Server side, `buildGrantsPlan` reads each
+  catalog and schema once (`USE SCHEMA` / `SELECT` / `MANAGE` share one `SHOW GRANTS ON SCHEMA`),
+  at most 8 statements at a time, so N schemas over C catalogs cost N + C reads instead of 4N.
+  Successful reads are reused across plan loads for 60 s (a failed read is never kept, so it
+  still reads `unknown`); the panel's **Refresh** sends `?refresh=1` to check again.
 - **Download `convert-permissions.sql`** for the per-table grants the SP still needs, generated
   from the stored `convert_authority` verdicts (mirrors the runbook / comms-feed download). This
   handles "thousands of tables" without a giant on-screen block.

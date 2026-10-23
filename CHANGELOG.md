@@ -31,6 +31,13 @@ release may change job parameters or control-table columns; every such change is
 - **Settings → "What you can see" marks schemas the profiler already lists.** Their chips read
   "already covered by the scan" instead of offering a tick that changed nothing, because their
   grants are already in Step 2. "Select all" and the selected count skip them.
+- **Settings → "Permissions the app needs" stays usable on large estates.** Step 2 opens on a
+  summary and shows only missing grants by default, grouped by catalog with `USE CATALOG` once per
+  catalog, and **Copy all missing**, **Copy all** and **Download .sql** take the whole list. The
+  schema picker is grouped by catalog with a tick-all per catalog, has a filter, lists the
+  schemas the scan does not cover by default, and scrolls inside a fixed height. The grant check
+  reads each catalog and schema once, at most eight at a time, and reuses a result for a minute
+  (Refresh checks again), so a 400-schema estate costs about 430 reads instead of 1,600.
   `GET /api/grants/plan` accepts an optional `scopes` parameter (validated server-side, max 50).
 - **Genie Code, front and center.** The README gains a "Drive it with Genie Code" section (what the
   app's MCP server is, how to connect it, example prompts, the `confirm=true` safety model).

@@ -39,8 +39,9 @@ as one Databricks Asset Bundle.
 - **AI/BI scoping dashboard and Genie space**.
 - **Opt-out usage telemetry** with a closed vocabulary (no names, paths, IDs or SQL).
 - **Generic `e2e` bundle target** and environment-driven live e2e drivers (`.env.e2e.example`).
-- Release tooling: CI (backend pytest, app typecheck / tests / lint) and a tag-driven release
-  workflow that checks the tag matches the version in every versioned file.
+- Local release tooling: `make ci` (backend pytest, app typecheck / tests / lint) and
+  `make release TAG=vX.Y.Z` (`scripts/release.py`), which checks the tag matches the version in
+  every versioned file and publishes the GitHub Release from this changelog.
 
 [Unreleased]: https://github.com/databricks-solutions/managed-table-migration-accelerator/compare/v0.1.0...HEAD
 [0.1.0]: https://github.com/databricks-solutions/managed-table-migration-accelerator/releases/tag/v0.1.0

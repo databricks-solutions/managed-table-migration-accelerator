@@ -113,6 +113,7 @@ databricks.yml            # THE bundle root: variables, targets (dev/e2e/prod),
                           #   include (backend + app resources); no artifacts block
 Makefile                  # repo-level convenience wrapper (bundle + pytest)
 CHANGELOG.md              # release notes, one section per version (see "Cutting a release")
+scripts/release.py        # local release gate + publisher (no GitHub Actions; `make release`)
 backend/                  # migration TOOLING
   resources/*.yml         #   one Workflow job per stage (file number == execution order)
     job_00_profiler.yml ... job_10_campaign.yml
@@ -756,30 +757,36 @@ bump may change a job parameter or control-table column (call it out in the chan
 contract change); a patch bump never does.
 
 The version lives in **four files that must stay in lockstep** (the parity tests
-`app/server/telemetry/product.test.ts` and `backend/src/tests/test_telemetry.py` fail otherwise,
-and the release workflow refuses a tag that disagrees with any of them):
+`app/server/telemetry/product.test.ts`, `backend/src/tests/test_telemetry.py` and
+`test_release_script.py` fail otherwise, and `scripts/release.py` refuses a tag that disagrees with
+any of them):
 
 - `backend/src/uc_ext2managed/__init__.py` — `__version__`
 - `app/package.json` — `"version"`
 - `app/package-lock.json` — the two root `"version"` entries (top level and `packages[""]`)
 - `app/server/telemetry/product.ts` — `VERSION`
 
+**This repository has no GitHub Actions** (disabled by the organization, permanently), so every
+check runs locally: `make ci` is the pre-merge gate (backend tests + app typecheck, tests and lint)
+and releases are published from a checkout. Do not add `.github/workflows/` files — they never run.
+
 To cut `vX.Y.Z`:
 
 1. On a branch, bump all four files and move the `## [Unreleased]` notes in `CHANGELOG.md` under
    a new `## [X.Y.Z] - YYYY-MM-DD` heading (update the compare links at the bottom).
-2. Open a PR; CI (backend + app) must pass before merge to `main`.
-3. From the merged `main`: `git tag -a vX.Y.Z -m "vX.Y.Z" && git push origin vX.Y.Z`.
-4. `.github/workflows/release.yml` checks the tag equals the version in all four files, reruns
-   CI, and publishes a GitHub Release whose notes are that version's `CHANGELOG.md` section. A
-   pre-release tag (`vX.Y.Z-rc.N`, with the same `X.Y.Z-rc.N` in the four files and a matching
-   changelog heading) is published as a pre-release.
+   `make release-check TAG=vX.Y.Z` confirms the files agree.
+2. Run `make ci`, open a PR, and merge to `main`.
+3. On the merged `main` (clean tree, `gh` authenticated with push rights):
+   `make release TAG=vX.Y.Z`. It re-runs the check and `make ci`, refuses unless HEAD is
+   `origin/main`, creates the annotated tag, pushes it, and publishes a GitHub Release whose notes
+   are that version's `CHANGELOG.md` section. A pre-release tag (`vX.Y.Z-rc.N`, with the same
+   `X.Y.Z-rc.N` in the four files and a matching changelog heading) is published as a pre-release.
 
 Never move or delete a published tag; fix forward with a new patch release.
 
 ## Before you commit
 
-- [ ] `python -m pytest backend/src/tests/ -q` passes.
+- [ ] `python -m pytest backend/src/tests/ -q` passes (`make ci` before a PR: it adds the app checks).
 - [ ] `databricks bundle validate -t dev` passes if you touched bundle/job/dashboard config.
 - [ ] User-visible changes have a line under `## [Unreleased]` in `CHANGELOG.md`.
 - [ ] New manifest columns are added to both `MANIFEST_COLUMNS` and `_DEFERRED_DEFAULTS`.

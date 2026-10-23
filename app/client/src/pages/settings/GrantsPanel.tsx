@@ -30,8 +30,10 @@ import {
   presentTone,
   removeTyped,
   saveSelection,
+  scanCoveredKeys,
   scopeKey,
   selectAll,
+  selectableKeys,
   toggleScope,
   visibleTier2,
   type MergedScope,
@@ -148,7 +150,11 @@ export function GrantsPanel() {
     };
   }, [refreshCount]);
 
-  const scopes: MergedScope[] = useMemo(() => mergeScopes(obo?.visibility ?? [], selection), [obo, selection]);
+  const covered = useMemo(() => (plan ? scanCoveredKeys(plan.tier2) : new Set<string>()), [plan]);
+  const scopes: MergedScope[] = useMemo(
+    () => mergeScopes(obo?.visibility ?? [], selection, covered),
+    [obo, selection, covered],
+  );
 
   function onAddTyped() {
     const parsed = parseTypedScope(typedInput);
@@ -197,7 +203,7 @@ export function GrantsPanel() {
           onAddTyped={onAddTyped}
           onToggle={(key) => setSelection((prev) => toggleScope(prev, key))}
           onRemove={(key) => setSelection((prev) => removeTyped(prev, key))}
-          onSelectAll={() => setSelection((prev) => selectAll(prev, scopes.map(scopeKey)))}
+          onSelectAll={() => setSelection((prev) => selectAll(prev, selectableKeys(scopes)))}
           onClear={() => setSelection((prev) => clearSelection(prev))}
           onRefresh={() => setRefreshCount((n) => n + 1)}
         />
@@ -399,6 +405,9 @@ function ScopePicker({
   onRefresh: () => void;
 }) {
   const state = discoveryState(obo);
+  const coveredCount = scopes.filter((s) => s.covered).length;
+  const pickedCount = scopes.filter((s) => s.selected && !s.covered).length;
+  const selectableCount = scopes.length - coveredCount;
   return (
     <div className="flex flex-col gap-2">
       <SectionHeader
@@ -433,6 +442,13 @@ function ScopePicker({
             view, not the whole estate. Tick the schemas the app should get grants for.
           </p>
         )}
+        {coveredCount > 0 ? (
+          <p className="mt-1">
+            {coveredCount === scopes.length
+              ? 'Every schema here is already covered by the estate scan, so its grants are in Step 2 below. Add a schema the scan has not listed to grant it too.'
+              : `${coveredCount} of these ${coveredCount === 1 ? 'is' : 'are'} already covered by the estate scan, so ${coveredCount === 1 ? 'its' : 'their'} grants are in Step 2 below.`}
+          </p>
+        ) : null}
       </div>
       {scopes.length > 0 ? (
         <>
@@ -442,13 +458,13 @@ function ScopePicker({
             ))}
           </div>
           <div className="flex items-center gap-2 text-xs text-muted-foreground">
-            <Button variant="ghost" size="sm" onClick={onSelectAll}>
+            <Button variant="ghost" size="sm" onClick={onSelectAll} disabled={selectableCount === 0}>
               Select all
             </Button>
             <Button variant="ghost" size="sm" onClick={onClear} disabled={selectedCount === 0}>
               Clear
             </Button>
-            <span>{selectedCount} selected</span>
+            <span>{pickedCount} selected</span>
           </div>
         </>
       ) : null}
@@ -487,6 +503,29 @@ function ScopeChip({
   onRemove: (key: string) => void;
 }) {
   const key = scopeKey(scope);
+  if (scope.covered) {
+    return (
+      <span
+        aria-label={`${key}, already covered by the scan`}
+        className="flex items-center gap-1 rounded-md border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 font-mono text-[11px] text-[var(--success-foreground)]"
+      >
+        <CircleCheck className="size-3" aria-hidden />
+        {key}
+        {scope.externalTableCount !== null ? <span>· {scope.externalTableCount}</span> : null}
+        <span className="font-sans">· already covered by the scan</span>
+        {scope.source === 'manual' ? (
+          <button
+            type="button"
+            aria-label={`Remove ${key}`}
+            onClick={() => onRemove(key)}
+            className="ml-1 hover:text-foreground"
+          >
+            <X className="size-3" aria-hidden />
+          </button>
+        ) : null}
+      </span>
+    );
+  }
   return (
     <span
       className={cn(

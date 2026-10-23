@@ -392,7 +392,9 @@ it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 down
   `GET /api/grants/plan?scopes=cat.sch,…`, and the plan returns Tier 2 for the manifest targets
   plus those scopes (each group labelled `source: scan | selected`; a scope already in the
   manifest stays one `scan` group). Tier 2 includes `MANAGE`, so nothing is pre-selected; "Select
-  all" is an explicit click. The server re-validates every scope against a strict
+  all" is an explicit click. A schema whose plan group is `source: scan` renders as a read-only
+  "already covered by the scan" chip instead of a toggle: its grants are in Tier 2 whatever the
+  selection, so "Select all" skips it and the "N selected" count excludes it. The server re-validates every scope against a strict
   `catalog.schema` pattern (letters, digits, underscores) and caps the list at 50
   (`grants.pure.ts` `parseScopeParam`), because the names are interpolated into `SHOW GRANTS`
   statements the SP executes; the client mirrors the pattern (golden cases in

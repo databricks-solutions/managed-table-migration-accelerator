@@ -90,6 +90,27 @@ stream-stop, and convert-permission (`require_ownership_leased`, default `true`)
 **fails closed** on a gap. Convert one wave at a time; keep streaming isolated (opt in with
 `bucket=streaming` or `include_streaming=true`).
 
+`job_04_convert` has two tasks: `select_waves` resolves the selector into an ordered
+`(plan_run_id, wave_id)` list pinned to the current plan, and a `for_each` runs the converter once
+per wave at concurrency 1. What that guarantees:
+
+- **No implicit convert-all.** One selector is required: `target_schema`, `bucket`, or `wave_ids`
+  (exclusive with the other two). A selector that matches no wave fails.
+- **Atomic waves.** The converter takes the whole remaining wave or fails before mutating anything
+  (`convert_max_tables_per_wave`, default `300`, guards this).
+- **Resumable.** Only waves with a remaining `DRY_RUN_OK` or `CONVERTING` member are runnable, so an
+  interrupted run resumes cleanly, and a fully-migrated scope is an idempotent no-op.
+- **Plan-drift guard.** `select_waves` and `04_convert` both require the exact
+  `(plan_run_id, wave_id)` in the current plan; a stale selection fails before mutation.
+- **Streaming safety belt.** Beyond skipping streaming waves by default, the converter fails loud
+  if a streaming table ever appears in a non-streaming wave.
+- **Already-managed reconciliation.** A table that is already `MANAGED` advances to `CONVERTED`
+  with an audit row, without re-running `SET MANAGED`.
+
+The CLI `--params` list is comma-separated, so a value cannot contain a comma: pass one wave per
+call (`--params wave_ids=<wave_id>,confirm_compaction_paused=true`), or set several `wave_ids`
+from the Jobs UI.
+
 **5b. Scale up with a parallel-safe batch (optional).** For a large estate, convert a whole
 **batch** of non-conflicting waves at once instead of one at a time. The wave planner colors
 waves into batches in `wave_parallel_groups` (one risk tier, streaming isolated, capped by
@@ -127,8 +148,9 @@ converting (a recommendation, not a gate). Drive from the cockpit (`09_cockpit.p
 **10. After 14 days, clean up.** `job_07_post_convert_cleanup` VACUUMs PO-disabled tables once
 past the 14-day window (never inside it) and, gated by its own `confirm_execute`, **revokes the
 grants Authorize added** once a table is `CLEANED` (a privilege held before is never revoked).
-**Rollback (`job_06_rollback`) is available only within those 14 days**, is manual, and requires
-a written `reason`. See [Rollback and cleanup](./09-rollback-and-cleanup.md).
+**Rollback (`job_06_rollback`) is available only within those 14 days**, is manual, and is pinned
+to one wave with a written reason (`--params plan_run_id=<uuid>,wave_id=<wave_id>,reason="<why>"`).
+See [Rollback and cleanup](./09-rollback-and-cleanup.md).
 
 ## Why the discipline
 

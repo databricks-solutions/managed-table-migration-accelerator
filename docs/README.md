@@ -47,6 +47,7 @@ These are still separate, deliberate launches, with streaming waves kept serial.
 
 | Page | What it covers |
 |---|---|
+| [00 - Installation](./00-installation.md) | Prerequisites, who needs which permissions, bundle variables, the two install paths, the success check, troubleshooting, and uninstalling. |
 | [01 - Overview](./01-overview.md) | What the migration is; the golden safety rules and non-negotiable `SET MANAGED` facts; the two surfaces. |
 | [02 - Architecture](./02-architecture.md) | Manifest-driven design; pure logic + thin Spark edges; module map; the one bundle; two system diagrams. |
 | [03 - Discovery and signals](./03-discovery-and-signals.md) | The profiler: discovering EXTERNAL tables, hard-signal eligibility, the signals it writes, the config handshake. |
@@ -64,6 +65,7 @@ These are still separate, deliberate launches, with streaming waves kept serial.
 | [13 - Estate migration playbook](./13-estate-migration-playbook.md) | The step-by-step "migrate an estate safely at scale" runbook that ties it all together. |
 | [14 - Bulk convert](./14-bulk-convert.md) | Converting non-conflicting waves in parallel: parallel-safe batches, the `11*` jobs, the app-free cockpit, and the `/bulk` screen. |
 | [15 - Genie Code MCP](./15-genie-code-mcp.md) | Exposing the control plane to Genie Code / AI Playground as a custom MCP server: the v2 tool tiers, the recommended direct-connect path (no account admin) + the CORS-persist gotcha, and the Unity Catalog MCP Service governance alternative (not bundle-managed). |
+| [16 - AI/BI dashboard and Genie space](./16-dashboard-and-genie.md) | The read-only dashboard pages and how to edit them safely, the Genie space build and knowledge library, and their bundle variables. |
 
 ## Authoritative contracts (do not duplicate; link)
 
@@ -86,18 +88,15 @@ restates full column lists or full parameter tables.
 - [`app/docs/design-deltas.md`](../app/docs/design-deltas.md): where the built app
   deliberately diverges from its mockup, plus its read/write/trigger conventions.
 
-Concepts, tuning knobs, and the operator narrative also live in the root
-[`README.md`](../README.md); engineering conventions live in [`AGENTS.md`](../AGENTS.md).
+The root [`README.md`](../README.md) is the short front door (what it is, install, a first
+migration); the detail lives on these pages. Engineering conventions live in
+[`AGENTS.md`](../AGENTS.md).
 
 ## Known doc drift
 
 A few statements elsewhere in the repo are stale or contradicted by the current code. They
 are called out here so a reader is not misled:
 
-- **Root `README.md` links to a stale `./docs/`.** The root README's documentation table was
-  written when the reference docs lived at the repo root; those files now live under
-  `backend/docs/`. Those links are being repointed. The new top-level hub is this page
-  (`docs/README.md`), and it links down into `backend/docs/` for the contracts.
 - **`app/README.md` mentions a standalone `apps deploy`.** The truth is that the **root
   bundle owns the app lifecycle**: deploy with `databricks bundle deploy`, never
   `databricks apps deploy`. See [Using the app](./12-using-the-app.md#deploy).

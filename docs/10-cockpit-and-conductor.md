@@ -31,8 +31,15 @@ pick is: replan → a started wave → a converted wave's finish steps → the f
 own step is on the happy path → the default pick. With no pins it is exactly `resolve_next_step`.
 A blocked / held / unplanned / orphaned pin is skipped (its status is on `focus_pins`); a pin clears
 itself when every wave of its schema is `DONE`. Change them with `job_08_conductor`
-`pin_action=add|remove|move|clear` (one schema per call; `add` needs `pin_reason`), from the app's
-Team priorities panel, or Genie Code's `mtm_set_focus_pins`.
+`pin_action=add|remove|move|clear` (one schema per call in `pin_scope`; `add` needs `pin_reason`,
+`move` needs `pin_rank`), from the app's Team priorities panel, or Genie Code's
+`mtm_set_focus_pins`. For example:
+
+```bash
+databricks bundle run job_08_conductor -t dev \
+  --params pin_action=add,pin_scope=<catalog.schema>,pin_reason="<why first>"
+databricks bundle run job_08_conductor -t dev --params pin_action=move,pin_scope=<catalog.schema>,pin_rank=1
+```
 
 ### One wave end to end
 
@@ -69,7 +76,9 @@ What counts as a finish step:
   holding the wave, stays in `migration_runbook`, and `finish_action=reopen` brings it back.
 - "Turn on liquid clustering" (`08c`, step kind `optimize`) while `wave_status.optimize_pending`
   (a member's `table_manifest.optimize_run_at` is NULL). An executed `08c` stamps the tables and
-  the wave finishes. See [Post-convert maintenance policy](./08c-post-convert-maintenance.md).
+  the wave finishes; a run with `enable_po_on_convert=false` also records `optimize_po_declined`
+  ("operator declined PO"). A dry-run stamps nothing, and `06` rollback clears both columns. See
+  [Post-convert maintenance policy](./08c-post-convert-maintenance.md).
 
 `ENABLE_*`, `RETIRE_MAINTENANCE_JOB`, and `RESTORE_OWNERSHIP` actions (cleanup's work, after the
 14-day window) never hold a wave. Only `wave_status.open_post_convert_holding` does.
@@ -79,10 +88,53 @@ steps are optional and non-mutating at the conductor; each job they launch is dr
 and re-checks its own gates. A fully-converted awaiting wave is never routed to a `PRE_CONVERT`
 step: a pre-convert action still open on it is an orphaned bracket.
 
+### Routing a wave that is waiting on actions
+
+A data-ready wave in `AWAITING_ACTIONS` is never reported as `done`. `wave_status` splits its open
+pre-convert work into `open_pre_convert_auto` and `open_pre_convert_manual` (mirroring
+`executor.freeze_op_for_action`), so the conductor routes auto-freezable work to `freeze` (`03c`),
+an open `LEASE_OWNERSHIP` action to `lease` (Authorize, `03d`), and manual-only work to `actions`
+(resolve the action by hand), rather than dead-ending a manual OPTIMIZE on Freeze. A wave held
+only by an open `LEASE_OWNERSHIP` action (for example a grant `03d` applied but could not verify)
+routes to `lease`, never `actions`.
+
+Separately, a READY wave (`dry_run_ok>0`) with `wave_status.open_lease>0` (tables still to convert
+whose latest `convert_authority` verdict is not `AUTHORIZED`) recommends `lease` before `convert`.
+The conductor re-checks the verdicts as the convert identity with the same rule the `04_convert`
+gate enforces, so the recommendation matches the gate. When the identity is already authorized,
+`open_lease` is `0` and the conductor recommends `convert` directly; otherwise the directive names
+what is missing. The step is skippable (`require_ownership_leased=false`). See
+[Convert permissions and Authorize](./07b-convert-permissions.md).
+
 The conductor writes one **append-only** row to `migration_next_actions` carrying the step, its
 full implications (mutation, reversibility, ETA + max downtime, blast radius, post-actions), a
 prior-activity narrative (`build_activity_summary`), and the exact command. It never mutates a
-table.
+table. The AI/BI dashboard's **Next action** page renders the latest row as a read-only view of
+the same recommendation.
+
+The conductor's schedule is set by the `conductor_schedule_cron` bundle variable (paused by
+default). `cockpit_default_include_streaming` (default `false`) sets whether the conductor and a
+cockpit schema pass fold in streaming waves; streaming stays isolated either way.
+
+## The gated campaign: the headless sequencer
+
+`job_10_campaign` prepares **one** `target_schema` and then stops. It chains four tasks:
+`resolve` (turn the schema into dry-run filters), `dry_run` (`03`, advancing passing tables to
+`DRY_RUN_OK`), `conductor` (refresh the recommendation), and `decide`, which prints GO / NO-GO
+plus the exact convert command. It never converts; conversion stays a deliberate operator step.
+Use it for a headless or scheduled "prep the next schema" run, and the cockpit or the app for the
+human decide-and-launch step:
+
+|  | `job_10_campaign` | `09_cockpit.py` |
+|---|---|---|
+| Type | Deployed Workflow job | Interactive notebook |
+| Runs how | CLI, Jobs UI, schedule, or launched by the cockpit | A human, attached to compute |
+| Mutates tables? | No (stops before convert) | No (only `jobs.run_now`) |
+| Triggers convert? | Never | Yes, the deliberate step |
+| Best for | Headless "prep next schema" | Human decide, click, and watch |
+
+The division holds across the control plane: the stage jobs are the only mutators, the conductor
+is the brain, the campaign is the gated sequencer, and the cockpit (or the app) is the launcher.
 
 ## The cockpit: the human launcher (interactive)
 
@@ -102,7 +154,32 @@ it and "Run all" to get the briefing, then approve the recommendation:
   `replan` / `rollback` / `cleanup` / `export_runbook` / `digest`. There is no
   `manual=conductor` (advance already runs the conductor when needed).
 
-The cockpit never runs `SET MANAGED` inline; it only launches deployed jobs.
+The cockpit never runs `SET MANAGED` inline; it only launches deployed jobs. After a launch it
+shows a "Job RUNNING" status with the run link, and an "Active runs" panel echoes any stage
+already in flight. `manual=replan` refuses while a wave is `IN_PROGRESS` / `CONVERTING` unless
+`confirm_replan=true`; that is a courtesy, because the planner itself still refuses while any table
+is `CONVERTING` (see [Wave planning](./06-wave-planning.md#when-to-re-plan)).
+
+### Finding the control tables and ids
+
+Nothing in the cockpit needs a hand-copied value. Cell 1 resolves where the control tables live
+before it builds any table name (`bootstrap.resolve_control_schema`), in three layers:
+
+1. **Config handshake.** With `manifest_catalog` / `manifest_schema` left blank, it reads the
+   `migration_control_config` row the profiler wrote and adopts the `catalog.schema` it records.
+   It prefers a config row at the default location, else the single `migration_control_config`
+   found anywhere in `information_schema`, so a non-`main` deploy still resolves.
+2. **Auto-resolve.** Otherwise it searches `information_schema` for the schema holding the
+   control tables and adopts the single match.
+3. **Fail fast.** If nothing is found, or the search is ambiguous, it stops and says which
+   `manifest_catalog` / `manifest_schema` to set.
+
+Typing a value into either widget forces that control schema; clearing the boxes returns to
+auto-resolve. A blank `dashboard_id` is resolved by matching the deployed Migration Scope
+dashboard's display-name suffix, and stage job ids are resolved the same way from each job's
+name tail (both tolerate the `[dev <user>]` prefix of development mode). Cell 1b then repaints the
+`manifest_catalog`, `manifest_schema`, and `dashboard_id` widgets with the resolved values, so the
+boxes show what the run actually used.
 
 ## The bulk cockpit: the app-free batch launcher
 
@@ -136,8 +213,9 @@ flowchart LR
 ```
 
 Every stage that moves a wave along ends with a read-only `recompute_next_step` task
-(`run_job_task` → `job_08_conductor`, `run_if: ALL_DONE`): `03c`, `03d`, `04`, `05`, `05b`, `06`,
-`08`, `08b`, `08c`, and the bulk `11`, `11b`, `11c`, `11d` (and `02` runs a `conductor` tail).
+(`run_job_task` → `job_08_conductor`, `run_if: ALL_DONE`): `03`, `03c`, `03d`, `04`, `05`, `05b`,
+`06`, `08`, `08b`, `08c`, and the bulk `11`, `11b`, `11c`, `11d` (and `02` runs a `conductor` tail).
+`00` runs it only after its path-redirect opt-in task, so a normal profile never launches it.
 So the recommendation moves on to the next finish step, the next wave, or `done` by itself, and
 the loop closes.
 
@@ -154,7 +232,7 @@ can do, an operator can do by hand. It UNIONs, phase-ordered
   `ALTER CATALOG ... SET MANAGED LOCATION` DDL).
 
 It surfaces as the `migration_runbook` view (created by `bootstrap.ensure_control_plane`), the
-dashboard's Runbook page, and a read-only export from the cockpit
+Runbook table on the dashboard's **Actions & Comms** page, and a read-only export from the cockpit
 (`action=advanced`, `manual=export_runbook`, `runbook_volume_path=<UC Volume dir>`) that writes
 an ordered, commented `.sql` + `.md` to a UC Volume. It never executes anything. In dry-run,
 `03c` / `05b` print and persist the exact statement (ledger `evidence`) instead of calling

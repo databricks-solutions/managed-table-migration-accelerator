@@ -73,6 +73,68 @@ Every system-table read degrades honestly: a failed read stamps an accurate note
 `resolver_unavailable_grants`) and leaves prior values untouched rather than recording a false
 "clean" signal.
 
+## Size and effort estimates
+
+The profiler records two estimates per table, both pure functions in
+`src/migration/eligibility.py` (unit-tested in `src/tests/test_eligibility.py`, no cluster
+required):
+
+- **Copy time.** `est_data_copy_minutes` is the estimated data-copy time;
+  `est_data_copy_seconds` is its finer-grained companion, so aggregates of sub-minute (MB-scale)
+  tables do not round to `0`. The model (`eligibility._raw_copy_minutes`) is a **monotonic,
+  band-anchored piecewise-linear** function whose knots are the documented points `0 -> 0`,
+  `100GB -> 6 min`, `1TB -> 30 min`, and `10TB -> 90 min`, interpolated linearly between knots
+  and extrapolated linearly beyond 10TB. It is strictly non-decreasing (a 101GB table never
+  estimates less than a 100GB one), while the per-GB slope still drops band-to-band to reflect
+  the larger compute that bigger tables get.
+- **Downtime.** `est_downtime_minutes` is a fixed per-band cutover downtime (`1.5` / `1.5` /
+  `3.0` / `5.0` minutes for the `<=100GB` / `~1TB` / `~10TB` / `>10TB` bands), independent of
+  the copy estimate.
+
+The same band drives the advisory compute recommendation that `04_convert` checks (see
+[Conversion and validation](./08-conversion-and-validation.md#advisory-cluster-sizing)).
+
+## Consumer-runtime floor (advisory)
+
+Readers and writers of a converted table should be on DBR 15.4 LTS+. The consumer-runtime pass
+(`scan_consumer_runtime`, default on) resolves each JOB consumer's runtime entirely from system
+tables; the bridge, the floor, and why an unresolved table is `unknown` rather than safe are
+covered in
+[External access and buckets](./05-external-access-and-buckets.md#below-floor-consumer-runtimes).
+Results land in four manifest columns (`min_consumer_dbr`, `has_below_floor_consumer`,
+`consumer_dbr_confidence`, `consumer_runtime_notes`) plus a per-cluster audit trail in the
+`consumer_runtime_plan` detail table, and surface as the advisory dry-run Check 11 (WARN, never
+FAIL) and on the dashboard's **Consumers & Runtime** page.
+
+The pass is idempotent: the manifest merge is UPDATE-only on `full_name` and the detail table is
+delete-then-append per in-scope table. With `scan_consumer_runtime=false` prior values are left
+untouched; a requested run that fails on missing system-table grants stamps `unknown` with a
+`resolver_unavailable_grants` note rather than leaving stale data. Pure logic
+(`classify_consumer_runtime`, `consumer_runtime_check_status`) lives in
+`src/migration/consumer_runtime.py`.
+
+## Access recency and staleness
+
+To help sequence the migration, the recency pass (`scan_recency`, default on) records when each
+in-scope table was last read and written, plus access counts, aggregated from
+`system.access.table_lineage` over the last `recency_lookback_days` (default `365`). Because it
+reads **only** that table, it populates even when the consumer-runtime resolver is blocked by
+missing `system.lakeflow` / `system.compute` grants. Results land in `last_write_at`,
+`last_read_at`, `write_count`, `read_count`, `recency_scanned_at`, and `recency_notes`.
+
+The dashboard's **Coverage & Estate** page buckets tables into staleness bands (`active <30d`,
+`warm 30-90d`, `cold 90-180d`, `stale 180-365d`, `dormant >=365d / none`), computed at query
+time so they stay fresh, and lists migrate-first candidates (most stale first). Dormant or
+never-accessed tables are usually the safest to convert first; frequently read or written tables
+warrant more coordination.
+
+A `NULL` last access is **not** "never": it means no read or write was seen in the lookback
+window, and lineage is a sampled, retention-bounded subset that under-represents path-based and
+external access, so treat it as unconfirmed, not inactive. The merge is UPDATE-only on
+`full_name`; `scan_recency=false` leaves prior values untouched; a lineage read failure stamps
+`lineage_unavailable`, and a table with no access in the window gets `no_access_in_window`. Pure
+logic (`days_since`, `staleness_band`) lives in `src/migration/recency.py`.
+
 ## Writer attribution and the schedule verdict
 
 Two related, **advisory** passes profile who writes each table and whether it is safe to
@@ -94,9 +156,11 @@ convert *now*:
   `MUST_STOP` / `UNKNOWN` - plus `next_scheduled_write_at`, `writer_schedule_reason`, and
   `writer_schedule_notes`. It answers "safe to convert now?" by composing the next scheduled
   write with the predictive convert window and the `writer_schedule_safety_margin_min` headroom
-  (default `15`). It **never overrides the reactive convert-time gates**; it feeds the
-  schedule-aware wave selection ([Wave planning](./06-wave-planning.md)) and surfaces as an
-  advisory dry-run Check 14. An unreadable schedule is an honest `UNKNOWN`, never a green light.
+  (default `15`). It **never overrides the reactive convert-time gates** (recent-write,
+  recent-compaction, recent-vacuum, writer-stop coverage); it feeds the schedule-aware wave
+  selection ([Wave planning](./06-wave-planning.md)) and surfaces as an advisory dry-run
+  Check 14 (INFO/WARN, never FAIL) and a per-wave print in `04_convert`. An unreadable schedule
+  is an honest `UNKNOWN`, never a green light.
 
 Both degrade honestly: an empty/failed lineage read stamps `writer_attribution_unavailable` and
 leaves prior values untouched - sampled ~90-day lineage means NULL is never proof of "no
@@ -122,9 +186,43 @@ upsert `bootstrap.write_control_config`. That single row is how the cockpit, the
 external control plane discover where the control tables live and which warehouse and
 dashboard back them. See [Architecture](./02-architecture.md#the-deployconfig-handshake).
 
-## Optional tier-2 source scan
+## Path-based access attribution
 
-`backend/notebooks/01_source_scan.py` (`job_01_source_scan`, OFF by default) is an optional,
-read-only deep scan of exported job/notebook source for storage-path literals, and feeds the
-`path_access_locations` table. It augments the profiler's tier-1 path-access signal and is
-covered in [External access and buckets](./05-external-access-and-buckets.md#path-based-access-two-tiers).
+Path-based access (a job, notebook, or external engine reading or writing a table's storage
+location directly rather than by name) holds a table out of the plan. The detection rules, the
+holds, and the Verify exit are covered in
+[External access and buckets](./05-external-access-and-buckets.md#path-based-access-two-tiers);
+this section covers what the two discovery tiers record.
+
+**Tier 1, who (always on, in `job_00_profiler`).** The access pass attributes path-based
+lineage records to the accessing entities and writes them to `path_access_entities`, a JSON
+list of `{entity_type, entity_id, created_by, role}` (role `READ` / `WRITE`). This tells you
+which job, notebook, or external engine, and which owner, touched the path. It is
+lineage-recall limited (`system.access.table_lineage` is a ~90-day subset), so absence is not
+proof of safety; the row also carries `access_confidence` and `access_notes`.
+
+**Tier 2, exactly where (optional, OFF by default).** `backend/notebooks/01_source_scan.py`
+scans exported notebook and job source for storage-path literals and records the entity,
+source path, cell, line, and matched snippet in `path_access_locations`, pinpointing the code
+to fix. Pure scan logic lives in `src/migration/source_scan.py`. The `scan_mode` parameter
+selects the scope:
+
+- `targeted_jobs` (default, fast) resolves JOB entities from tier-1 `path_access_entities`,
+  then reads each job's task notebook paths, exports them, and scans them. It needs a prior
+  profiler run to have populated `path_access_entities` (otherwise it scans nothing), and it
+  covers **only JOB** lineage entities: bare `NOTEBOOK` lineage ids and external engines need
+  `broad`.
+- `broad` (complete, slower) walks the workspace recursively from `workspace_paths` (default
+  `/`), minus `exclude_paths` (default `/Repos,/Shared/Archive`), capped at `max_notebooks`
+  (default `500`). Notebooks owned by jobs are annotated with their job names.
+
+There are two ways to run it. It runs embedded in `job_00_profiler` with
+`run_source_scan=true` (set `run_profiler=false` for a scan-only run), which is how the app
+triggers it; the standalone
+`job_01_source_scan` stays deployed for the CLI and is a no-op unless `scan_source=true`. The
+bundle variables that seed these defaults are `scan_source`, `scan_mode`,
+`scan_workspace_paths`, `scan_exclude_paths`, and `scan_max_notebooks`; the job parameters
+themselves are `workspace_paths`, `exclude_paths`, and `max_notebooks`. See
+[`backend/docs/contracts/jobs.md`](../backend/docs/contracts/jobs.md) for both jobs' parameter
+surface. Results surface on the dashboard's **Consumers & Runtime** page ("Path-literal
+matches (fix before converting)").

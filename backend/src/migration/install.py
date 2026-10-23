@@ -23,7 +23,7 @@ so the notebook stays a thin Spark/SDK edge (same discipline as ``gate_eval`` / 
 * **App-restart decision.** Decide whether the app needs a restart to pick up ``genie_space_id``
   and produce the SAFE remediation — a bundle **re-deploy**, never ``apps stop/start`` or an SDK
   restart (both drop the bundle-substituted ``config.env`` and crash the app; see the notebook's
-  Step 3 rationale and the README "Restarting the app" note).
+  Step 3 rationale and "Restarting the app" in docs/00-installation.md).
 
 No Spark/SDK import here; every function is a pure transform over plain data.
 """

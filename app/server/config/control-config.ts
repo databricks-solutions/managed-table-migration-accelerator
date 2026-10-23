@@ -18,8 +18,8 @@ export interface ControlConfig {
  * KNOWN SYMPTOM — not a bug: because the BOOT read is what decides whether genie() registers,
  * a cold warehouse at boot makes /api/config report `genie_available: false` even when a
  * genie_space_id exists. `genie_space_configured` (re-read live per request, warehouse now warm)
- * still shows true. A restart WHILE THE WAREHOUSE IS WARM flips genie_available true. See the
- * README "genie_available can read false right after a restart (cold warehouse)".
+ * still shows true. A restart WHILE THE WAREHOUSE IS WARM flips genie_available true. See
+ * "Troubleshooting" in docs/00-installation.md.
  */
 const CONTROL_READ_TIMEOUT_MS = 4000;
 

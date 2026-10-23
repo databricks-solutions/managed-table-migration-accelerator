@@ -41,8 +41,12 @@ the guided step and the MCP next step pass `true` explicitly.
 `optimize_run_at` on every in-scope converted table with no FAILED PO or auto-liquid op, which
 clears `optimize_pending`. PO-unreadable (MANUAL) and manual auto-liquid tables are stamped too;
 their `ENABLE_*` actions stay OPEN as runbook work but never hold the wave. A dry-run stamps
-nothing, and a FAILED table stays unstamped so optimize is offered again. `06_rollback` clears
-the stamp, so a re-converted table is offered optimize again. The full stamp rule is in
+nothing, and a FAILED table stays unstamped so optimize is offered again. With
+`enable_po_on_convert=false` (the Skip choice) only not-yet-stamped tables are stamped, and each
+is recorded as `optimize_po_declined` ("operator declined PO", with an
+`ENABLE_PREDICTIVE_OPTIMIZATION` `SKIPPED` audit row written first); a table already read as
+PO-on is not a decline. `06_rollback` clears both columns, so a re-converted table is offered
+optimize again. The full stamp rule is in
 [`backend/docs/contracts/jobs.md`](../backend/docs/contracts/jobs.md) §15.
 
 ## Predictive Optimization and liquid clustering policies
@@ -71,22 +75,23 @@ falling back to the profiler's manifest fields when a read fails:
 1. **Already on AUTO** → skipped; any open `ENABLE_AUTO_LIQUID` action is closed.
 2. **Managed Iceberg** → MANUAL (Iceberg needs explicit confirmation; `CLUSTER BY AUTO` is not
    the same choice as Delta).
-3. **UniForm** (Iceberg reads, `data_source_format=DELTA`) → MANUAL (needs confirmation).
-4. **Partition or clustering layout unreadable** → MANUAL (degraded honestly).
-5. **Partitioned** → MANUAL (the statement shown is `ALTER TABLE ... REPLACE PARTITIONED BY WITH
-   CLUSTER BY AUTO`, which reorganizes data — never executed by `08c`).
-6. **PO off** → MANUAL (auto-clustering needs PO).
-7. **Manual clustering keys** (CLUSTER BY with specific columns) → ELIGIBLE (`auto_liquid_policy`
+3. **Not Delta** → skipped (nothing to cluster).
+4. **UniForm** (Iceberg reads, `data_source_format=DELTA`) → MANUAL (needs confirmation).
+5. **Partition or clustering layout unreadable** → MANUAL (degraded honestly).
+6. **Partitioned** → MANUAL (the statement shown is `ALTER TABLE ... REPLACE PARTITIONED BY WITH
+   CLUSTER BY AUTO`, which needs DBR 18.1+ and reorganizes data — never executed by `08c`).
+7. **PO off** → MANUAL (auto-clustering needs PO).
+8. **Manual clustering keys** (CLUSTER BY with specific columns) → ELIGIBLE (`auto_liquid_policy`
    = `enable_eligible` only): the statement is `CLUSTER BY AUTO`, which keeps those keys as the
    starting keys; Predictive Optimization may change them later. If the table's AUTO flag cannot be
    read, it stays MANUAL instead.
-8. **ZORDER hints** (found in the newest non-empty `DESCRIBE HISTORY` operationParameters.zOrderBy,
+9. **ZORDER hints** (found in the newest non-empty `DESCRIBE HISTORY` operationParameters.zOrderBy,
    at most 4 valid top-level clustering columns with statistics) → ELIGIBLE: the statement is a
    pair: `CLUSTER BY (hints)` followed by `CLUSTER BY AUTO`. If the platform rejects the hints
    (e.g. missing stats), `08c` falls back to plain `CLUSTER BY AUTO` and records `hints_rejected`
    on the action evidence.
-9. **ZORDER but no valid hints** → ELIGIBLE: plain `CLUSTER BY AUTO`.
-10. **Clean** (Delta, unpartitioned, no keys, not already auto, PO on) → ELIGIBLE: `CLUSTER BY
+10. **ZORDER but no valid hints** → ELIGIBLE: plain `CLUSTER BY AUTO`.
+11. **Clean** (Delta, unpartitioned, no keys, not already auto, PO on) → ELIGIBLE: `CLUSTER BY
     AUTO`.
 
 ## Gated, verified, reversible
@@ -111,8 +116,11 @@ converted table, resuming either job would just double up. So `05b_unfreeze_veri
 `post_convert_maintenance_policy=prefer_po` (the only accepted value; a legacy `exact_restore`
 request is coerced to `prefer_po` with a deprecation note): instead of resuming the paused
 job it raises a non-blocking `RETIRE_MAINTENANCE_JOB` recommendation carrying the exact
-`databricks jobs update ... pause_status=PAUSED` statement, and **never deletes the job**. Each
-executed `08c` then re-reads the job of every open `RETIRE_MAINTENANCE_JOB` row in scope (read-only)
+`databricks jobs update ... pause_status=PAUSED` statement, and **never deletes the job**. If PO
+was off at unfreeze, `05b` resumed the job instead; when an executed `08c` later finds that
+table PO-on (verified in the same run, or already on), it raises the same recommendation (same
+`action_key`, `source = 08c_enable_optimization`), still without pausing or deleting the job.
+Each executed `08c` then re-reads the job of every open `RETIRE_MAINTENANCE_JOB` row in scope (read-only)
 and closes the row `DONE` once the job is deleted, paused, or has no schedule or trigger; a job that
 is still scheduled, or unreadable, keeps it OPEN. `RETIRE_MAINTENANCE_JOB` is advisory: it is
 listed in the runbook but never holds a wave. When PO is off or unknown it falls back to resuming

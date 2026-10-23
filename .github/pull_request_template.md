@@ -15,3 +15,4 @@
 - [ ] No secrets, workspace hosts / IDs, bucket names or profile names in tracked files; no hardcoded table lists.
 - [ ] Nothing here runs `SET MANAGED` / `UNSET MANAGED`, hard-deletes data, or VACUUMs inside the 14-day window outside the gated jobs.
 - [ ] User-visible change noted under `## [Unreleased]` in `CHANGELOG.md`.
+- [ ] A new signal, knob or stage is documented on its `docs/` page (`README.md` only if install, permissions or the first-migration steps changed).

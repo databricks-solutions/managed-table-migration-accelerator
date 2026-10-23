@@ -147,7 +147,7 @@ for _label, _fqn in control_fqns.items():
 # MAGIC never rewrite `audit_log` / `wave_plan` / `freeze_ledger`). Best-effort and idempotent:
 # MAGIC resolves the SP at runtime from `app_name`, GRANTs, then verifies via `SHOW GRANTS` and
 # MAGIC prints the exact statements for any grant it could not land (typically `USE CATALOG` on
-# MAGIC a pre-existing shared catalog — see the README "App service principal grants" fallback).
+# MAGIC a pre-existing shared catalog — see "The app service principal's grants" in docs/00-installation.md).
 # MAGIC Never fails this job.
 
 # COMMAND ----------
@@ -210,8 +210,8 @@ if APP_NAME:
         print(
             f"  [WARNING] could not resolve/grant App SP control-plane access for "
             f"app_name='{APP_NAME}' ({type(_ex).__name__}: {str(_ex)[:160]}); the job identity "
-            f"may lack apps/grant authority. Run the grants manually (see README 'App service "
-            f"principal grants'). The migration is unaffected."
+            f"may lack apps/grant authority. Run the grants manually (see docs/00-installation.md "
+            f"'The app service principal's grants'). The migration is unaffected."
         )
 else:
     print("app_name blank -> no App SP control-plane grant (set app_name to enable).")

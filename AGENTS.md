@@ -1,7 +1,8 @@
 # AGENTS.md
 
 Guidance for AI coding agents (and new contributors) working in this repository.
-Read this before making changes. For product/usage detail, see [`README.md`](./README.md).
+Read this before making changes. For product/usage detail, see [`README.md`](./README.md) and
+[`docs/`](./docs/README.md).
 
 ## Start here
 
@@ -101,7 +102,7 @@ Authoritative doc: <https://learn.microsoft.com/en-us/azure/databricks/tables/co
 - **Notebooks** are Databricks source format (`# COMMAND ----------` cells, `# MAGIC`
   directives). Import shared logic from `migration.*`; don't duplicate logic in notebooks.
 
-## Repository layout — two directories, ONE bundle (see README for detail)
+## Repository layout — two directories, ONE bundle (see docs/02-architecture.md for detail)
 
 This repo is a monorepo with a **single Databricks Asset Bundle**. The root
 `databricks.yml` is the one and only bundle root — there is no second bundle
@@ -792,6 +793,7 @@ Never move or delete a published tag; fix forward with a new patch release.
 - [ ] New manifest columns are added to both `MANIFEST_COLUMNS` and `_DEFERRED_DEFAULTS`.
 - [ ] New pure logic has a `backend/src/tests/test_*.py`.
 - [ ] No secrets, no hardcoded table lists, no destructive SQL run from the editor.
-- [ ] README updated if you added a signal, knob, or stage.
+- [ ] The matching `docs/` page updated if you added a signal, knob, or stage. Touch `README.md`
+ only when install, permissions, or the first-migration steps change; it is the short front door.
 - [ ] A new stage notebook / blocker literal / app trigger is wired into telemetry (see "Usage telemetry").
 - [ ] Only create commits when the user asks.

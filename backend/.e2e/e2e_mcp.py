@@ -64,7 +64,7 @@ from migration import install as ins  # noqa: E402
 import _e2e_env  # noqa: E402
 
 PROFILE = _e2e_env.optional("DATABRICKS_CONFIG_PROFILE")
-APP_NAME_WANTED = "managed-table-migration"  # bundle.name; deployed app is `mcp-<bundle.name>`
+APP_NAME_WANTED = _e2e_env.app_name_wanted()  # E2E_APP_NAME, else the bundle name (unique suffix)
 MCP_PROTOCOL_VERSION = "2025-06-18"          # verified against the live e2e app (2026-09-18)
 ACCEPT_BOTH = "application/json, text/event-stream"
 
@@ -369,7 +369,7 @@ _NO_RUN_TOOLS = frozenset({
     "mtm_list_waves", "mtm_get_wave_members", "mtm_list_blockers", "mtm_list_open_actions",
     "mtm_get_runbook", "mtm_get_readiness", "mtm_get_streaming_waves", "mtm_get_convert_permissions",
     "mtm_get_ownership_gap",  # deprecated alias of mtm_get_convert_permissions
-    "mtm_list_schema_steps",
+    "mtm_list_schema_steps", "mtm_get_permissions",
 })
 # HUMAN GATE state, armed only by journey()/rollback_wave() from --confirm-execute / --confirm-convert.
 _gate = {"execute": False, "convert": ""}
@@ -634,6 +634,65 @@ def pins_cuj(url: str, *, pin_schema: str | None, confirm_execute: bool) -> None
     check("P7 remove pin run", result == "SUCCESS", result)
     check(f"P8 {scope} is no longer pinned",
           all(p.get("scope_key") != scope for p in jo.team_pins(j.pins_row())))
+
+
+def _raw_call(url: str, name: str, arguments: dict) -> tuple[bool, dict]:
+    """(isError, doc) for one tools/call, without the HUMAN GATE (only for calls that must not act)."""
+    r = jsonrpc(url, "tools/call", {"name": name, "arguments": arguments}, req_id=next(_rpc_ids))
+    if r.status_code != 200:
+        raise RuntimeError(f"{name}: HTTP {r.status_code}: {r.text[:300]}")
+    result = parse_result(r)
+    content = result.get("content") or [{}]
+    return bool(result.get("isError")), json.loads(content[0].get("text") or "{}")
+
+
+def permissions_cuj(url: str, *, scopes: str | None, confirm_execute: bool) -> None:
+    """Install permissions over /mcp, as the caller: the read, the refusals (no confirm, a stale
+    plan_id, a jobs identity change), and with --confirm-execute the grant of the previewed plan
+    and its read-back. Never revokes: hand-back is read here (its plan), run by a human."""
+    names = tool_names(url)
+    check("K1 mtm_get_permissions is listed", "mtm_get_permissions" in names)
+    check("K1 the gated writes are listed (deployed tier v2)",
+          {"mtm_grant_permissions", "mtm_hand_back_convert_rights"} <= names)
+    args = {"scopes": scopes} if scopes else {}
+    view = call_tool(url, "mtm_get_permissions", args)
+    pid = str(view.get("plan_id") or "")
+    check("K2 the read answers as the caller with a plan_id", view.get("state") in ("ready", "cannot_act", "not_installed")
+          and (view.get("state") != "ready" or len(pid) == 12), json.dumps({k: view.get(k) for k in ("state", "reason", "plan_id")}))
+    lines = view.get("lines") or []
+    check("K2 every plan line has a read-back status",
+          all(l.get("status") in ("present", "missing", "unknown") for l in lines), f"{len(lines)} lines")
+    check("K2 a line the read cannot settle carries its grantor or commands",
+          all(l.get("grantor") or l.get("commands") for l in lines if l.get("status") == "unknown"))
+    if view.get("state") != "ready":
+        check("K2 not ready answers with the CLI command", "databricks bundle run install" in str(view.get("cli_command")))
+        return
+    err, doc = _raw_call(url, "mtm_grant_permissions", {**args, "plan_id": pid})
+    check("K3 without confirm it asks and runs nothing", not err and doc.get("needs_confirmation") is True, json.dumps(doc)[:200])
+    err, doc = _raw_call(url, "mtm_grant_permissions", {**args, "plan_id": "000000000000", "confirm": True})
+    check("K4 a stale plan_id is refused with the current one", err and doc.get("status") == 409 and doc.get("plan_id") == pid,
+          json.dumps(doc)[:200])
+    err, doc = _raw_call(url, "mtm_grant_permissions", {**args, "plan_id": pid, "jobs_identity": "sp:x", "confirm": True})
+    check("K5 a jobs identity change cannot be sent over MCP", err and doc.get("status") == 400, json.dumps(doc)[:200])
+    hb = call_tool(url, "mtm_get_permissions", {**args, "action": "revoke_convert"})
+    handback = hb.get("handback") or {}
+    check("K6 the hand-back plan reads with its own plan_id", len(str(handback.get("plan_id") or "")) == 12,
+          f"{len(handback.get('revokes') or [])} revokes, {len(handback.get('refused') or [])} refused")
+    _gate["execute"] = bool(confirm_execute)
+    if not confirm_execute:
+        print(f"HUMAN GATE: rerun with --confirm-execute to grant plan {pid} as you "
+              f"({view.get('pending')} pending, {view.get('need_someone_else')} for someone else).")
+        return
+    out = call_tool(url, "mtm_grant_permissions", {**args, "plan_id": pid, "confirm": True})
+    outcomes = [r.get("outcome") for r in out.get("results") or []]
+    check("K7 the grant ran the previewed plan with no failure", out.get("plan_id") == pid and "failed" not in outcomes,
+          json.dumps({o: outcomes.count(o) for o in set(outcomes)}))
+    check("K7 nothing ran without its audit row", not out.get("audit_errors"), json.dumps(out.get("audit_errors"))[:200])
+    summary = out.get("summary") or {}
+    check("K8 the read-back finds every grant it ran", all(
+        l.get("status") == "present" for l in out.get("lines") or []
+        if any(r.get("statement") == l.get("statement") and r.get("outcome") == "granted" for r in out.get("results") or [])),
+        json.dumps(summary))
 
 
 def rollback_wave(url: str, *, wave_id: str, reason: str, plan_run_id: str | None, confirm_execute: bool) -> None:
@@ -916,18 +975,22 @@ def main() -> int:
                     help="focus mode: walk --schema wave by wave through /mcp (MUTATING; see README).")
     ap.add_argument("--pins", action="store_true", help="team pins over /mcp (read-only unless --confirm-execute).")
     ap.add_argument("--pin-schema", help="--pins: the scope to add then remove (needs --confirm-execute).")
+    ap.add_argument("--permissions", action="store_true",
+                    help="install permissions over /mcp as you (read + refusals; grants only with --confirm-execute).")
+    ap.add_argument("--scopes", help="--permissions: comma-separated catalog.schema / catalog.* to plan for.")
     ap.add_argument("--reason", help="--rollback-wave: the rollback reason (required).")
     ap.add_argument("--plan-run-id", help="--rollback-wave: the exact plan pin (required with --confirm-execute; "
                                           "a dry run defaults to the only plan in wave_plan).")
     args = ap.parse_args()
 
     if not (args.probe or args.oracle or args.cuj or args.guardrails or args.journey or args.rollback_wave
-            or args.focus_journey or args.pins):
+            or args.focus_journey or args.pins or args.permissions):
         print("Pass --probe (M1 transport), --oracle (L3 cross-surface), --cuj (M2 read rows), "
               "--guardrails (M4), and/or one of --journey --wave W (M5 journey) or --rollback-wave W "
               "--reason R (M5 rollback). CUJ rows: see backend/.e2e/README.md.")
         return 2
-    if (args.journey or args.rollback_wave or args.guardrails or args.focus_journey or args.pins) and not args.profile:
+    if (args.journey or args.rollback_wave or args.guardrails or args.focus_journey or args.pins
+            or args.permissions) and not args.profile:
         print("--journey / --rollback-wave / --guardrails need an explicit --profile (never defaulted).")
         return 2
     if args.journey and not args.wave:
@@ -961,6 +1024,8 @@ def main() -> int:
                       max_steps=args.max_steps)
     if args.pins:
         pins_cuj(url, pin_schema=args.pin_schema, confirm_execute=args.confirm_execute)
+    if args.permissions:
+        permissions_cuj(url, scopes=args.scopes, confirm_execute=args.confirm_execute)
     if args.rollback_wave:
         rollback_wave(url, wave_id=args.rollback_wave, reason=args.reason.strip(),
                       plan_run_id=args.plan_run_id, confirm_execute=args.confirm_execute)
@@ -974,7 +1039,8 @@ def main() -> int:
     ran = " + ".join(m for m, on in (("M1 transport", args.probe), ("L3 oracle", args.oracle),
                                      ("M2 CUJ", args.cuj), ("M4 guardrails", args.guardrails),
                                      ("M5 journey", args.journey), ("rollback", bool(args.rollback_wave)),
-                                     ("focus journey", args.focus_journey), ("team pins", args.pins)) if on)
+                                     ("focus journey", args.focus_journey), ("team pins", args.pins),
+                                     ("install permissions", args.permissions)) if on)
     print(f"{ran}: all checks passed.")
     return 0
 

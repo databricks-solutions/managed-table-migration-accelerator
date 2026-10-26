@@ -12,8 +12,20 @@ import {
   tier2Specs,
 } from './grants.pure.js';
 import { type AuthoritySummary, authoritySummarySql, tallyAuthority } from './estate.pure.js';
+import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 
 const SP_PLACEHOLDER = '<app-sp-client-id>';
+const JOBS_PLACEHOLDER = '<jobs-run-as>';
+
+/**
+ * Who the deployed jobs run as, from each bound job's `run_as_user_name` (null = unreadable).
+ * `mixed` when the readable jobs disagree; then there is no single identity to grant to.
+ */
+export function jobsIdentityOf(runAs: (string | null)[]): { name: string | null; mixed: boolean } {
+  const distinct = [...new Set(runAs.filter((n): n is string => !!n && !!n.trim()).map((n) => n.trim()))];
+  if (distinct.length > 1) return { name: null, mixed: true };
+  return { name: distinct[0] ?? null, mixed: false };
+}
 /** Hard bound so a cold-warehouse read can't hang the request forever (mirrors diag.ts). */
 const GRANTS_TIMEOUT_MS = 45000;
 /** SHOW GRANTS statements in flight at once per plan (same bound as estate discovery). */
@@ -91,6 +103,9 @@ export interface GrantStatus {
 
 export interface GrantsPlanResponse {
   sp_client_id: string | null;
+  /** Who the jobs run as (the Tier 2 grantee); null when unreadable or `jobs_identity_mixed`. */
+  jobs_identity: string | null;
+  jobs_identity_mixed: boolean;
   control: { catalog: string; schema: string };
   tier1: GrantStatus[];
   /** `scan` = a profiled target in table_manifest; `selected` = a scope the admin picked in the panel. */
@@ -105,6 +120,8 @@ export interface GrantsPlanDeps {
   schema: string;
   /** The SP's client-id UUID (SELECT current_user()); null when unresolved. */
   currentUser: () => Promise<string | null>;
+  /** `run_as_user_name` of each job the app is bound to (null for one that could not be read). */
+  jobsRunAs: () => Promise<(string | null)[]>;
   /** Distinct in-scope EXTERNAL target catalog/schemas from table_manifest; [] when none/absent. */
   distinctTargets: () => Promise<{ catalog: string; schema: string }[]>;
   /** Scopes the admin selected in the panel, already validated by parseScopeParam. */
@@ -120,8 +137,9 @@ async function statusFor(
   spec: GrantSpec,
   sp: string | null,
   showGrants: GrantsPlanDeps['showGrants'],
+  placeholder: string = SP_PLACEHOLDER,
 ): Promise<GrantStatus> {
-  const spForSql = sp ?? SP_PLACEHOLDER;
+  const spForSql = sp ?? placeholder;
   const base = {
     privilege: spec.privilege,
     securableType: spec.securableType,
@@ -140,6 +158,7 @@ async function statusFor(
 /** Pure-ish core (DI'd): everything I/O is a dep, so it unit-tests with fakes. */
 export async function buildGrantsPlan(deps: GrantsPlanDeps): Promise<GrantsPlanResponse> {
   const sp = await deps.currentUser();
+  const jobs = jobsIdentityOf(await deps.jobsRunAs());
   const targets = await deps.distinctTargets();
   // USE SCHEMA, SELECT and MANAGE read the same SHOW GRANTS rows, so each securable is read once.
   const showGrants = memoByStatement(limitConcurrency(deps.showGrants, GRANTS_CONCURRENCY));
@@ -158,7 +177,9 @@ export async function buildGrantsPlan(deps: GrantsPlanDeps): Promise<GrantsPlanR
       catalog: t.catalog,
       schema: t.schema,
       source: t.source,
-      grants: await Promise.all(tier2Specs(t.catalog, t.schema).map((s) => statusFor(s, sp, showGrants))),
+      grants: await Promise.all(
+        tier2Specs(t.catalog, t.schema).map((s) => statusFor(s, jobs.name, showGrants, JOBS_PLACEHOLDER)),
+      ),
     })),
   );
 
@@ -167,6 +188,8 @@ export async function buildGrantsPlan(deps: GrantsPlanDeps): Promise<GrantsPlanR
 
   return {
     sp_client_id: sp,
+    jobs_identity: jobs.name,
+    jobs_identity_mixed: jobs.mixed,
     control: { catalog: deps.catalog, schema: deps.schema },
     tier1,
     tier2,
@@ -235,6 +258,19 @@ export function registerGrantsPlanRoute(app: Application): void {
           } catch {
             return null;
           }
+        },
+        jobsRunAs: async () => {
+          const client = getExecutionContext().client;
+          const ids = MIGRATION_ALIASES.map((a) => jobIdFor(a)).filter((id): id is number => id != null);
+          return Promise.all(
+            [...new Set(ids)].map(async (job_id) => {
+              try {
+                return (await client.jobs.get({ job_id })).run_as_user_name ?? null;
+              } catch {
+                return null;
+              }
+            }),
+          );
         },
         distinctTargets: async () => {
           try {

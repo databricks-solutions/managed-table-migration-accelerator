@@ -3,6 +3,7 @@ resources:
   jobs:
     job_05_validate:
       name: "[${bundle.target}] ${bundle.name} :: 05 validate"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "05-validate"

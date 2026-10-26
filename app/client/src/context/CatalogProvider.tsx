@@ -53,8 +53,8 @@ interface CatalogContextValue {
    *  genie_space_configured) IN PLACE, without remounting the app.
    *  This is how a handshake value job_99_setup writes AFTER boot self-heals in a running
    *  tab — no hard reload needed. A transient failure keeps the current config (never blanks
-   *  the app). Note: genie_available is the server's BOOT value (the plugin's spaces are fixed
-   *  at construct), so it only changes on an app restart — re-fetching won't flip it. */
+   *  the app). genie_available is live too: the server looks the Genie space up per request, so
+   *  re-fetching flips it as soon as the installer has created the space. */
   refreshConfig: () => Promise<void>;
 }
 

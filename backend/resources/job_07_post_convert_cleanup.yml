@@ -4,6 +4,7 @@ resources:
   jobs:
     job_07_post_convert_cleanup:
       name: "[${bundle.target}] ${bundle.name} :: 07 post-convert cleanup"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "07-cleanup"

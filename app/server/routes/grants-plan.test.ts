@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest';
-import { GRANTS_CONCURRENCY, buildGrantsPlan, createStatementCache, limitConcurrency } from './grants-plan.js';
+import {
+  GRANTS_CONCURRENCY,
+  buildGrantsPlan,
+  createStatementCache,
+  jobsIdentityOf,
+  limitConcurrency,
+} from './grants-plan.js';
 import { parseScopeParam, showGrantsStatement, tier1Specs } from './grants.pure.js';
 
 const SP = 'a1b2c3d4-0000-1111-2222-333344445555';
@@ -9,6 +15,7 @@ function deps(over: Partial<Parameters<typeof buildGrantsPlan>[0]> = {}) {
     catalog: 'ctl',
     schema: 'migration',
     currentUser: () => Promise.resolve<string | null>(SP),
+    jobsRunAs: () => Promise.resolve<(string | null)[]>([SP, SP]),
     distinctTargets: () => Promise.resolve([{ catalog: 'sales', schema: 'orders' }]),
     // Grant is "present" only for the exact statements we say landed.
     showGrants: (stmt: string) =>
@@ -51,6 +58,23 @@ describe('buildGrantsPlan', () => {
     expect(plan.sp_client_id).toBeNull();
     expect(plan.tier1.every((g) => g.present === 'unknown')).toBe(true);
     expect(plan.tier1[0].stmt).toContain('TO `<app-sp-client-id>`');
+  });
+
+  it('addresses tier2 to the jobs\' run_as, not the app SP', async () => {
+    const JOBS = 'deployer@example.com';
+    const plan = await buildGrantsPlan(deps({ jobsRunAs: () => Promise.resolve([JOBS, null, JOBS]) }));
+    expect(plan.jobs_identity).toBe(JOBS);
+    expect(plan.jobs_identity_mixed).toBe(false);
+    expect(plan.tier1[0].stmt).toContain('TO `' + SP + '`');
+    expect(plan.tier2[0].grants.every((g) => g.stmt.endsWith('TO `' + JOBS + '`'))).toBe(true);
+  });
+
+  it('jobs that disagree or cannot be read → placeholder and unknown, never the app SP', async () => {
+    const plan = await buildGrantsPlan(deps({ jobsRunAs: () => Promise.resolve(['a@x.com', 'b@x.com']) }));
+    expect(plan.jobs_identity).toBeNull();
+    expect(plan.jobs_identity_mixed).toBe(true);
+    expect(plan.tier2[0].grants.every((g) => g.present === 'unknown' && g.stmt.includes('<jobs-run-as>'))).toBe(true);
+    expect(jobsIdentityOf([null, ''])).toEqual({ name: null, mixed: false });
   });
 
   it('no targets → empty tier2 + targets_known false (run the profiler first)', async () => {

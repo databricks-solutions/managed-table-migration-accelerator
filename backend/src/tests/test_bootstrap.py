@@ -252,6 +252,19 @@ def test_ensure_control_plane_creates_and_returns_ownership_ledger(monkeypatch):
     ), "ownership_ledger table was never created by ensure_control_plane"
 
 
+def test_ensure_control_plane_creates_and_returns_migration_scope(monkeypatch):
+    from migration import manifest as mf
+
+    monkeypatch.setattr(mf, "ensure_manifest_table", lambda *a, **k: "c.s.table_manifest")
+
+    spark = _RecordingSpark()
+    fqns = b.ensure_control_plane(spark, "c", "s")
+
+    assert fqns["migration_scope"] == "c.s.migration_scope"
+    ddl = [s for s in spark.statements if "c.s.migration_scope" in s and "CREATE TABLE" in s.upper()]
+    assert ddl and "scope STRING" in ddl[0] and "removed_at TIMESTAMP" in ddl[0]
+
+
 def test_ensure_control_plane_creates_convert_authority_with_row_level_concurrency(monkeypatch):
     from migration import manifest as mf
 

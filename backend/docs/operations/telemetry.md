@@ -44,9 +44,10 @@ Every ping carries the product token `uc-ext2managed/<version>` (the SDK adds it
 | `e2m.mode` | `dry_run` · `execute` |
 | `e2m.outcome` | `ok` · `failed` (an item failed; the fail-loud raise follows) · `error` (the stage died before reporting) · `noop` · `refused` |
 | `e2m.sel` | `schema` · `bucket` · `wave` · `batch` · `table` · `none` (the selector *kind*, never its value) |
-| `e2m.n.<metric>` | band; metrics `targets`, `converted`, `failed`, `skipped`, `reconciled`, `validated`, `pending`, `rolled_back`, `refused`, `waves`, `batches`, `ops`, `manual`, `verified`, `restored`, `frozen`, `planned`, `discovered`, `hinted`, `switched`, `hint_fallback` (`08c`: tables clustered with ZORDER hints, manual keys switched to AUTO, hints rejected → plain AUTO) |
-| `e2m.f.<flag>` | `true`/`false` for `streaming`, `truncate_uniform`, `enable_po`, `force_vacuum`, `restore_prior_state`, `location_supplied` (never the location), `open_apis`, `genie`, `warehouse_set`, `app_bound`, `confirm_convert`, `discovery_error` |
+| `e2m.n.<metric>` | band; metrics `targets`, `converted`, `failed`, `skipped`, `reconciled`, `validated`, `pending`, `rolled_back`, `refused`, `waves`, `batches`, `ops`, `manual`, `verified`, `restored`, `frozen`, `planned`, `discovered`, `hinted`, `switched`, `hint_fallback` (`08c`: tables clustered with ZORDER hints, manual keys switched to AUTO, hints rejected → plain AUTO), `granted`, `present`, `missing`, `revoked` (the installer: grant lines run, read back present or missing, revoked) |
+| `e2m.f.<flag>` | `true`/`false` for `streaming`, `truncate_uniform`, `enable_po`, `force_vacuum`, `restore_prior_state`, `location_supplied` (never the location), `open_apis`, `genie`, `warehouse_set`, `app_bound`, `confirm_convert`, `discovery_error`, `confirm_grants`, `installer_group` (whether one is set, never its name) |
 | `e2m.bucket` · `e2m.finish_action` · `e2m.step` · `e2m.cockpit_action` | wave bucket (`lineage.ALL_BUCKETS`) · `run`/`defer`/`reopen` · conductor / bulk step kinds · `show`/`advance` |
+| `e2m.install_action` · `e2m.front_door` · `e2m.coverage` · `e2m.convert_rights` | installer action (`provision.ACTIONS`) · `notebook`/`cli`/`app` · coverage band `all`/`most`/`some`/`none` (never a count or a name) · `all_at_once`/`per_wave` |
 
 ### Pain points
 

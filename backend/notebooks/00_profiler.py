@@ -228,6 +228,7 @@ def _discover_from_system() -> "list":
         SELECT {DISCOVERY_COLS}
         FROM system.information_schema.tables
         WHERE table_type = 'EXTERNAL'
+          AND table_schema <> 'information_schema'
           AND {_like('table_catalog', CATALOG_FILTER)}
           AND {_like('table_schema', SCHEMA_FILTER)}
     """
@@ -253,6 +254,7 @@ def _discover_per_catalog() -> "list":
                 SELECT {DISCOVERY_COLS}
                 FROM `{cat}`.information_schema.tables
                 WHERE table_type = 'EXTERNAL'
+                  AND table_schema <> 'information_schema'
                   AND {_like('table_schema', SCHEMA_FILTER)}
             """
             out += spark.sql(sql).collect()
@@ -2232,7 +2234,7 @@ else:
     )
     print(pf.render_preflight_report(_tiers, _gaps))
     if _gaps:
-        print("\nBroad estate-wide alternatives (single-profiler-SP setup):")
+        print("\n" + pf.BROAD_ALTERNATIVES_NOTE)
         for _alt in pf.broad_grant_alternatives(PRINCIPAL):
             print(f"  {_alt}")
 

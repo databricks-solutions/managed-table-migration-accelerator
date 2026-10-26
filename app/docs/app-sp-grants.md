@@ -1,22 +1,26 @@
 # App service principal — identity, attribution, and the grants an admin must provision
 
-**Status** Design-complete (decision + grant contract). Companion to
+**Status** Built. Companion to
 [`control_plane.md`](./control_plane.md) — especially Part 0 ("the app reflects; the job
-enforces") and Part 3.12 (Connection & policy). **Code wiring is a separate follow-up**
-(see "Not in this note").
+enforces") and Part 3.12 (Connection & policy). The installer that grants these sets (notebook,
+CLI, Settings → Permissions, MCP) is designed and recorded as built in
+[`backend/docs/install-and-permissions.md`](../../backend/docs/install-and-permissions.md).
 
 ---
 
 ## Decision
 
-1. **One service principal does everything.** The app SP is *both* the app-execution
-   identity (control-plane reads, the single `migration_actions` write, `jobs.runNow`)
-   *and* the job `run_as` identity that executes `SET MANAGED` / `UNSET MANAGED` /
-   `VACUUM`. There is no second principal to reason about in **production**: `databricks.yml`
-   `var.prod_run_as_sp` MUST be set to the app SP. (In `dev` / `e2e` — development mode —
-   jobs have **no `run_as` override** and execute as the **deploying user**, not the SP; see
-   "`run_as` — who actually executes" below. This is why converts succeed in dev without any
-   grant to the SP.)
+1. **The jobs' identity is one bundle variable.** Every stage job carries
+   `run_as: ${var.jobs_run_as}` (a complex variable: `service_principal_name`, `group_name` or
+   `user_name`). It is the identity that executes `SET MANAGED` / `UNSET MANAGED` / `VACUUM`.
+   The default is whoever deploys. `prod` keeps its earlier behavior: `jobs_run_as` is set from
+   `var.prod_run_as_sp`, normally the app SP, so one SP both serves the app and runs the jobs.
+   The installer's `jobs_identity` option writes a different choice to
+   `.databricks/bundle/<target>/variable-overrides.json` and redeploys. The app SP always stays
+   the app-execution identity (control-plane reads, the single `migration_actions` write,
+   `jobs.runNow`). The `run_as` sits on each job, not on the target, because a target-level
+   `run_as` also applies to the app, and the Apps platform refuses a `run_as` other than the
+   app's owner.
 2. **`operator` is attribution only — never authorization.** App access (`CAN_USE` on the
    App) is the authorization boundary; this is an admin-only app. We do **not** gate
    triggers per-user (no OBO *authorization* step like Genie Workbench needs, because
@@ -69,10 +73,20 @@ A trigger involves **three** identities; only one of them runs the `ALTER TABLE`
 
 Because `run_as` is static:
 
-| Target | `mode` | `run_as` resolves to | Convert authority satisfied by |
+| Target | `mode` | `run_as` resolves to (`var.jobs_run_as`) | Convert authority satisfied by |
 |---|---|---|---|
-| `dev` / `e2e` | `development` | the **deploying user** (no override) | the deployer's own ownership or `MANAGE` |
-| `prod` | `production` | `${var.prod_run_as_sp}` (the app SP) | the **SP** — needs `MANAGE` (Tier 2) plus `SELECT` + `MODIFY` |
+| `dev` / `e2e` | `development` | the **deploying user** (the default) | the deployer's own ownership or `MANAGE` |
+| `prod` | `production` | `${var.prod_run_as_sp}` (normally the app SP) | the **SP** — needs `MANAGE` (Tier 2) plus `SELECT` + `MODIFY` |
+| any | any | the installer's `jobs_identity` choice, after the redeploy | that identity |
+
+The jobs' identity also needs `CAN_MANAGE_RUN` on every job of the deployment, so the `09` /
+`11e` cockpits and the conductor tails can start other jobs. The installer plans and grants it
+(a `JOBS` line, an additive Permissions API update that keeps the app SP's own run permission).
+It is not a bundle `permissions` block: bundle-managed job permissions replace the whole access
+list, which would remove the run permission the app's job bindings give the app SP. Deploying
+as a service principal? Set `jobs_run_as`: the default names a user. The Settings grants panel
+addresses Tier 2 to the identity read from the deployed jobs' `run_as`, and shows a
+`<jobs-run-as>` placeholder when the jobs disagree or cannot be read.
 
 **This is why converts "just worked" in dev/e2e:** the job ran as *you* (the deployer) and
 you own the seeded estate — the SP was never the executor. The prod/SP authority path is a
@@ -84,9 +98,27 @@ OBO token cannot back a long-running async job (the same reason user tokens are 
 forwarded into jobs). You *could* statically set prod `run_as` to a specific admin **user**
 (converts would work via that user's authority), but every run would then execute as that one
 human — brittle, non-rotatable, and still needing the `operator` param for attribution — which
-is exactly why prod uses an SP. `run_as` also cannot be a group.
+is exactly why prod uses an SP. A group (`run_as.group_name`) is possible too, through
+`jobs_run_as`; a dedicated service principal is the recommended production choice because it
+outlives the app.
 
 ---
+
+## Two identities, four grant sets (what the installer grants)
+
+The installer plans every grant in one reviewed plan, split by **grantee**:
+
+| Identity | Who it is | Grant sets it receives |
+|---|---|---|
+| **The app's service principal** | Created with the app; reads the control plane and starts runs | **Control**: Tier 1 below (`job_99_setup` grants it) |
+| **The jobs' identity** | The deployed jobs' `run_as` (`jobs_run_as`), read from the jobs, never typed | **Control** (`USE CATALOG` + `CREATE SCHEMA` on the control catalog, `CAN_READ` on the deployment folder, `CAN_MANAGE_RUN` on its jobs), **Look** (`BROWSE` or `READ METADATA`, and the `system` schemas), **Read** (`USE SCHEMA` + `SELECT` per migrated schema) and **Change** (`MANAGE` per migrated schema, all at once or per wave, handed back after cleanup) |
+
+The installers' group (`installer_group`, falling back to the installer) gets write access to the
+install records (`migration_scope`, `ownership_ledger`, `audit_log`). Grants run as the person at
+the keyboard: the notebook session, the CLI profile, or the signed-in admin in Settings →
+Permissions (their forwarded token, never the app's identity). The app's own service principal gains
+no new authority. Tier 2 below is the same Read + Change scope, as copy-paste SQL for an admin who
+prefers to run it by hand.
 
 ## The two grant tiers
 
@@ -122,8 +154,9 @@ every case records what `SET MANAGED` actually did). The convert identity needs,
 **Ownership never changes.** The `SET MANAGED` error "User is not an owner" is raised for a missing
 authority even when ownership is not needed (`authority.explain_failure` says so).
 
-> This only bites when `run_as` is the SP (prod). In dev/e2e, `run_as` is the deploying user,
-> whose own privileges usually cover convert — see the `run_as` table above.
+> This only bites when `run_as` is a service principal (prod by default). With the default
+> `jobs_run_as`, `run_as` is the deploying user, whose own privileges usually cover convert —
+> see the `run_as` table above.
 
 Per target catalog/schema being migrated:
 
@@ -374,6 +407,12 @@ This is a UX degradation, **not** a correctness problem — and it must be surfa
 > `GET /api/estate/obo-discovery` (admin-visibility scope pre-fill), and
 > `GET /api/grants/convert-permissions.sql` (the per-grantor convert-permission grant script; the
 > old `ownership.sql` path is an alias). The app generates and verifies; it never executes a grant.
+>
+> **Now titled "Permissions the app needs"**, and it sits below the **Permissions** panel
+> (`app/client/src/pages/settings/PermissionsPanel.tsx`, `GET/POST /api/permissions*`). That panel
+> is the installer's Settings front door: it runs the shared rights check and grant plan, and its
+> **Grant** and **Hand back** run as the signed-in admin (their forwarded token), never as the app
+> SP. This panel stays read-only.
 
 A prominent, read-only **"Grants the App SP needs"** panel. The app **generates** the SQL;
 it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 download-not-send).

@@ -108,6 +108,12 @@ ACTION_REVOKE_PRIVILEGE = "REVOKE_PRIVILEGE"
 # Legacy ownership lease bracket (07 still restores leases taken before convert authority).
 ACTION_LEASE_OWNERSHIP = "LEASE_OWNERSHIP"
 ACTION_RESTORE_OWNERSHIP = "RESTORE_OWNERSHIP"
+# Install and permissions (migration.provision): one row per grant the installer issued, skipped as
+# already held, or revoked. full_name is the securable (a catalog, catalog.schema or table name);
+# detail JSON carries the front door, plan_id, set, grantee, privilege and added/prior_held.
+ACTION_INSTALL_GRANT = "INSTALL_GRANT"
+ACTION_INSTALL_GRANT_SKIPPED = "INSTALL_GRANT_SKIPPED"
+ACTION_INSTALL_REVOKE = "INSTALL_REVOKE"
 # Team pins (job_08_conductor pin task / the conductor's auto-clear; migration.focus). Schema-level
 # rows: full_name is the pinned group_key (a catalog.schema, or a catalog), "*" for CLEAR_PINS.
 # Recommendation order only — nothing here touches a table.

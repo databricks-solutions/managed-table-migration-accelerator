@@ -260,6 +260,10 @@ def ensure_control_plane(spark, manifest_catalog: str, manifest_schema: str) -> 
     # row-level concurrency so parallel bulk waves authorizing disjoint tables don't conflict.
     ownership_ledger_fqn = own.ensure_ownership_ledger_table(spark, manifest_catalog, manifest_schema)
     spark.sql(cc.enable_row_level_concurrency_sql(ownership_ledger_fqn))
+    # migration_scope: the installer's chosen scopes, written by every front door (MERGE on scope,
+    # rows flagged removed, never deleted), so a CLI install can be carried on in the app.
+    from . import provision as pv
+    spark.sql(pv.create_scope_table_sql(manifest_catalog, manifest_schema))
     # convert_authority: the latest "can the convert identity SET MANAGED this table" verdict,
     # MERGEd by the profiler / dry run / authorize / convert / conductor writers — several of
     # which run in parallel under bulk fan-out, hence row-level concurrency. Ensured BEFORE
@@ -329,6 +333,7 @@ def ensure_control_plane(spark, manifest_catalog: str, manifest_schema: str) -> 
         "compaction_sources": cp.compaction_sources_fqn(manifest_catalog, manifest_schema),
         "freeze_ledger": ex.freeze_ledger_fqn(manifest_catalog, manifest_schema),
         "ownership_ledger": own.ownership_ledger_fqn(manifest_catalog, manifest_schema),
+        "migration_scope": pv.scope_table_fqn(manifest_catalog, manifest_schema),
         "convert_authority": authz.convert_authority_fqn(manifest_catalog, manifest_schema),
         "validation_results": vd.validation_results_fqn(manifest_catalog, manifest_schema),
         "wave_gate_evaluation": ge.gate_eval_fqn(manifest_catalog, manifest_schema),

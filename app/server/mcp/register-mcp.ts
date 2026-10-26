@@ -26,6 +26,11 @@ import { pickWaveRow } from './finishSteps.pure.js';
 import { OPEN_APIS_REASON } from '../../client/src/lib/compatOpenApis.pure.js';
 import type { ConvertImpacts } from './convertImpacts.pure.js';
 import { getRunStatus } from './run-status.js';
+import {
+  GRANT_PERMISSIONS_ARGS, GRANT_PERMISSIONS_DESCRIPTION, GRANT_PERMISSIONS_TOOL_NAME, HAND_BACK_ARGS, HAND_BACK_DESCRIPTION,
+  HAND_BACK_TOOL_NAME, PERMISSIONS_ARGS, PERMISSIONS_DESCRIPTION, PERMISSIONS_TOOL_NAME, getPermissions, grantPermissionsTool,
+  handBackTool, liveDepsOf,
+} from './permissions-tools.js';
 
 type ToolDef = {
   name: string;
@@ -107,6 +112,14 @@ export const MCP_INSTRUCTIONS = [
   '- mtm_authorize_convert grants only what the convert identity can grant itself, verifies, and records',
   '  it so cleanup revokes only what it added. Call it only when `authorize_can_close` is true; otherwise',
   '  send the `grant_script` section addressed to each owner, then re-run Authorize to re-check.',
+  '',
+  'Install permissions:',
+  '- "What permissions does the migration need / am I missing / who must grant it" \u2192 call',
+  '  mtm_get_permissions (read as the caller). Relay `state`, `reason` and each line\u2019s grantor; when',
+  '  `state` is not ready, give the user `cli_command` and `request`, never a workaround.',
+  '- mtm_grant_permissions and mtm_hand_back_convert_rights run as the CALLER (never the app), need',
+  '  confirm=true and the plan_id the read returned for the same arguments; a changed plan runs nothing.',
+  '  Show the plan lines first. Job permissions and who runs the jobs stay CLI steps (`cli_command`).',
   '',
   'Workstreams around a conversion (papercuts):',
   '- Streaming stop/restart and compaction freeze/unfreeze are ONE bracket: mtm_freeze before convert,',
@@ -388,6 +401,28 @@ export function allToolDefs(env: NodeJS.ProcessEnv = process.env): ToolDef[] {
       return getConvertPermissions({ query: (name, extra) => runControlQuery(name, extra) }, parsed.data);
     },
   });
+
+  // Install permissions — the Settings → Permissions engine, read as the caller (their forwarded token).
+  defs.push({
+    name: PERMISSIONS_TOOL_NAME,
+    description: PERMISSIONS_DESCRIPTION,
+    inputSchema: toInputSchema(PERMISSIONS_ARGS),
+    handler: (args, req) => getPermissions(liveDepsOf, args, req),
+  });
+  if (mcpTier(env) === 'v2') {
+    defs.push({
+      name: GRANT_PERMISSIONS_TOOL_NAME,
+      description: GRANT_PERMISSIONS_DESCRIPTION,
+      inputSchema: withConfirmProperty(toInputSchema(GRANT_PERMISSIONS_ARGS)),
+      handler: (args, req) => grantPermissionsTool(liveDepsOf, args, req),
+    });
+    defs.push({
+      name: HAND_BACK_TOOL_NAME,
+      description: HAND_BACK_DESCRIPTION,
+      inputSchema: withConfirmProperty(toInputSchema(HAND_BACK_ARGS)),
+      handler: (args, req) => handBackTool(liveDepsOf, args, req),
+    });
+  }
 
   // Path-based access — shaped per table (located usages + Verify + redirect eligibility/opt-in).
   defs.push({

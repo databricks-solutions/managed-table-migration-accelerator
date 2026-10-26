@@ -92,33 +92,51 @@ flowchart LR
 - **Operators, day to day:** `CAN_USE` on the app. Nothing else.
 - **The jobs, per table:** ownership **or** `MANAGE`, plus `SELECT` + `MODIFY`. Ownership never
   changes; **Authorize** grants only what is missing.
+- **At install** the installer grants the jobs read access and, by default, `MANAGE` on each schema
+  you migrate, in one reviewed plan. A person hands `MANAGE` back after cleanup. Granting it per
+  wave instead is the stricter option.
 
 Every identity, privilege and grant statement, step by step:
 [Who needs which permissions](./docs/00-installation.md#who-needs-which-permissions).
 
 ## Install
 
-Pick one path. Both deploy the same bundle: the jobs, the dashboard, and the app.
+Deploy the bundle, then run the **installer**. It checks your rights up front, shows exactly what
+it will grant, grants it after you confirm, reads every grant back and verifies the app. Nothing
+is granted until you confirm, and if you cannot grant something it says who can.
 
-**From the workspace (no local tools)**
+```mermaid
+flowchart LR
+  deploy["Deploy"] --> check["Check rights"] --> plan["Preview grants"] --> apply["Apply + verify"]
+  apply --> migrate["Profile, plan,<br/>convert"] --> handback["Hand convert<br/>rights back"]
+```
 
-1. Clone this repository into a Databricks **Git folder**.
-2. Open `databricks.yml`, click the **Deployments** icon, choose a target and click **Deploy**.
-3. Open `backend/notebooks/install.py` and click **Run all**. It creates the control tables, the
-   Genie space and the app's grants, asks you to deploy once more, profiles your estate, and
-   prints the app URL.
+| Front door | How |
+|---|---|
+| **Notebook** (no local tools) | Clone into a **Git folder**, open `databricks.yml`, click **Deployments → Deploy**, then open `backend/notebooks/install.py` and **Run all** |
+| **CLI** | `databricks bundle deploy`, then `databricks bundle run install` (below) |
+| **The app**, after the first install | **Connection & policy → Permissions**: add schemas, grant as you, hand rights back |
 
-**From your laptop (Databricks CLI)**
+Run all first with `action=check`: one line per requirement, and how much of the estate you can
+grant on.
+
+![The installer's rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity and the install records, a warning for metastore admin, and the coverage headline](docs/images/install/notebook/rights.png)
+
+Then set `confirm_grants=true` and the printed `plan_id`, and run all again. The run ends with
+`VERIFY PASSED` and the app URL.
 
 ```bash
 git clone https://github.com/databricks-solutions/managed-table-migration-accelerator.git
 cd managed-table-migration-accelerator
 
-databricks bundle validate -t dev --profile <profile> --var="warehouse_id=<warehouse-id>"
-databricks bundle deploy   -t dev --profile <profile> --var="warehouse_id=<warehouse-id>"
-databricks bundle run job_99_setup     -t dev --profile <profile>
-databricks bundle run job_08_conductor -t dev --profile <profile>
+databricks bundle deploy -t dev --profile <profile> --var="warehouse_id=<warehouse-id>"
+MTM_ACTION=check databricks bundle run install -t dev --profile <profile>        # read-only
+MTM_SCOPES='sales.*' databricks bundle run install -t dev --profile <profile>    # preview the plan
+MTM_SCOPES='sales.*' MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+  databricks bundle run install -t dev --profile <profile>                        # apply it
 ```
+
+![The CLI check: the rights and coverage report, the stored scopes, and the grant plan with one Change line missing](docs/images/install/cli/check.png)
 
 Before deploying, set the `dev` target's workspace `host` in `databricks.yml` (it ships as a
 placeholder), and the catalog and schema for the control tables if `main.migration` is not right
@@ -134,8 +152,9 @@ should be green: the control plane is provisioned, the app's grants are in place
 warehouse answers. If something is red, see
 [Troubleshooting](./docs/00-installation.md#troubleshooting).
 
-The full guide, including production (`-t prod` with a service principal), the e2e target, and
-uninstalling, is [Installation](./docs/00-installation.md).
+The full guide, with every option, each step's screenshots, Genie Code, handing convert rights back,
+production (`-t prod` with a service principal), the e2e target, and uninstalling, is
+[Installation](./docs/00-installation.md).
 
 ## Your first migration
 

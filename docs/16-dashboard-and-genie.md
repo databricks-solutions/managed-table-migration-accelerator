@@ -102,9 +102,8 @@ logged and never fails the setup job.
 databricks bundle deploy -t <target> --profile <profile> --var="warehouse_id=<warehouse-id>"
 ```
 
-The app picks up a new Genie space only after a restart, and a restart means a bundle redeploy, not
-`databricks apps stop` / `start`. See [Restarting the app](./00-installation.md#restarting-the-app)
-and the cold-warehouse note under [Troubleshooting](./00-installation.md#troubleshooting).
+The app looks the Genie space up when a request needs it, so a space the installer creates after
+the deploy works without a redeploy: open (or reopen) the Genie panel once the installer finishes.
 
 The embedded dashboard in the app needs no grant for the app's service principal: with basic
 embedding it renders under the viewing user's identity.

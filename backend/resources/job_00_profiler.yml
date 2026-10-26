@@ -26,6 +26,7 @@ resources:
       # suffix (migration.install.OPERATOR_JOB_LABELS) and the app's run pill keys off it. The
       # folded source scan is an internal task, not a rename.
       name: "[${bundle.target}] ${bundle.name} :: 00 profiler"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "00-profiler"

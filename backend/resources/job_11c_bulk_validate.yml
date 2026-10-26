@@ -6,6 +6,7 @@ resources:
   jobs:
     job_11c_bulk_validate:
       name: "[${bundle.target}] ${bundle.name} :: 11c bulk validate"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "11c-bulk-validate"

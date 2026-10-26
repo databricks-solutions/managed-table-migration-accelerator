@@ -14,6 +14,7 @@ resources:
   jobs:
     job_08b_enable_compat:
       name: "[${bundle.target}] ${bundle.name} :: 08b enable compatibility mode"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "08b-enable-compat"

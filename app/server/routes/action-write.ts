@@ -14,9 +14,10 @@ import { migrationTableFqn } from '../config/catalog.js';
  * as the service principal (admin-only app; SP is the correct identity). Raw
  * statement execution => no AppKit result cache; single call => no retry.
  *
- * There is no operator-edit trail: the PRD forbids app writes to audit_log (no
- * operator-edit action token exists and audit_log cannot identify an action_key), so
- * only current values persist. No audit append.
+ * There is no operator-edit trail: no operator-edit action token exists and audit_log
+ * cannot identify an action_key, so only current values persist. No audit append. (The
+ * only app writes to audit_log are the installer's INSTALL_* rows, as the signed-in admin,
+ * in permissions/provisionFlow.ts — SR17.)
  */
 
 // Columns the app may write. These names are hard-coded literals and are NEVER

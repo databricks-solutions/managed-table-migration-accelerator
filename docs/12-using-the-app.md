@@ -28,6 +28,20 @@ From `app/client/src/components/nav.ts` (four nav groups, plus the workstream de
 Genie is a docked panel available on every route, not a route of its own (the **Ask Genie**
 button, backed by the Genie space).
 
+**Permissions** (`/settings#permissions`, under **Connection & policy**) is the installer's third
+front door. It runs the same rights check and grant plan as the install notebook and CLI, for the
+signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
+after a confirm that lists each statement and pins the previewed `plan_id`. From there you can add
+schemas to the migration scope, switch convert rights between all at once and per wave, and hand
+convert rights back. Lines you cannot grant name who can, with **Copy request**. When a stored scope
+or the control plane is missing a grant, a banner on every page links here. The convert gate offers
+**Grant convert rights** for a per-wave install, and the runbook's **Hand back convert rights** rows
+have a **Hand back** button. If the workspace does not let the app run SQL for you, the page shows the
+notebook and CLI commands instead. Step by step, with screenshots:
+[Installation](./00-installation.md#carry-on-in-the-app).
+
+![Settings → Permissions: the rights check, who runs the jobs, the migration scope with Look, Read and Change status per schema, convert rights, and the plan](images/install/app/settings-permissions.png)
+
 The app is also an **MCP server** at `POST /mcp` (`app/server/mcp/`). Connected to Genie Code as
 a custom MCP server, it exposes the same reads and job triggers as tools, so the migration can be
 driven in plain language from the workspace assistant. It adds no authority: mutating tools need
@@ -135,8 +149,8 @@ enforces every gate. See [Bulk convert](./14-bulk-convert.md).
 Deploy with `databricks bundle deploy`; the one root bundle owns the app lifecycle. Do
 not run standalone `databricks apps deploy`, and do not restart the app with
 `databricks apps stop/start` (that drops the bundle's `config.env` and the app crashes at boot
-on `MIGRATION_CATALOG`). To restart (for example to pick up a freshly written `genie_space_id`),
-re-run `databricks bundle deploy -t <target>`.
+on `MIGRATION_CATALOG`). To restart, re-run `databricks bundle deploy -t <target>`. A freshly
+written `genie_space_id` needs no restart: the app looks it up per request.
 
 > Note the known drift: `app/README.md` has local `apps deploy` wording. The truth is that the
 > root bundle owns deploy, and the root `databricks.yml` intentionally has no `artifacts:` block

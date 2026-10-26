@@ -11,7 +11,6 @@ resources:
       schema: e2e_dlt
       serverless: true
       channel: CURRENT
-      development: true
       libraries:
         - file:
             path: ../notebooks/e2e/dlt_pipeline.py

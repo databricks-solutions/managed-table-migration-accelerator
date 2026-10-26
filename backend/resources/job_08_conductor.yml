@@ -6,6 +6,7 @@ resources:
   jobs:
     job_08_conductor:
       name: "[${bundle.target}] ${bundle.name} :: 08 conductor"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "08-conductor"

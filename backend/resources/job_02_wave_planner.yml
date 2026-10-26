@@ -7,6 +7,7 @@ resources:
   jobs:
     job_02_wave_planner:
       name: "[${bundle.target}] ${bundle.name} :: 02 wave planner"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "02-wave-planner"

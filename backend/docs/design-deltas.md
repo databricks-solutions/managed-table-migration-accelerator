@@ -191,7 +191,7 @@ tiered least-privilege recipe:
 | Pass | Runs | Minimum privilege |
 |---|---|---|
 | Discovery | `information_schema.tables` | `BROWSE` per catalog (estate-wide via `All account users`) |
-| Enrichment | `DESCRIBE DETAIL`/`HISTORY` | `USE CATALOG`+`USE SCHEMA`+`SELECT`, or `READ METADATA` at metastore *(validate empirically)* |
+| Enrichment | `DESCRIBE DETAIL`/`HISTORY` | `USE CATALOG`+`USE SCHEMA`+`SELECT`. `READ METADATA` does not substitute (tested 2026-10-26; see [`install-and-permissions.md`](./install-and-permissions.md#3-what-a-read-only-profiler-identity-actually-needs-tested)) |
 | System tables | `system.access.*`, `system.compute.*`, `system.lakeflow.*` | `USE CATALOG system` + explicit `SELECT` (these do **not** auto-filter) |
 | Workspace reach | all of the above | run **in each workspace** with bound catalogs |
 

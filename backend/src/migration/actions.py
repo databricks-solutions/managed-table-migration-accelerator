@@ -1435,10 +1435,15 @@ def generate_ownership_actions(
 def obsolete_keys(existing_open_keys: Iterable[str], generated_keys: Iterable[str]) -> list[str]:
     """Open action keys that the current generation no longer produces (signal cleared).
 
-    These get flipped to OBSOLETE (never deleted). Returns a sorted, de-duplicated list.
+    These get flipped to OBSOLETE (never deleted). Returns a sorted, de-duplicated list. The
+    installer hand-back (a schema-scoped RESTORE_OWNERSHIP 07 opens) is never generated here, so it
+    is never obsoleted by a regeneration; revoke_convert closes it.
     """
+    from . import provision as _pv  # noqa: PLC0415 — provision imports nothing from actions
+
     gen = {k for k in (generated_keys or []) if k}
-    return sorted({k for k in (existing_open_keys or []) if k and k not in gen})
+    return sorted({k for k in (existing_open_keys or [])
+                   if k and k not in gen and not _pv.is_handback_action_key(k)})
 
 
 def bracket_keys_to_obsolete(

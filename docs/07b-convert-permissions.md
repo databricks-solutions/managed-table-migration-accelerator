@@ -103,6 +103,27 @@ Each revoke is audited first and verified with `SHOW GRANTS` before the ledger f
 Tables leased under the older ownership model (`LEASE` rows, status `LEASED`) are still
 restored to their recorded `prior_owner` at cleanup. No new lease is ever taken.
 
+## Convert rights granted at install
+
+Authorize can grant `SELECT` and `MODIFY` only because the convert identity already holds `MANAGE`
+on the schema: a job can never give itself `MANAGE`. The installer grants it, in the same reviewed
+plan as the read access ([Installation](./00-installation.md#what-the-installer-grants)):
+
+- **All at once** (the default): `MANAGE` on every schema you migrate, at install. No person is
+  needed between waves.
+- **Per wave** (the stricter option): `MANAGE` on one wave's schemas, just before it converts, with
+  `action=grant_convert` or **Grant convert rights** on the convert gate.
+
+Each is recorded as an `INSTALL|…` row in `ownership_ledger` (`added`, or `prior_held` when the
+identity already held it). The jobs' identity cannot revoke its own `MANAGE`, so cleanup does not
+revoke these rows. Once every table in the schema is `CLEANED` or `ROLLED_BACK`, cleanup marks the
+row `HANDBACK_READY` and opens a **Hand back convert rights** item on the runbook, with the exact
+`REVOKE`. A person hands it back from any front door (`action=revoke_convert`, the runbook's **Hand
+back**, or `mtm_hand_back_convert_rights`). A schema with a table inside its 14-day window is
+refused, and a grant the tool did not add is never revoked.
+
+![The runbook row Hand back convert rights on a schema, with its REVOKE and its Hand back button](images/install/app/runbook-handback.png)
+
 ## The convert-time gate
 
 `04_convert` does not trust a stored verdict. Before any `SET MANAGED` it re-reads the

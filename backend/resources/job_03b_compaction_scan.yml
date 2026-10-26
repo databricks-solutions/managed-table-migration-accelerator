@@ -6,6 +6,7 @@ resources:
   jobs:
     job_03b_compaction_scan:
       name: "[${bundle.target}] ${bundle.name} :: 03b compaction scan"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "03b-compaction-scan"

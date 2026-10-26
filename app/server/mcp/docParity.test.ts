@@ -41,6 +41,17 @@ describe('genie-code-mcp.md documents the path-based access tools', () => {
   });
 });
 
+describe('genie-code-mcp.md documents the install permissions tools', () => {
+  const doc = readFileSync(resolve(HERE, '../../../backend/docs/integration/genie-code-mcp.md'), 'utf8');
+  const tools = readFileSync(resolve(HERE, 'permissions-tools.ts'), 'utf8');
+  it('lists the read tool and both v2 writes the server registers', () => {
+    for (const name of ['mtm_get_permissions', 'mtm_grant_permissions', 'mtm_hand_back_convert_rights']) {
+      expect(tools).toContain(`'${name}'`);
+      expect(doc).toContain(`| \`${name}\` |`);
+    }
+  });
+});
+
 describe('client verdict literals are live PreflightVerdict members', () => {
   const code = readFileSync(resolve(HERE, 'conversionPreflight.pure.ts'), 'utf8');
   const live = new Set(verdicts(code));

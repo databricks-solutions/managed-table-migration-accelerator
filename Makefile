@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 TARGET ?= dev
 
-.PHONY: help validate deploy deploy-prod test ci release-check release typegen-check setup profiler wave-plan dry-run convert validate-stage rollback cleanup e2e-all
+.PHONY: help validate deploy deploy-prod test ci release-check release typegen-check install setup profiler wave-plan dry-run convert validate-stage rollback cleanup e2e-all
 
 # Convert selector (schema is the safe default). Streaming waves are excluded from a
 # schema/bucket scope unless INCLUDE_STREAMING=true (or BUCKET=streaming).
@@ -52,6 +52,9 @@ typegen-check: ## Fail if committed app query types drift from the .sql (run bef
 	cd app && npm run typegen -- --wait
 	git diff --exit-code app/shared/appkit-types/
 
+
+install: ## Run the install CLI (rights, plan, grants; options as MTM_* env, e.g. MTM_ACTION=check)
+	databricks bundle run install -t $(TARGET) $(if $(PROFILE),--profile $(PROFILE),)
 
 setup: ## Run stage 99 setup (install-time: Genie space + App SP grants; order-independent with profiler)
 	databricks bundle run job_99_setup -t $(TARGET)

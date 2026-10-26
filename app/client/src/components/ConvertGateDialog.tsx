@@ -47,6 +47,7 @@ import type { ConfirmKind } from '../pages/overview/guidedConvertScope.pure';
 import { verdictBadge } from '../pages/workstreams/writerJobs.pure';
 import { showStopWritersAction, willBePaused, writerCoverageState, writersPanelVisible, type WriterPauseRow } from './writersPanel.pure';
 import { GateFlowRail } from './GateFlowRail';
+import { WaveConvertRights } from './WaveConvertRights';
 import {
   defaultGateStageId,
   gateStages,
@@ -574,7 +575,11 @@ export function ConvertGateDialog({
                 recheckDisabled={submitting || leaseActive}
                 onRecheck={() => void runLease(false)}
               />
-            ) : ownershipSignal === 'unevaluated' ? (
+            ) : null}
+            {ownershipView?.signal === 'gap' && typeof leaseParams?.wave_id === 'string' && typeof leaseParams.plan_run_id === 'string' ? (
+              <WaveConvertRights waveId={leaseParams.wave_id} planRunId={leaseParams.plan_run_id} />
+            ) : null}
+            {ownershipView && (ownershipView.signal === 'gap' || ownershipView.signal === 'covered') ? null : ownershipSignal === 'unevaluated' ? (
               <p className="rounded-lg border border-[var(--warning-border)] bg-[var(--warning-bg)] p-3 text-xs text-[var(--warning-foreground)]">
                 {preflight.error != null ? PERMISSION_STATE_COPY.unread : PERMISSION_STATE_COPY.checking}
               </p>

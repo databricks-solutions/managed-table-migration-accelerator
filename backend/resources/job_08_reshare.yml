@@ -14,6 +14,7 @@ resources:
   jobs:
     job_08_reshare:
       name: "[${bundle.target}] ${bundle.name} :: 08 re-share (D2D)"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "08-reshare"

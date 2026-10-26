@@ -22,6 +22,7 @@ resources:
   jobs:
     job_99_setup:
       name: "[${bundle.target}] ${bundle.name} :: 99 setup"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "99-setup"
@@ -49,3 +50,5 @@ resources:
               # bundle-level substitution, NOT a resource reference — so it creates no deploy
               # cycle. Blank app_name skips the grant.
               app_name: ${var.app_name}
+              # Group whose members run the installer: granted access to the install records.
+              installer_group: ${var.installer_group}

@@ -15,11 +15,8 @@ export interface ControlConfig {
  * result doesn't arrive within this window we bail and degrade to {null, null}, exactly as
  * on any other error. A cold warehouse costs a Genie panel, not a failed deploy.
  *
- * KNOWN SYMPTOM — not a bug: because the BOOT read is what decides whether genie() registers,
- * a cold warehouse at boot makes /api/config report `genie_available: false` even when a
- * genie_space_id exists. `genie_space_configured` (re-read live per request, warehouse now warm)
- * still shows true. A restart WHILE THE WAREHOUSE IS WARM flips genie_available true. See
- * "Troubleshooting" in docs/00-installation.md.
+ * A cold warehouse at boot only delays Genie: the space is looked up per request
+ * (config/genieSpace.ts), so the next /api/config read on a warm warehouse brings it online.
  */
 const CONTROL_READ_TIMEOUT_MS = 4000;
 

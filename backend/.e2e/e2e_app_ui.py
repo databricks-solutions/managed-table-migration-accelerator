@@ -110,7 +110,7 @@ from migration import install as ins  # noqa: E402
 import _e2e_env  # noqa: E402
 
 PROFILE = _e2e_env.optional("DATABRICKS_CONFIG_PROFILE")
-APP_NAME_WANTED = "managed-table-migration"  # bundle.name; deployed app is `mcp-<bundle.name>`
+APP_NAME_WANTED = _e2e_env.app_name_wanted()  # E2E_APP_NAME, else the bundle name (unique suffix)
 DEFAULT_STATE = os.path.expanduser("~/.mtm_e2e_app_state.json")
 
 # Stable DOM markers (grounded in app source, 2026-09-20):

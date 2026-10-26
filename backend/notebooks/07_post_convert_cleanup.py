@@ -395,6 +395,41 @@ print(f"REVOKE: eligible grants={len(_rplan['revokes'])}  held back={len(_rplan[
 # COMMAND ----------
 
 # MAGIC %md
+# MAGIC ## Installer convert rights — ready to hand back
+# MAGIC
+# MAGIC The installer's schema / catalog `MANAGE` (`INSTALL|…` ledger rows) is not revoked here: the
+# MAGIC jobs' identity cannot give up its own `MANAGE`. Once every table in a granted schema is
+# MAGIC `CLEANED` or `ROLLED_BACK`, the row is marked `HANDBACK_READY` and a schema-scoped
+# MAGIC `RESTORE_OWNERSHIP` action opens with the exact `REVOKE` (reopened when an earlier grant
+# MAGIC cycle on the same schema closed it). A person runs it: the installer's
+# MAGIC `action=revoke_convert`, or Hand back in the app. This changes no grant, so it also runs when
+# MAGIC `confirm_execute=false`.
+
+# COMMAND ----------
+
+from migration import provision as pv  # noqa: E402
+
+_installer_rows = [r.asDict() for r in spark.sql(pv.installer_ledger_sql(MANIFEST_CATALOG, MANIFEST_SCHEMA)).collect()]
+_schema_states = pv.schema_states(
+    [r.asDict() for r in spark.sql(pv.manifest_states_sql(MANIFEST_CATALOG, MANIFEST_SCHEMA)).collect()])
+_ready = pv.handback_ready_keys(_installer_rows, _schema_states)
+if _ready:
+    spark.sql(pv.ledger_status_sql(MANIFEST_CATALOG, MANIFEST_SCHEMA, _ready,
+                                   status=pv.LEDGER_STATUS_HANDBACK_READY, now=_now()))
+    ax.merge_action_rows(spark, MANIFEST_CATALOG, MANIFEST_SCHEMA,
+                         pv.handback_action_rows(_installer_rows, _ready, now=_now()))
+_reopen = pv.handback_reopen_keys(_installer_rows, _ready)
+if _reopen:
+    spark.sql(pv.handback_reopen_sql(MANIFEST_CATALOG, MANIFEST_SCHEMA, _reopen, now=_now()))
+for _r in _installer_rows:
+    if _r["ledger_key"] in _ready:
+        print(f"[HAND BACK] {pv.revoke_sql(_r['privilege'], _r['securable_type'], _r['securable_name'], _r['grantee'])};")
+print(f"HAND BACK: installer MANAGE rows ready={len(_ready)}")
+
+
+# COMMAND ----------
+
+# MAGIC %md
 # MAGIC ## Legacy ownership restore — hand back leases taken before convert authority existed
 # MAGIC
 # MAGIC Cleanup is the ONLY safe restore point: ownership is held through convert -> validate -> the

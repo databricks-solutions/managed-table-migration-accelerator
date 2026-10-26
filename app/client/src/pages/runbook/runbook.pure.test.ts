@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { filterRunbookToScope } from './runbook.pure';
+import { filterRunbookToScope, handbackScope } from './runbook.pure';
 
 const row = (catalog: string | null, schema: string | null, id: string) =>
   ({ catalog, schema, id }) as { catalog: string | null; schema: string | null; id: string };
@@ -15,5 +15,16 @@ describe('filterRunbookToScope', () => {
   });
   it('returns an empty array when nothing matches', () => {
     expect(filterRunbookToScope([row('c', 's', 'a')], 'c', 'nope')).toEqual([]);
+  });
+});
+
+describe('handbackScope', () => {
+  const row = { item_kind: 'RESTORE_OWNERSHIP', title: 'Hand back convert rights on sales.orders', catalog: 'sales', schema: 'orders', status: 'OPEN' };
+  it('offers Hand back only on open installer hand-back rows', () => {
+    expect(handbackScope(row)).toBe('sales.orders');
+    expect(handbackScope({ ...row, schema: '*' })).toBe('sales.*');
+    expect(handbackScope({ ...row, status: 'DONE' })).toBeNull();
+    expect(handbackScope({ ...row, title: 'Restore the owner of sales.orders.t' })).toBeNull();
+    expect(handbackScope({ ...row, item_kind: 'FIX_PATH_ACCESS' })).toBeNull();
   });
 });

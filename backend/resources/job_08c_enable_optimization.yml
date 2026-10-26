@@ -16,6 +16,7 @@ resources:
   jobs:
     job_08c_enable_optimization:
       name: "[${bundle.target}] ${bundle.name} :: 08c enable predictive optimization"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "08c-enable-optimization"

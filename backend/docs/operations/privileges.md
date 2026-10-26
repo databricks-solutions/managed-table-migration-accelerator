@@ -15,7 +15,7 @@ D3/D4). Column contract (unchanged by this page): [`../contracts/control-tables.
 | Tier | Profiler reads | Minimum privilege | Preflight probe |
 |---|---|---|---|
 | **Discovery** | `information_schema.tables` (system, then per-catalog fallback) | `BROWSE` per catalog (auto-filters metadata without `USE CATALOG`/`USE SCHEMA`/`SELECT`) | `can_read_system_information_schema` **or** `can_read_catalog_information_schema` |
-| **Enrichment** | `DESCRIBE DETAIL`, `DESCRIBE HISTORY`; `information_schema.row_filters`/`column_masks` | `USE CATALOG` + `USE SCHEMA` + `SELECT` per catalog, **or** `READ METADATA` at the metastore *(validate empirically)* | `can_describe_detail` **and** `can_describe_history` |
+| **Enrichment** | `DESCRIBE DETAIL`, `DESCRIBE HISTORY`; `information_schema.row_filters`/`column_masks` | `USE CATALOG` + `USE SCHEMA` + `SELECT` per catalog or schema. `READ METADATA` does **not** substitute (tested, below) | `can_describe_detail` **and** `can_describe_history` |
 | **System tables** | `system.access.table_lineage`, `system.compute.clusters`, `system.lakeflow.job_task_run_timeline` | `USE CATALOG` on `system` + explicit `SELECT` on each schema (these do **not** auto-filter) | `can_read_system_lineage` **and** `can_read_system_compute` **and** `can_read_system_lakeflow` |
 | **Workspace reach** *(advisory)* | all of the above, per workspace | run **in each workspace** whose bound catalogs you must cover | none (cannot be proven from one run) |
 
@@ -36,7 +36,7 @@ GRANT BROWSE ON CATALOG `<catalog>` TO `All account users`;   -- recommended est
 GRANT USE CATALOG ON CATALOG `<catalog>` TO `<principal>`;
 GRANT USE SCHEMA  ON CATALOG `<catalog>` TO `<principal>`;
 GRANT SELECT      ON CATALOG `<catalog>` TO `<principal>`;
--- Enrichment (broad alternative: inherits to EVERY object; sensitive; validate empirically)
+-- Grant and owner visibility for the convert-permission check (NOT enrichment; sensitive)
 GRANT READ METADATA ON METASTORE TO `<principal>`;            -- METASTORE takes no name
 
 -- System tables (do NOT auto-filter; grant explicitly)
@@ -47,10 +47,16 @@ GRANT SELECT      ON SCHEMA  `system`.`lakeflow` TO `<principal>`;
 ```
 
 `READ METADATA` exposes sensitive metadata (grants, masks, credential names) and is a child
-privilege of `MANAGE`; grant it only to a trusted profiler SP. Prefer the granular
-`USE CATALOG`+`USE SCHEMA`+`SELECT` form where you can enumerate catalogs. The design-delta
-flags the enrichment tier "validate empirically": confirm `DESCRIBE DETAIL`/`HISTORY` succeed
-on a sample table after granting.
+privilege of `MANAGE`; grant it only to a trusted profiler SP.
+
+**`READ METADATA` is not an enrichment grant (tested 2026-10-26).** With `READ METADATA` held on
+the metastore or the catalog, plus `USE CATALOG` and `USE SCHEMA`, a service principal could read
+`system.information_schema.tables`, the owner and `*_privileges` views and `SHOW GRANTS`, but
+`DESCRIBE DETAIL`, `DESCRIBE HISTORY`, `DESCRIBE TABLE` and `SHOW TBLPROPERTIES` were each refused
+for missing `SELECT` on the table. Enrichment needs `USE CATALOG` + `USE SCHEMA` + `SELECT`. A table
+the profiler can discover but not describe is held `NEEDS_REVIEW` (`convert_identity_cannot_read`)
+rather than reported as corrupted. The full matrix and its limits are in
+[`../install-and-permissions.md`](../install-and-permissions.md#3-what-a-read-only-profiler-identity-actually-needs-tested).
 
 ## Recommended setup: one profiler service principal, wired via `run_as`
 
@@ -59,8 +65,9 @@ on a sample table after granting.
    set it per target in `databricks.yml`). One identity = one attributable
    `discovered_by_principal` in the manifest (WS1 provenance) and one `principal` per
    `profiler_run_ledger` row.
-2. Grant the SP the tiers above. For the widest one-shot coverage, use the estate-wide
-   `BROWSE` to `All account users` + a metastore `READ METADATA`, then the `system.*` grants.
+2. Grant the SP the tiers above. For the widest one-shot **discovery**, use the estate-wide
+   `BROWSE` to `All account users` + a metastore `READ METADATA`, then the `system.*` grants;
+   enrichment still needs `USE CATALOG` + `USE SCHEMA` + `SELECT` on each schema you assess.
 3. Run `job_00_profiler` with `run_preflight=true` once to print the report; close any GAP
    with the printed statements; re-run until Discovery/Enrichment/System tables read **OK**.
 

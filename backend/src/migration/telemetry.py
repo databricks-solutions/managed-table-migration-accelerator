@@ -53,6 +53,7 @@ from migration import locations as _loc
 from migration import manifest as _mf
 from migration import parallelism as _par
 from migration import path_access as _pa
+from migration import provision as _pv
 from migration import reconcile as _rc
 
 PRODUCT = _product.PRODUCT
@@ -117,9 +118,10 @@ OUTCOMES = (OUTCOME_OK, OUTCOME_FAILED, OUTCOME_ERROR, OUTCOME_NOOP, OUTCOME_REF
 SELECTORS = ("schema", "bucket", "wave", "batch", "table", "none")
 
 COUNT_METRICS = (
-    "batches", "converted", "discovered", "failed", "frozen", "hint_fallback", "hinted", "manual",
-    "ops", "pending", "planned", "reconciled", "refused", "restored", "rolled_back", "skipped",
-    "switched", "targets", "validated", "verified", "waves",
+    "batches", "converted", "discovered", "failed", "frozen", "granted", "hint_fallback", "hinted",
+    "manual", "missing", "ops", "pending", "planned", "present", "reconciled", "refused",
+    "restored", "revoked", "rolled_back", "skipped", "switched", "targets", "validated",
+    "verified", "waves",
 )
 
 # Literal blocker tokens written to the manifest ``blockers`` CSV that have no constant in their
@@ -209,11 +211,16 @@ EXTRA_VOCAB: dict[str, frozenset] = {
     "cockpit_action": frozenset({"show", "advance"}),  # 11_bulk_cockpit `action` dropdown
     "finish_action": _constants(_ac, "FINISH_"),
     "step": frozenset(_cd.ALL_STEP_KINDS) | _constants(_par, "STEP_BULK_"),
+    # Installer (migration.provision): the action, the front door, the coverage band, the mode.
+    "install_action": frozenset(_pv.ACTIONS),
+    "front_door": frozenset(_pv.FRONT_DOORS),
+    "coverage": frozenset({"all", "most", "some", "none"}),
+    "convert_rights": frozenset(_pv.CONVERT_RIGHTS),
 }
 BOOL_FLAGS = frozenset({
-    "app_bound", "confirm_convert", "discovery_error", "enable_po", "force_vacuum", "genie",
-    "location_supplied", "open_apis", "restore_prior_state", "streaming", "truncate_uniform",
-    "warehouse_set",
+    "app_bound", "confirm_convert", "confirm_grants", "discovery_error", "enable_po",
+    "force_vacuum", "genie", "installer_group", "location_supplied", "open_apis",
+    "restore_prior_state", "streaming", "truncate_uniform", "warehouse_set",
 })
 
 # ---------------------------------------------------------------------------------------------

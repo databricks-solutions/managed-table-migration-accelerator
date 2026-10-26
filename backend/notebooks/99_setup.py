@@ -59,6 +59,10 @@ dbutils.widgets.dropdown("genie_grant_users", "true", ["true", "false"], "Grant 
 # CTA, so a plain name resolved at runtime is used, not a ${resources.apps...} substitution.
 # Blank -> no App -> no grant.
 dbutils.widgets.text("app_name", "", "App name to grant Genie CAN_RUN + control-plane UC grants (blank = none)")
+# The group whose members run the installer (${var.installer_group}). Setup grants it read access
+# to the control schema and MODIFY on the install records (audit_log, migration_scope,
+# ownership_ledger) as owner of those tables. Blank = each installer grants themselves.
+dbutils.widgets.text("installer_group", "", "Installer group: install-records access (blank = none)")
 
 MANIFEST_CATALOG = dbutils.widgets.get("manifest_catalog").strip()
 MANIFEST_SCHEMA = dbutils.widgets.get("manifest_schema").strip()
@@ -68,10 +72,12 @@ GENIE_WAREHOUSE_ID = dbutils.widgets.get("genie_warehouse_id").strip()
 GENIE_PARENT_PATH = dbutils.widgets.get("genie_parent_path").strip() or "/Shared"
 GENIE_GRANT_USERS = dbutils.widgets.get("genie_grant_users").strip().lower() == "true"
 APP_NAME = dbutils.widgets.get("app_name").strip()
+INSTALLER_GROUP = dbutils.widgets.get("installer_group").strip()
 
 print(f"manifest target  = {MANIFEST_CATALOG}.{MANIFEST_SCHEMA}")
 print(f"ensure_genie     = {ENSURE_GENIE} (warehouse={'set' if GENIE_WAREHOUSE_ID else 'blank -> skip'})")
 print(f"app_name         = {APP_NAME or '<none>'}")
+print(f"installer_group  = {INSTALLER_GROUP or '<none> (installers grant themselves)'}")
 
 # COMMAND ----------
 
@@ -118,6 +124,7 @@ from migration import bootstrap as bs
 from migration import genie_space as gs
 from migration import grants as gr
 from migration import metric_view as mv
+from migration import provision as pv
 import uc_ext2managed  # noqa: F401,E402  product marker (opt-out: telemetry_enabled=false)
 from migration import telemetry as tm  # noqa: E402
 TM = tm.start("99_setup", dbutils)  # usage telemetry: closed vocabulary only, never raises
@@ -215,6 +222,44 @@ if APP_NAME:
         )
 else:
     print("app_name blank -> no App SP control-plane grant (set app_name to enable).")
+
+# COMMAND ----------
+
+# MAGIC %md
+# MAGIC ## Grant the installer group access to the install records
+# MAGIC With `installer_group` set, members can run the installer (notebook, CLI or app) without
+# MAGIC granting themselves anything: `USE CATALOG`, `USE SCHEMA`, schema `SELECT`, and `MODIFY` on
+# MAGIC `audit_log`, `migration_scope` and `ownership_ledger` only. Best-effort, verified by
+# MAGIC `SHOW GRANTS`, prints the exact statements for anything that did not land. Never fails this job.
+
+# COMMAND ----------
+
+if INSTALLER_GROUP:
+    _rec_missing = []
+    for _priv, _sec_type, _sec_fqn, _grant_sql, _show_sql in pv.record_access_plan(
+            MANIFEST_CATALOG, MANIFEST_SCHEMA, INSTALLER_GROUP):
+        try:
+            spark.sql(_grant_sql)
+        except Exception as _gex:  # noqa: BLE001 — one grant failing must not abort the rest
+            print(f"  [note] GRANT failed ({_priv} on {_sec_type} {_sec_fqn}): "
+                  f"{type(_gex).__name__}: {str(_gex)[:140]}")
+        try:
+            _rows = [r.asDict() for r in spark.sql(_show_sql).collect()]
+        except Exception as _sex:  # noqa: BLE001 — SHOW GRANTS itself can be denied
+            print(f"  [note] SHOW GRANTS failed ({_sec_type} {_sec_fqn}): "
+                  f"{type(_sex).__name__}: {str(_sex)[:140]}")
+            _rows = []
+        if gr.sp_has_grant(_rows, INSTALLER_GROUP, _priv):
+            print(f"  verified: `{INSTALLER_GROUP}` has {_priv} on {_sec_type} {_sec_fqn}")
+        else:
+            _rec_missing.append(_grant_sql)
+    if _rec_missing:
+        print(f"  [WARNING] `{INSTALLER_GROUP}` is missing install-records access; installers in it "
+              f"will be asked to grant themselves. An owner of the control schema can run:")
+        for _grant_sql in _rec_missing:
+            print(f"    {_grant_sql};")
+else:
+    print("installer_group blank -> each installer grants themselves the install records.")
 
 # COMMAND ----------
 
@@ -480,14 +525,16 @@ else:
         else:
             print("  app_name blank -> no App SP grant (set app_name to enable).")
 
-        # Step 4 — persist the Genie space id + dashboard id into the handshake table. A PARTIAL
-        # upsert: only these fields are written; catalog/schema/warehouse_id the profiler wrote
-        # are preserved. This is what makes setup order-independent from the profiler.
+        # Step 4 — persist the Genie space id + dashboard id (and the deploy's warehouse id, the
+        # same ${var.warehouse_id} the profiler writes) into the handshake table. A PARTIAL
+        # upsert: fields not passed are preserved. This is what makes setup order-independent
+        # from the profiler, and a fresh install complete before the first profile.
         try:
             bs.write_control_config(
                 spark,
                 MANIFEST_CATALOG,
                 MANIFEST_SCHEMA,
+                warehouse_id=GENIE_WAREHOUSE_ID or None,
                 dashboard_id=DASHBOARD_ID or None,
                 genie_space_id=space_id,
             )

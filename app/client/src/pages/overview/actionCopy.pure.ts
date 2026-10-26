@@ -16,7 +16,7 @@ const _LABELS: Record<string, string> = {
   FIX_PATH_ACCESS: 'Switch consumers to name-based access',
   UPGRADE_CONSUMER_DBR: 'Upgrade the consumer runtime',
   LEASE_OWNERSHIP: 'Lease table ownership',
-  RESTORE_OWNERSHIP: 'Restore table ownership',
+  RESTORE_OWNERSHIP: 'Hand back convert permission',
   RETIRE_MAINTENANCE_JOB: 'Retire the maintenance job',
   ENABLE_PREDICTIVE_OPTIMIZATION: 'Enable Predictive Optimization',
   ENABLE_AUTO_LIQUID: 'Enable automatic liquid clustering',

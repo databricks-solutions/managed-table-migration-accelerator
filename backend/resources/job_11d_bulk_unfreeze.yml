@@ -5,6 +5,7 @@ resources:
   jobs:
     job_11d_bulk_unfreeze:
       name: "[${bundle.target}] ${bundle.name} :: 11d bulk unfreeze + verify"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "11d-bulk-unfreeze"

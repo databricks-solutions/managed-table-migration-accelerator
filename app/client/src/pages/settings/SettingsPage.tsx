@@ -26,6 +26,7 @@ import { RederiveAction } from '../../components/RederiveAction';
 import { SectionHeader } from '../../components/SectionHeader';
 import { ACTION_COPY, SECTION_COPY } from '../../lib/sectionCopy';
 import { GrantsPanel } from './GrantsPanel';
+import { PermissionsPanel } from './PermissionsPanel';
 
 /**
  * Connection & policy — the smallest route, and the app's live diagnostic.
@@ -98,6 +99,7 @@ export function SettingsPage() {
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <ConnectionCard />
+      <PermissionsPanel />
       <GrantsPanel />
       <QueryHealthCard />
     </div>
@@ -105,23 +107,17 @@ export function SettingsPage() {
 }
 
 function ConnectionCard() {
-  const { catalog, schema, dashboardId, genieAvailable, genieSpaceConfigured } = useCatalog();
+  const { catalog, schema, dashboardId, genieAvailable } = useCatalog();
 
-  // The Genie handshake is two booleans (see CatalogProvider): configured = a space id
-  // exists in the control table now; available = the running app registered it at boot.
-  const genie: { label: string; tone: Tone; detail: string } = !genieSpaceConfigured
+  // The app looks the Genie space up per request, so a space the installer created after the
+  // app started is live as soon as /api/config reads it (no restart).
+  const genie: { label: string; tone: Tone; detail: string } = !genieAvailable
     ? {
         label: 'Not configured',
         tone: 'muted',
         detail: 'Run the setup job to create the Genie space.',
       }
-    : !genieAvailable
-      ? {
-          label: 'Configured — restart to activate',
-          tone: 'warning',
-          detail: 'The space exists. Restart the app so it picks up the space.',
-        }
-      : { label: 'Available', tone: 'success', detail: 'Genie chat is live in this app.' };
+    : { label: 'Available', tone: 'success', detail: 'Genie chat is live in this app.' };
 
   return (
     <Card>

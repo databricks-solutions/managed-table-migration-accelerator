@@ -68,7 +68,7 @@ SCHEMA = os.environ.get("E2E_SCHEMA", "migration")
 BUNDLE_TARGET = os.environ.get("E2E_BUNDLE_TARGET", "e2e")
 FIXTURE_CONTROL_PLANE = _e2e_env.optional("BUNDLE_VAR_e2e_fixture_control_plane")
 SERVERLESS_CLIENT = os.environ.get("E2E_SERVERLESS_CLIENT", "3")
-APP_NAME_WANTED = "managed-table-migration"  # bundle.name; resolved by exact/unique-suffix match
+APP_NAME_WANTED = _e2e_env.app_name_wanted()  # E2E_APP_NAME, else the bundle name (unique suffix)
 
 # Submit ceilings. The notebook itself waits on 99 setup (Step 2) BEFORE any data step, so even a
 # fast-failing negative case runs setup first; the fixture path additionally runs the seeder.
@@ -128,7 +128,10 @@ def _warehouse_sp_has_can_use(acl, sp_uuid) -> bool:
     use_levels = {"CAN_USE", "CAN_MANAGE", "IS_OWNER"}
     for ace in acl or []:
         name = getattr(ace, "service_principal_name", None)
-        if not name or str(name).lower() != str(sp_uuid).lower():
+        # Every workspace identity (service principals included) is in `users`; when that group
+        # already holds CAN_USE the platform adds no direct entry for the binding.
+        via_users = getattr(ace, "group_name", None) == "users"
+        if not via_users and (not name or str(name).lower() != str(sp_uuid).lower()):
             continue
         for perm in getattr(ace, "all_permissions", None) or []:
             level = getattr(perm, "permission_level", None)
@@ -153,7 +156,8 @@ def resolve_job_ids() -> dict:
     except Exception as ex:  # noqa: BLE001
         print(f"  could not list jobs ({type(ex).__name__}: {str(ex)[:140]})")
         all_jobs = []
-    return ins.resolve_job_ids(all_jobs, ins.ALL_JOB_LABELS)
+    resolved = ins.resolve_job_ids(all_jobs, ins.ALL_JOB_LABELS, _e2e_env.deployment())
+    return resolved if any(resolved.values()) else ins.resolve_job_ids(all_jobs, ins.ALL_JOB_LABELS)
 
 
 def _repo_root() -> str:
@@ -325,7 +329,7 @@ def verify_control_plane(app_name: str | None) -> None:
 
 def _base_params(data_mode: str, catalog: str = CATALOG) -> dict:
     return {"catalog": catalog, "schema": SCHEMA, "target": BUNDLE_TARGET,
-            "data_mode": data_mode, "app_name": "", "fixture_control_plane": FIXTURE_CONTROL_PLANE}
+            "data_mode": data_mode, "app_name": _e2e_env.optional("E2E_APP_NAME"), "fixture_control_plane": FIXTURE_CONTROL_PLANE}
 
 
 def run_fixture(app_name: str | None, run_name: str = "e2e-install-fixture") -> None:
@@ -356,8 +360,10 @@ def run_idempotent(app_name: str | None) -> None:
 def run_negatives() -> None:
     print("\n== negative parameter cases (assert on the _stop exit string) ==")
     bad = submit_install("e2e-install-bad-mode", _base_params("bogus"), NEGATIVE_TIMEOUT_MIN)
+    exit_msg = bad["exit"] or ""
     check("bad data_mode stops with validation message",
-          "data_mode must be one of" in (bad["exit"] or ""), f"exit={bad['exit']!r}")
+          "data_mode must be one of" in exit_msg or "data_mode: 'bogus' is not one of" in exit_msg,
+          f"exit={bad['exit']!r}")
 
     off = submit_install("e2e-install-fixture-blocked", _base_params("fixture", catalog="main"),
                          NEGATIVE_TIMEOUT_MIN)

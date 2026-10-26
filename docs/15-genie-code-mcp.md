@@ -32,14 +32,23 @@ You ask in plain language; Genie Code picks the tool. Some examples, with the to
 | "Finish wave 3: restart streams, re-share, set up external readers, turn on clustering." | `mtm_unfreeze`, `mtm_reshare`, `mtm_enable_compat`, `mtm_enable_optimization` | Yes, each behind `confirm=true` |
 | "Roll back `main.sales.orders`; the reason is ..." | `mtm_rollback` | Yes, behind `confirm=true`, within 14 days |
 | "Did that run finish?" | `mtm_get_run_status` | No |
+| "What permissions does the migration need, and which can I grant?" | `mtm_get_permissions` | No |
+| "Grant them", "Hand back the convert rights on `main.sales`" | `mtm_grant_permissions`, `mtm_hand_back_convert_rights` (v2) | Yes, as **you**, behind `confirm=true` and the previewed plan |
 
 Three rules hold for every answer. Genie Code signs in as **you** (so you need `CAN_USE` on the app)
 and you are recorded as the operator, while the reads and job launches themselves run as the app's
 service principal, exactly as when you click in the app. A tool that changes something only returns
 a "needs confirmation" preview until it is called again with `confirm=true`, and the job it launches
-re-checks every gate. And
+re-checks every gate. The permissions tools are the exception to the service-principal rule: they
+read and grant with **your** sign-in, as the app's Settings → Permissions page does, so Unity
+Catalog checks your rights, and a grant also needs the `plan_id` you previewed. And
 `mtm_convert` accepts only a selector: it rejects every gate-downgrade parameter, so the assistant
 can never weaken a safety gate. With `mcp_tier=v1` only the "No" rows are available.
+
+A permissions question, then a grant called without `confirm`, which returns a preview and runs
+nothing:
+
+![Genie Code calling mtm_get_permissions: the rights check, the plan counts and the lines not yet in place with who can grant them, then mtm_grant_permissions without confirm, which asks for confirmation](images/install/mcp/permissions.png)
 
 ## What ships in the bundle
 

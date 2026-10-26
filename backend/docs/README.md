@@ -24,6 +24,7 @@ surface is made of four things, and each is documented here as a public API:
 | Page | What it covers |
 |---|---|
 | [architecture.md](./architecture.md) | What the tool is, the manifest-driven design, pure-logic + thin-Spark-edge convention, and the deploy/config handshake (`migration_control_config` + smart schema resolution). |
+| [install-and-permissions.md](./install-and-permissions.md) | **(Design, proposed)** Frictionless install: notebook and CLI paths over one engine, the four grant sets (with the tested proof that `READ METADATA` cannot replace `SELECT` for the profiler), the installer grant rule, and the upfront rights check. |
 | [state-machine.md](./state-machine.md) | The per-table lifecycle `DISCOVERED → … → CLEANED`: every state, every legal transition, and which stage effects it. |
 | [integration/control-tables.md](./integration/control-tables.md) | **The core reference.** Every control table and view: full column schema, writer, readers, merge keys, idempotency semantics, and how to query or safely write it. |
 | [integration/job-api.md](./integration/job-api.md) | Every Workflow job as an "endpoint": purpose, trigger command, all parameters with defaults, selector rules, gating, side effects, and terminal states. |

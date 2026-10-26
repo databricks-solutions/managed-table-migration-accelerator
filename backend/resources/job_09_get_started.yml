@@ -8,6 +8,7 @@ resources:
   jobs:
     job_09_get_started:
       name: "[${bundle.target}] ${bundle.name} :: 09 get started (discover→plan→conduct)"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "09-get-started"

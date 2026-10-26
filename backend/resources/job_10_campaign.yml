@@ -8,6 +8,7 @@ resources:
   jobs:
     job_10_campaign:
       name: "[${bundle.target}] ${bundle.name} :: 10 campaign (gated)"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "10-campaign"

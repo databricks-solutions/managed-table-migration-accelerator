@@ -1441,3 +1441,34 @@ the starting keys in one verified action, and partitioned tables stay manual. Ro
 layout `08c` recorded. Skip sends `recommend`, not `off`, so a skipped table's statements stay on
 the runbook.
 
+
+## T59 · Settings → Permissions grants as the signed-in admin (not in the v4 mockup)
+
+**What.** Settings gains a **Permissions** panel above the copy-only grants panel, which stays as
+the fallback. It reads `GET /api/permissions` and shows, in order: your rights (metastore admin or
+not, which catalogs you can grant on, who to ask for the rest), who the jobs run as, the schemas
+the migration may touch (with **Add schemas**), how convert rights are given (all at once or per
+wave, with who holds them now and **Hand back**), and the plan. **Preview plan** opens a dialog
+with the exact statements and the plan's `plan_id`. **Grant** sends that `plan_id` back
+(`POST /api/permissions/grant`), so if the estate changed since the preview nothing runs. **Download
+plan** and **Copy request** give the SQL to someone who can grant what you cannot. The convert gate
+gains a **Grant convert rights for this wave** button when the gap is convert authority, and Do by
+hand gains **Hand back** on the installer's open hand-back rows (`POST /api/permissions/hand-back`).
+
+The server (`server/permissions/provisionFlow.ts`) is the app twin of `migration.provision_io`:
+the same options, plan, `plan_id` and audit order as the notebook and CLI (TS mirror
+`client/src/lib/provision.pure.ts` under a parity test on `provision_cases.json`). It runs every
+statement with the admin's forwarded token, never the app SP (SR15, SR17).
+
+**Limits, stated where they show.**
+- Job permissions (`CAN_MANAGE_RUN`) are not in the app's token scopes, so those lines show their
+  `databricks jobs update-permissions` commands instead of a Grant.
+- Changing who the jobs run as needs a redeploy: the app refuses it (422) and shows the CLI command.
+- The app never runs setup, data jobs or uninstall. Before the first install it shows the CLI
+  command and the install notebook path.
+- Read-back uses `SHOW GRANTS` on the securable plus catalog and schema owners. A privilege held
+  only through a nested group may read as missing (shown, never retried under another identity).
+
+**Why.** "Ease of permission" was a copy-and-paste chore across two tools. The person with the
+authority still runs every statement, under their own identity, from a plan they previewed; the
+app removes the copy and paste, not the check.

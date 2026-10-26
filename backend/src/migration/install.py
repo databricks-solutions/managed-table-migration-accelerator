@@ -20,10 +20,8 @@ so the notebook stays a thin Spark/SDK edge (same discipline as ``gate_eval`` / 
   and gate ``fixture`` on the dev allowlist (reusing ``fixture_safety``) BEFORE launching.
 * **Config-handshake completeness.** Check ``migration_control_config`` has every field the app's
   boot read needs.
-* **App-restart decision.** Decide whether the app needs a restart to pick up ``genie_space_id``
-  and produce the SAFE remediation — a bundle **re-deploy**, never ``apps stop/start`` or an SDK
-  restart (both drop the bundle-substituted ``config.env`` and crash the app; see the notebook's
-  Step 3 rationale and "Restarting the app" in docs/00-installation.md).
+* **No app restart.** The app looks ``genie_space_id`` up per request, so the installer never asks
+  for a second deploy; every run ends with the conductor (``CONDUCTOR_JOB_KEY``).
 
 No Spark/SDK import here; every function is a pure transform over plain data.
 """
@@ -117,26 +115,79 @@ def job_suffix(label: str) -> str:
 # Job resolution by suffix
 # --------------------------------------------------------------------------- #
 
-def resolve_job_id(jobs: Iterable[Tuple[Optional[str], object]], label: str):
+def deployment_qualifier(bundle_name: Optional[str], target: Optional[str]) -> Optional[str]:
+    """The ``[<target>] <bundle.name>`` segment every job of one deployment carries, or ``None``.
+
+    Two deployments in one workspace (dev and prod, or two targets) share every `` :: <label>``
+    tail, so a caller that knows its own target passes this to resolve only its own jobs.
+    """
+    if not bundle_name or not target:
+        return None
+    return f"[{target.strip()}] {bundle_name.strip()}"
+
+
+def deployment_from_path(path: Optional[str]) -> Optional[Tuple[str, str]]:
+    """``(bundle_name, target)`` from a path inside a deployed bundle (``…/.bundle/<name>/<target>/…``).
+
+    The installer reads its own notebook path, so it resolves its own deployment's jobs without
+    the operator re-typing the target. ``None`` for a Git folder or any other non-bundle path.
+    """
+    parts = [p for p in (path or "").split("/") if p]
+    for i, part in enumerate(parts):
+        if part == ".bundle" and i + 2 < len(parts):
+            return parts[i + 1], parts[i + 2]
+    return None
+
+
+def deployment_of_path(path: Optional[str]) -> Optional[str]:
+    """``deployment_qualifier`` for the deployment a notebook path lives in, or ``None``."""
+    found = deployment_from_path(path)
+    return deployment_qualifier(*found) if found else None
+
+
+def name_matches(name: Optional[str], suffix: str, deployment: Optional[str]) -> bool:
+    """``name`` ends with ``suffix``, preceded by ``deployment`` when one is given.
+
+    ``suffix`` may carry its own leading space or not (``" :: 04 convert"`` / ``":: 04 convert"``),
+    and may already start with the bundle name (``"managed-table-migration :: 04 convert"``).
+    """
+    if not name:
+        return False
+    if not deployment:
+        return name.endswith(suffix)
+    tail = suffix.lstrip(" ")
+    target, _, bundle = deployment.partition("] ")
+    if bundle and tail.startswith(bundle + " "):
+        return name.endswith(target + "] " + tail)
+    return name.endswith(deployment + " " + tail)
+
+
+def resolve_job_id(
+    jobs: Iterable[Tuple[Optional[str], object]], label: str, deployment: Optional[str] = None
+):
     """Return the id of the first ``(name, id)`` whose name ends with ``label``'s stage suffix.
 
     ``jobs`` is an iterable of ``(display_name, job_id)`` pairs (what ``w.jobs.list`` yields once
     projected). Matching on the `` :: <label>`` tail tolerates the ``[dev <user>]`` prefix and any
-    bundle-name segment. Returns ``None`` when no job matches.
+    bundle-name segment. With ``deployment`` (see ``deployment_qualifier``) only names ending in
+    ``<deployment> :: <label>`` match, so another deployment's job is never picked. Returns
+    ``None`` when no job matches.
     """
     suffix = job_suffix(label)
     for name, job_id in jobs:
-        if name and name.endswith(suffix):
+        if name_matches(name, suffix, deployment):
             return job_id
     return None
 
 
 def resolve_job_ids(
-    jobs: Iterable[Tuple[Optional[str], object]], labels: Dict[str, str]
+    jobs: Iterable[Tuple[Optional[str], object]],
+    labels: Dict[str, str],
+    deployment: Optional[str] = None,
 ) -> Dict[str, object]:
     """Resolve a whole ``{key: label}`` map to ``{key: job_id-or-None}`` (``jobs`` read once)."""
     materialized = list(jobs)
-    return {key: resolve_job_id(materialized, label) for key, label in labels.items()}
+    return {key: resolve_job_id(materialized, label, deployment) for key, label in labels.items()}
 
 
 def missing_job_keys(resolved: Dict[str, object]) -> List[str]:
@@ -258,6 +309,10 @@ DATA_MODES: Tuple[str, ...] = (DATA_MODE_REAL, DATA_MODE_FIXTURE, DATA_MODE_NONE
 # trio, whose trailing conductor became a redundant second run once the planner started tailing it.
 REAL_JOB_SEQUENCE: Tuple[str, ...] = (ORCHESTRATOR_JOB_KEY,)
 
+# Every installer run ends with the conductor, so the views and the next step reflect it (an
+# upgrade is "re-run the installer"). ``real`` gets it from the orchestrator's own tail.
+CONDUCTOR_JOB_KEY = "08_conductor"
+
 
 def normalize_data_mode(value: Optional[str]) -> str:
     """Normalize + validate the data-mode widget to one of ``DATA_MODES`` (raises on unknown)."""
@@ -273,15 +328,16 @@ def data_mode_job_sequence(mode: str) -> List[str]:
     """Ordered job keys to run for ``mode``.
 
     ``real`` -> the ``09 get_started`` orchestrator (discover->plan->conduct); ``fixture`` -> the dev
-    fixture seeder; ``none`` -> nothing. ``real`` and ``fixture`` are mutually exclusive — both fully
-    rewrite ``wave_plan`` — so the notebook only ever runs one branch per install.
+    fixture seeder, then the conductor; ``none`` -> the conductor alone. ``real`` and ``fixture`` are
+    mutually exclusive — both fully rewrite ``wave_plan`` — so the notebook only ever runs one
+    branch per install.
     """
     mode = normalize_data_mode(mode)
     if mode == DATA_MODE_REAL:
         return list(REAL_JOB_SEQUENCE)
     if mode == DATA_MODE_FIXTURE:
-        return [FIXTURE_JOB_KEY]
-    return []
+        return [FIXTURE_JOB_KEY, CONDUCTOR_JOB_KEY]
+    return [CONDUCTOR_JOB_KEY]
 
 
 def fixture_allowed(catalog: str, schema: str, extra: str | None = None) -> bool:
@@ -325,58 +381,3 @@ def config_complete(
 ) -> bool:
     """True iff every required config field is populated."""
     return not missing_config_fields(config_row, required)
-
-
-# --------------------------------------------------------------------------- #
-# App-restart decision (Step 3)
-# --------------------------------------------------------------------------- #
-
-# The remediation the notebook prints when a restart is needed. A bundle RE-DEPLOY is the ONLY safe
-# restart for this bundle-managed app: the app's whole environment (MIGRATION_CATALOG/SCHEMA, the
-# warehouse, the 15 job bindings) lives in the bundle's `config.env` with `${var...}` substitutions
-# that ONLY the bundle deploy resolves and applies. `apps stop/start` and an SDK `apps.deploy()`
-# restart the container WITHOUT re-applying that env (env "is not set until the app is started", and
-# nothing re-substitutes the vars), so the app crashes at boot on `MIGRATION_CATALOG is missing`.
-RESTART_REMEDIATION = (
-    "Re-deploy the bundle to restart the app and pick up genie_space_id: open databricks.yml in "
-    "the workspace, click the Deployments icon, pick your target, and Deploy again (same as "
-    "phase 2). Do NOT use `databricks apps stop/start` or an SDK restart — they drop the bundle's "
-    "config.env and the app crashes at boot on MIGRATION_CATALOG."
-)
-
-
-def genie_restart_needed(
-    genie_space_id: Optional[str], app_boot_genie_available: Optional[bool]
-) -> bool:
-    """True iff the app must restart to activate Genie.
-
-    The app registers the Genie plugin only at BOOT, from the ``migration_control_config`` handshake.
-    A restart is needed exactly when a ``genie_space_id`` now exists but the app's boot value reported
-    Genie unavailable. When the boot value is unknown (``None``), assume a restart is prudent iff a
-    space id exists (the freshly-written id is why Step 2 ran).
-    """
-    if not genie_space_id:
-        return False
-    if app_boot_genie_available is None:
-        return True
-    return not app_boot_genie_available
-
-
-def app_restart_plan(
-    genie_space_id: Optional[str], app_boot_genie_available: Optional[bool]
-) -> dict:
-    """Decide the Step-3 outcome: ``needed`` (bool) + a human ``message``.
-
-    Never proposes an automated restart — only a bundle re-deploy — because no restart the notebook
-    could issue re-applies the bundle-substituted ``config.env`` (see ``RESTART_REMEDIATION``).
-    """
-    needed = genie_restart_needed(genie_space_id, app_boot_genie_available)
-    if not needed:
-        message = (
-            "App already reflects Genie (or no Genie space to activate) — no restart needed."
-            if genie_space_id
-            else "No genie_space_id yet — nothing to activate (re-run Step 2 if you expected one)."
-        )
-    else:
-        message = RESTART_REMEDIATION
-    return {"needed": needed, "message": message}

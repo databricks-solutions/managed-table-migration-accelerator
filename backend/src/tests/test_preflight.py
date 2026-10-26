@@ -138,10 +138,13 @@ def test_gaps_enrichment_granular_per_catalog():
         assert f"GRANT {priv} ON CATALOG `cat_a` TO `me@example.com`" in stmts
 
 
-def test_gaps_enrichment_metastore_fallback_without_catalogs():
-    # Can't enumerate catalogs -> the metastore-wide inherit form (validate empirically).
+def test_gaps_enrichment_placeholder_without_catalogs():
+    # Can't enumerate catalogs -> the same granular form on a <catalog> placeholder. READ METADATA
+    # is never offered for enrichment: DESCRIBE DETAIL/HISTORY need SELECT (tested live).
     stmts = pf.grant_statements_for_gaps(tiers=_gaps_everywhere(), principal=SP, catalogs=None)
-    assert "GRANT READ METADATA ON METASTORE TO `me@example.com`" in stmts
+    for priv in ("USE CATALOG", "USE SCHEMA", "SELECT"):
+        assert f"GRANT {priv} ON CATALOG <catalog> TO `me@example.com`" in stmts
+    assert not any("READ METADATA" in s for s in stmts)
 
 
 def test_gaps_system_tables():
@@ -164,6 +167,11 @@ def test_broad_alternatives():
     alts = pf.broad_grant_alternatives(SP)
     assert "GRANT BROWSE ON CATALOG <catalog> TO `All account users`" in alts
     assert "GRANT READ METADATA ON METASTORE TO `me@example.com`" in alts
+
+
+def test_broad_alternatives_note_says_enrichment_still_needs_select():
+    assert "SELECT" in pf.BROAD_ALTERNATIVES_NOTE
+    assert "discovery" in pf.BROAD_ALTERNATIVES_NOTE.lower()
 
 
 def test_render_report_marks_gaps_and_points_to_doc():

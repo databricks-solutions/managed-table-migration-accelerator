@@ -67,6 +67,22 @@ Repeated parameters have these complete semantics wherever referenced:
   changes a gate, never raises, writes no control table, and is not part of the run-now
   contract. Signal catalogue: `backend/docs/operations/telemetry.md`.
 
+Who the jobs run as:
+
+- Every operator-facing job and `job_99_setup` (24 jobs) carries `run_as: ${var.jobs_run_as}`,
+  a complex bundle variable (`service_principal_name`, `group_name` or `user_name`; default
+  `{user_name: <the deployer>}`; `prod`: `{service_principal_name: ${var.prod_run_as_sp}}`). The
+  two E2E seeder jobs have no `run_as` and run as the deployer. No target sets `run_as`: on a
+  target it also applies to the app, which the Apps platform refuses. Pinned by
+  `test_jobs_run_as.py`.
+- The jobs' identity needs `CAN_MANAGE_RUN` on every job of the deployment (the `09` / `11e`
+  `run_now` launches and the `run_job_task` conductor tails). The installer grants it as one
+  `JOBS` plan line through the Permissions API (an additive update), never as bundle
+  `permissions`, which would replace each job's access list and drop the app SP's run permission.
+- The installer's `jobs_identity` option changes the identity by writing
+  `.databricks/bundle/<target>/variable-overrides.json`; it takes effect at the next
+  `bundle deploy` (the CLI offers to run it; `--yes` skips the prompt).
+
 Common write sets:
 
 - `audit_log`: complete 23-column append-only audit rows.
@@ -258,7 +274,12 @@ Deploy-fixed:
 > profiler parameters; they belong to `job_99_setup` (`notebooks/99_setup.py`), the
 > install-time job that provisions the Genie space + App-SP grants. `job_99_setup` is not
 > surfaced in the app (it is not one of the 20 operator jobs) and is run at install time,
-> order-independent with the profiler.
+> order-independent with the profiler. It also takes `installer_group` (default bundle
+> `installer_group`, blank): the group granted read access to the control schema and `MODIFY` on
+> the install records (`audit_log`, `migration_scope`, `ownership_ledger`); blank = each installer
+> grants themselves that access. It persists `genie_warehouse_id` as
+> `migration_control_config.warehouse_id` too, so a fresh install's handshake is complete before
+> the first profile.
 
 Widget-only:
 
@@ -1443,7 +1464,8 @@ Widget-only:
 - `freeze_ledger[*]` filtered to frozen Predictive Optimization operations.
 - `table_manifest.state` for `CLEANED` / `ROLLED_BACK` tables (`cleanup.revoke_eligible`).
 - `ownership_ledger[*]`: real `GRANTED` `GRANT` rows (`read_granted_ledger_rows`) and legacy
-  `LEASED` rows.
+  `LEASED` rows; the installer's `INSTALL|…` rows (`provision.installer_ledger_sql`).
+- `table_manifest` `catalog, schema, state` for every table (`provision.schema_states`).
 - `SHOW GRANTS <grantee> ON <securable>` after each `REVOKE` (verification).
 
 ### Writes
@@ -1460,6 +1482,15 @@ Widget-only:
 - `migration_actions`: closes a table's `RESTORE_OWNERSHIP` action `DONE` when every privilege
   added for it is revoked (`ownership.restore_actions_to_close`); legacy restores close it as
   before (`IN_PROGRESS` if applied-but-unverified).
+- **Installer hand-back (every run, whatever `confirm_execute`):** an installer `MANAGE` row whose
+  schema (or, for a catalog row, every schema of the catalog in the manifest) has only `CLEANED` /
+  `ROLLED_BACK` tables flips `GRANTED → HANDBACK_READY` (`provision.handback_ready_keys`) and opens
+  one schema-scoped, non-blocking `POST_CONVERT` `RESTORE_OWNERSHIP` action
+  (`RESTORE_OWNERSHIP|<catalog.schema>|MANAGE:<grantee>`, `source=07_post_convert_cleanup`) whose
+  `remediation_sql` is the exact `REVOKE`. It changes no grant: the jobs' identity cannot revoke
+  its own `MANAGE`, so a person runs the installer's `action=revoke_convert` (or the app's Hand
+  back), which revokes, flips the row `REVOKED` and closes the action `DONE`. Obsolete detection
+  never retires it (`provision.is_handback_action_key`).
 
 **mutates:** **YES.** Executes `VACUUM`; and, when `confirm_execute=true`, revokes the convert
 privileges Authorize added (for `CLEANED` / `ROLLED_BACK` tables — never earlier, since in-window
@@ -2895,6 +2926,67 @@ re-run repair practical. The safety guard runs before writes.
 **task_values:** None.
 
 **typical_duration:** Approximately 5-20 minutes; longer with optional real writes.
+
+# Install front door (not a job)
+
+## 26. `install` bundle script and `backend/notebooks/install.py`
+
+**bundle_key:** `scripts.install` (`databricks bundle run install -t <target> --profile <p>`),
+which runs `python3 backend/scripts/install.py`. The notebook `backend/notebooks/install.py` is the
+same engine (`migration.provision` + `migration.provision_io`) from the workspace, and the app's
+Settings → Permissions (`/api/permissions*`) is its TypeScript mirror. None is a Workflow job, so
+none is an app binding.
+
+### Parameters
+
+One option set, `provision.OPTIONS`: notebook widgets, CLI flags on a direct run, and `MTM_<NAME>`
+environment variables through the bundle (a bundle script takes no arguments). A flag wins over its
+variable. A guard test pins every widget and flag to the list.
+
+| Option | Default | Meaning |
+|---|---|---|
+| `action` | `install` | `install` / `check` / `grant_convert` / `revoke_convert` / `uninstall` (`uninstall` is notebook and CLI only) |
+| `confirm_grants` | `false` | `false` prints the plan and runs nothing |
+| `plan_id` | blank | Apply only when the plan's fingerprint still matches; a hand-back or uninstall plan has its own fingerprint |
+| `scopes` | the stored scopes | `catalog.schema` / `catalog.*`, comma-separated |
+| `convert_rights` | `all_at_once` | `all_at_once` grants `MANAGE` on every scope; `per_wave` leaves it to `grant_convert` |
+| `wave_id`, `plan_run_id` | blank | `grant_convert`: the wave, pinned to the current `wave_plan` |
+| `jobs_identity` | `keep` | `sp:<application-id>` / `group:<name>` / `user:<email>`: writes `jobs_run_as` to `.databricks/bundle/<target>/variable-overrides.json`; needs a redeploy |
+| `grantee_group` | blank | Grant to a group that contains the jobs' identity |
+| `data_mode` | `real` | `real` (`09 get started`), `fixture` (dev allowlist only), `none` |
+| `fixture_control_plane` | blank | Extra fixture allowlist entry, dev only |
+| `app_name` | blank | Blank resolves this deployment's app from the `99 setup` job's `app_name` parameter |
+| `yes`, `output` | `false`, `text` | CLI only: answer the prompts; `json` prints one document |
+
+Deploy-fixed through `scripts.install.env`: `MTM_CATALOG`, `MTM_SCHEMA`, `MTM_TARGET`,
+`MTM_DEPLOYMENT`, `MTM_APP_NAME`, `MTM_WAREHOUSE_ID`, `MTM_FIXTURE_CONTROL_PLANE`.
+
+### Reads
+
+The installer's own rights (`current_user`, workspace and metastore admin, the control catalog's
+owner), the deployed jobs' `run_as`, `system.information_schema.tables` as the installer (candidate
+scopes), `SHOW GRANTS` read-backs, `migration_scope`, `ownership_ledger`, `audit_log`, `wave_plan` and
+`table_manifest` (hand-back readiness and the 14-day window).
+
+### Writes
+
+`audit_log` (`INSTALL_GRANT` / `INSTALL_REVOKE`, written before each statement), `migration_scope`
+(one row per scope, flagged never deleted), `ownership_ledger` (`INSTALL|…` rows: `GRANTED` →
+`HANDBACK_READY` (by `07`) → `REVOKED`, with `added` / `prior_held`), and the `RESTORE_OWNERSHIP`
+hand-back action (closed `DONE` on revoke). Unity Catalog `GRANT` / `REVOKE`, workspace folder
+`CAN_READ` and jobs `CAN_MANAGE_RUN` (additive Permissions API updates). With `action=install` and
+`confirm_grants=true` it then runs `job_99_setup`, the `data_mode` step and `08 conductor`.
+
+**preconditions:** The bundle is deployed (preflight finds the app and its jobs by name). Grants
+run as the caller: the notebook session, the CLI profile, or the signed-in admin.
+
+**failure_mode:** Every step is idempotent. A line the caller cannot grant is listed with who can,
+never retried. CLI exit codes: `0` done, `1` no-go, `2` invalid options, `3` applied with gaps,
+`4` `plan_id` mismatch (nothing ran), `5` waiting on a redeploy. The notebook stops with the same
+sentence, after the cell that printed the reason.
+
+**typical_duration:** `check` well under a minute; `install` with `data_mode=real` waits for
+`99 setup` and the profiling job (about 30 minutes on a fresh serverless estate).
 
 # Dependency DAG
 

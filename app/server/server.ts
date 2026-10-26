@@ -11,61 +11,41 @@ import { registerGrantsPlanRoute } from './routes/grants-plan.js';
 import { registerEstateDiscoveryRoute } from './routes/estate-discovery.js';
 import { registerOwnershipSqlRoute } from './routes/ownership-sql.js';
 import { registerConvertPreflightRoute } from './routes/convert-preflight.js';
+import { registerPermissionsRoutes } from './routes/permissions.js';
 import { registerMcpServer } from './mcp/register-mcp.js';
 import { migrationJobs } from './jobs/job-params.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from './config/catalog.js';
 import { readControlConfig } from './config/control-config.js';
+import { BOOT_PLACEHOLDER, armGenieSpaces, liveGenieSpaces, noteGenieSpace } from './config/genieSpace.js';
 
 async function main() {
-  // One startup read of the migration_control_config handshake row, BEFORE createApp:
-  // genie_space_id must be known to construct genie({ spaces }), and dashboard_id is
-  // served via /api/config. Graceful — nulls when the profiler hasn't run yet.
+  // One startup read of the migration_control_config handshake row, BEFORE createApp, to seed
+  // the Genie space cache (dashboard_id is served live via /api/config). Graceful — nulls when
+  // the installer hasn't created the space yet.
   const control = await readControlConfig();
+  noteGenieSpace(control.genieSpaceId);
 
-  // AppKit's genie plugin declares its genie_space resource REQUIRED in its static manifest
-  // (@databricks/appkit .../plugins/genie/manifest.js). ResourceRegistry.enforceValidation()
-  // checks process.env.DATABRICKS_GENIE_SPACE_ID at createApp and THROWS in production if it
-  // is unset — regardless of the `spaces` config. The space id is a runtime handshake value
-  // (created by job_99_setup, absent on a fresh workspace), so we do TWO things together,
-  // gated on the handshake row carrying a space id: (1) export DATABRICKS_GENIE_SPACE_ID from
-  // that row so the gate passes, and (2) register genie() (conditional spread below). Doing
-  // only ONE crashes the app — registering genie() without the env trips the resource gate;
-  // and the config `spaces` map does NOT satisfy the gate (validate() reads the env var, not
-  // the config). When the row has no space id yet, genie() isn't constructed at all: the
-  // Genie panel shows its first-run empty state (genie_available:false via /api/config), and
-  // a later app restart — after job_99_setup creates the space and writes the handshake —
-  // brings Genie online (same restart-to-pick-up sequencing as the SP grants; not
-  // hot-reloaded). Restart via `bundle deploy`, NOT `databricks apps start`: a standalone
-  // start does not re-apply the bundle's config.env, so the whole env (MIGRATION_CATALOG,
-  // warehouse, job ids) drops and the app crashes on the MIGRATION_CATALOG check instead.
   // ── AppKit resource-gate trap (read before adding a plugin) ──────────────────────────
   // AppKit plugins declare manifest.resources.required with a HARDCODED env var name.
   // enforceValidation() checks process.env[<name>] at createApp and throws in production,
   // independent of plugin config. An empty config value satisfies the config schema and
-  // still trips the gate. Either bind the env var to a real resource, or do not register
-  // the plugin at all.
-  //   - genie: gated on DATABRICKS_GENIE_SPACE_ID → registered ONLY when a space id exists
-  //     (conditional spread below). CRITICAL: ResourceRegistry.validate() reads the ENV VAR,
-  //     not the `spaces` config — spaces:{} does NOT clear the gate — so once a space id is
-  //     configured we MUST also export DATABRICKS_GENIE_SPACE_ID or the app crashes at boot
-  //     with "Missing required resources: genie_space". The space id is a RUNTIME handshake
-  //     value (created by job_99_setup, absent at deploy), so it cannot be bound in
-  //     app/resources/app.yml the way the warehouse/jobs are — we set it here from the row we
-  //     just read, immediately before constructing genie().
+  // still trips the gate. Either bind the env var to a real resource, or set it yourself.
+  //   - genie: gated on DATABRICKS_GENIE_SPACE_ID. The space is created by the installer
+  //     (job_99_setup), after the deploy, so the id cannot be bound in app/resources/app.yml.
+  //     The plugin is ALWAYS registered with a live `spaces` getter (config/genieSpace.ts),
+  //     looked up per request, so Genie comes online without a second deploy; the env var
+  //     carries the boot id or a placeholder purely to clear the gate.
   //   - jobs:  gated on DATABRICKS_JOB_ID (plus one env per configured alias) → bound to a
   //     real job in app/resources/app.yml (value_from: profiler).
   //   - analytics: gated on DATABRICKS_WAREHOUSE_ID → set as a PLAIN env value (value:
   //     ${var.warehouse_id}), NOT a bound resource. The app already binds 19 jobs and Apps cap
   //     an app at 20 resources, so the warehouse can't also be one. The gate only reads the env
-  //     var (same as genie above), so the app boots; the SP's CAN_USE is granted out-of-band by
-  //     job_99_setup (see app/resources/app.yml).
+  //     var, so the app boots; the SP's CAN_USE is granted out-of-band by job_99_setup.
   // ─────────────────────────────────────────────────────────────────────────────────────
-  if (control.genieSpaceId) {
-    process.env.DATABRICKS_GENIE_SPACE_ID = control.genieSpaceId;
-  }
+  process.env.DATABRICKS_GENIE_SPACE_ID = control.genieSpaceId ?? BOOT_PLACEHOLDER;
   const plugins = [
     analytics(),
-    ...(control.genieSpaceId ? [genie({ spaces: { default: control.genieSpaceId } })] : []),
+    genie({ spaces: liveGenieSpaces(readControlConfig) }),
     // 19 operator-facing jobs, run-now param schemas from docs/contracts/jobs.md; IDs
     // resolve from DATABRICKS_JOB_<ALIAS> env vars (bundle). See job-params.ts.
     jobs(migrationJobs),
@@ -79,12 +59,12 @@ async function main() {
       // the variable), not on first request. (Handshake nulls are NOT fatal — see above.)
       resolveMigrationCatalog();
       resolveMigrationSchema();
+      armGenieSpaces();
       appkit.server.extend((app) => {
         // GET /api/config — the single place the client learns catalog, schema,
-        // dashboard_id, and whether Genie is configured yet.
-        // genie_available reflects THIS process's plugin (spaces fixed at construct);
-        // dashboard_id + genie_space_configured are re-read live per request in the route.
-        registerConfigRoute(app, { genieAvailableAtBoot: control.genieSpaceId !== null });
+        // dashboard_id, and whether Genie is set up. Re-read live per request; each read also
+        // refreshes the Genie space the plugin uses (config/genieSpace.ts).
+        registerConfigRoute(app);
         // POST /api/actions/update — idempotent MERGE UPDATE on migration_actions
         // (notes/assignee) as the service principal. Same catalog origin as reads.
         registerActionWriteRoute(app);
@@ -127,6 +107,10 @@ async function main() {
         // tool serves (runPreflight, impacts.authority from convert_authority), so the app convert gate and Genie
         // agree by construction. Triggers nothing; the convert job re-checks every gate.
         registerConvertPreflightRoute(app);
+        // GET /api/permissions, POST /api/permissions/grant, POST /api/permissions/hand-back —
+        // the install engine's app door. Every statement runs as the signed-in user (forwarded
+        // token, never the app's identity), plan_id-pinned, audit row first, read back after.
+        registerPermissionsRoutes(app);
         // POST/GET/DELETE /mcp — Genie Code custom MCP surface. Stateless streamable HTTP;
         // reuses the same reads + triggerAlias() the UI uses (no more-permissive path). v1 =
         // reads + non-mutating stages; MCP_TIER=v2 exposes gated conversions. See mcp/register-mcp.ts.

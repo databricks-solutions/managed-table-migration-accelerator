@@ -10,6 +10,7 @@ resources:
   jobs:
     job_05b_unfreeze_verify:
       name: "[${bundle.target}] ${bundle.name} :: 05b unfreeze + verify"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "05b-unfreeze-verify"

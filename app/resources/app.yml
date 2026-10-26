@@ -13,11 +13,11 @@ resources:
     app:
       # Prefixed with `mcp-` so Databricks recognizes this app as a custom MCP server
       # (the AI Playground / AI Gateway MCP surface only lists apps whose name starts with
-      # `mcp-`). Kept in lockstep with var.app_name (default `mcp-${bundle.name}`), which the
-      # profiler uses to resolve this App's service principal at runtime (w.apps.get) and grant
-      # it CAN_RUN on the Genie space. This is NOT a resource reference, so it introduces no
-      # deploy cycle.
-      name: mcp-${bundle.name}
+      # `mcp-`). Taken from var.app_name (default `mcp-${bundle.name}`), the same value setup and
+      # the installer use to resolve this App's service principal at runtime (w.apps.get), so the
+      # two cannot drift. Override it to run a second, isolated deployment in one workspace. This
+      # is NOT a resource reference, so it introduces no deploy cycle.
+      name: ${var.app_name}
       description: "Admin-only control plane for migrating external/Hive tables to UC managed tables, organized into waves."
       source_code_path: ..
 
@@ -36,6 +36,10 @@ resources:
         - catalog.catalogs:read
         - catalog.schemas:read
         - catalog.tables:read
+        # Settings → Permissions grants (and hands back) with the signed-in user's own rights:
+        # the forwarded token runs the plan's GRANT / REVOKE statements on the app's warehouse.
+        # Never the app's identity; a request without a forwarded token is refused.
+        - sql
 
       # SINGLE authoritative app spec. Databricks docs are explicit that a bundle
       # `config.env` "will override the environment variables specified in the app.yaml
@@ -155,6 +159,16 @@ resources:
           # surface only) on one current_user.me() call; "false" (or unset) sends nothing.
           - name: MTM_TELEMETRY_ENABLED
             value: "${var.telemetry_enabled}"
+          # Settings → Permissions: the group whose members may grant from the app (blank = each
+          # installer writes the install records with their own access), and the deployment the
+          # install commands and the jobs' run-permission line name. The Apps platform refuses an
+          # empty value, so the group rides behind a fixed "group:" prefix the server strips.
+          - name: MTM_INSTALLER_GROUP
+            value: "group:${var.installer_group}"
+          - name: MTM_TARGET
+            value: "${bundle.target}"
+          - name: MTM_DEPLOYMENT
+            value: "[${bundle.target}] ${bundle.name}"
 
       # Resource bindings — 19 operator jobs + the SQL warehouse = 20 resources, exactly at the
       # Databricks Apps hard cap of 20. Each job is bound by bundle

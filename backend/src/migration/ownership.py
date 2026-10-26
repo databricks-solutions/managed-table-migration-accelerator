@@ -543,8 +543,12 @@ def held_directly(grant_rows: Iterable[dict], securable_type: str, privilege: st
 
 
 def _revocable(r: dict) -> bool:
+    # Table-scoped Authorize rows only: the installer's schema/catalog MANAGE rows (``INSTALL|…``)
+    # are handed back by a person (revoke_convert) — the convert identity cannot revoke its own.
     return (r.get("op_kind") == OP_GRANT and r.get("status") == LEDGER_GRANTED and not r.get("dry_run")
-            and bool(r.get("added")) and not r.get("prior_held"))
+            and bool(r.get("added")) and not r.get("prior_held")
+            and (r.get("scope") or _ac.SCOPE_TABLE) == _ac.SCOPE_TABLE
+            and not str(r.get("ledger_key") or "").startswith("INSTALL|"))
 
 
 def revoke_plan(granted_rows: Iterable[dict], terminal_full_names: Iterable[str]) -> dict:

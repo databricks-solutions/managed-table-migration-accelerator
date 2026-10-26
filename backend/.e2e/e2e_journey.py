@@ -39,6 +39,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(
 from migration import actions as ax  # noqa: E402
 from migration import authority as authz  # noqa: E402
 from migration import bulk_journey_oracle as bjo  # noqa: E402
+from migration import install as ins  # noqa: E402
 from migration import journey_oracle as jo  # noqa: E402
 from migration import parallelism as pl  # noqa: E402
 
@@ -259,9 +260,12 @@ class Journey:
         return members, self.sql(authz.stored_authority_sql(self.t(authz.CONVERT_AUTHORITY_TABLE), names, run_as))
 
     def _job_id(self, suffix: str) -> int | None:
-        """The one deployed job whose name ends with ``suffix``; None when absent or ambiguous."""
-        ids = [j.job_id for j in self.w.jobs.list()
-               if j.settings and (j.settings.name or "").endswith(suffix)]
+        """The one deployed job of this target whose name ends with ``suffix``; None when absent
+        or ambiguous (a target-qualified match wins over the bare tail)."""
+        named = [(j.settings.name or "", j.job_id) for j in self.w.jobs.list() if j.settings]
+        ids = [i for n, i in named if ins.name_matches(n, suffix, _e2e_env.deployment())]
+        if not ids:
+            ids = [i for n, i in named if n.endswith(suffix)]
         if len(ids) != 1:
             print(f"    {len(ids)} deployed job(s) end with {suffix!r}")
             return None

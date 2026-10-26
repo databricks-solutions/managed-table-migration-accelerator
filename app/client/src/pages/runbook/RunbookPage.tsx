@@ -7,7 +7,8 @@ import { SECTION_COPY } from '../../lib/sectionCopy';
 import { PagedTable, type Column } from '../../components/PagedTable';
 import { ActionStatusBadge } from '../../components/ActionStatusBadge';
 import { parseScopeSelector } from '../overview/freezeCard.pure';
-import { filterRunbookToScope } from './runbook.pure';
+import { HandBackButton } from '../../components/HandBackButton';
+import { filterRunbookToScope, handbackScope } from './runbook.pure';
 
 /**
  * Do by hand — the manual runbook: the steps a human runs directly, phase-ordered with
@@ -65,7 +66,15 @@ export function RunbookPage() {
     {
       key: 'status',
       header: 'Status',
-      render: (r) => <ActionStatusBadge status={r.status} />,
+      render: (r) => {
+        const handback = handbackScope(r);
+        return (
+          <div className="flex flex-col items-start gap-1.5">
+            <ActionStatusBadge status={r.status} />
+            {handback ? <HandBackButton scope={handback} /> : null}
+          </div>
+        );
+      },
     },
   ];
 

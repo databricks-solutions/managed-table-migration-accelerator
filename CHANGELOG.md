@@ -8,7 +8,112 @@ release may change job parameters or control-table columns; every such change is
 
 ## [Unreleased]
 
+### Added
+
+- **One permissioning engine for every install door.** `migration.provision` (pure) holds the
+  install options, the rights and coverage report, the four-set grant plan (Control / Look /
+  Read / Change) with its `plan_id` fingerprint, read-back verification, and the hand-back and
+  uninstall plans; `migration.provision_io` is the thin edge the notebook and the CLI share. New
+  control table `migration_scope` (which scopes the jobs' identity was granted, by whom, through
+  which door; flagged on removal, never deleted). New `audit_log` actions `INSTALL_GRANT`,
+  `INSTALL_GRANT_SKIPPED` and `INSTALL_REVOKE`, and installer `INSTALL|…` rows in
+  `ownership_ledger` that `07` never revokes (contract change: see
+  `backend/docs/contracts/control-tables.md`).
+- **`installer_group` bundle variable.** `job_99_setup` grants that group read access to the
+  control schema and `MODIFY` on the install records, so installers never grant themselves.
+  Blank (the default) keeps today's behavior: each installer grants themselves that access.
+- **The install notebook checks your rights and shows the grant plan.** Its widgets now come from
+  the shared option list (`action`, `confirm_grants`, `jobs_identity`, `scopes`, `convert_rights`,
+  `wave_id`, `plan_id`, `grantee_group`, plus the existing ones). A default run still runs setup,
+  data and verify; it now also prints the rights and coverage report and the grant plan, and
+  applies the grants (each audited first, then read back) only with `confirm_grants=true`.
+  `action=check`, `grant_convert`, `revoke_convert` and `uninstall` cover the rest of the journey.
+  Run as a job, it keeps what it printed: a cell that prints a plan or a fix and then stops hands
+  its exit to the next cell, so the run output still shows the plan. It checks this deployment's
+  own app, named by the `99 setup` job's `app_name` parameter.
+- **An install CLI.** `databricks bundle run install -t <target>` runs the same engine from a
+  terminal or a pipeline: options as `MTM_*` environment variables through the bundle (a bundle
+  script takes no arguments) or as flags when run directly, `MTM_OUTPUT=json` for one document
+  with the rights, the plan and its `plan_id`, an interactive scope picker, and exit codes 0–5.
+  A dry run runs nothing. `make install` is the shortcut.
+- **Read-backs see privileges held through groups.** A grant held through one of the grantee's
+  groups (or `account users`) now reads as present instead of missing.
+- **Choose who the jobs run as.** New complex bundle variable `jobs_run_as`, set as `run_as` on
+  all 24 stage jobs (default: the deployer; `prod`: `prod_run_as_sp`, as before). The installer's
+  `jobs_identity` option writes it to `variable-overrides.json`, and the CLI offers to redeploy
+  (`--yes` skips the prompt). The grant plan gains a line that gives the jobs' identity
+  `CAN_MANAGE_RUN` on every job, so the cockpits and conductor tails can start other jobs. New
+  `prod_root_path` variable (default unchanged) and a WARN when every workspace user can edit
+  the deployment folder. Deploying as a service principal: set `jobs_run_as`, since the default
+  names a user. Moving the jobs to a service principal needs the deployer to hold its Service
+  principal: User role (workspace admins too). The installer says so before it redeploys, and
+  names the fix when the deploy is refused for it. The dev-only `e2e` helper jobs are not counted
+  in the "all jobs agree" check. When the jobs' identity is not the owner of the deployment folder
+  (on `dev` and `e2e` it sits in the deployer's home), the plan adds a bootstrap line that gives
+  it `CAN_READ` on that folder, so setup can open its notebooks. The app cannot grant it and
+  shows the two CLI commands instead.
+- **Install records follow the account group.** The `installer_group` membership check uses
+  `is_account_group_member`, so an account group not assigned to the workspace still counts
+  (the workspace group list is the fallback).
+- **Convert rights are handed back at the end.** `07` now marks the installer's schema `MANAGE`
+  `HANDBACK_READY` once every table in the schema is `CLEANED` or `ROLLED_BACK`, and opens a
+  schema-scoped `RESTORE_OWNERSHIP` action with the exact `REVOKE` (in dry-run too: it changes no
+  grant). The installer's `revoke_convert` runs it and closes the action. New installer option
+  `plan_run_id` pins `grant_convert` to the wave plan you reviewed: a newer plan stops it before
+  any grant.
+- **Hand-back rules.** A hand-back or uninstall plan has its own `plan_id`, so a grant plan id can
+  never apply a revoke. A re-install keeps `added = true` on a grant the tool already added, so it is
+  still handed back. Re-running `07` reopens a closed hand-back action when a schema is ready again.
+  An empty hand-back now names what is still held and why ("Still held, not ready yet"), with a
+  new `waiting` list on `provision.handback_plan` and one line in Settings → Permissions.
+- **Grant permissions from the app.** Settings → Permissions shows your rights, who the jobs run as,
+  the schemas in scope, and how convert rights are given, then grants the plan as the signed-in
+  admin (their forwarded token, never the app's identity) after a preview pinned by `plan_id`. The
+  convert gate offers **Grant convert rights for this wave**, and Do by hand offers **Hand back** on
+  the installer's hand-back rows. New routes `GET /api/permissions`, `POST /api/permissions/grant`
+  and `POST /api/permissions/hand-back`. The app now writes the installer's `INSTALL_*` audit rows,
+  `migration_scope` and `INSTALL|…` ledger rows (safety rules SR15–SR17 in
+  `app/docs/control_plane.md`). Job permissions and a jobs identity change stay CLI or notebook
+  steps; the app shows the commands.
+- **Permissions over MCP.** `mtm_get_permissions` (v1 and v2) reads the same plan as the Settings
+  page, as the caller. The v2 tools `mtm_grant_permissions` and `mtm_hand_back_convert_rights`
+  run it as the caller too, behind `confirm=true` and the previewed `plan_id`. With no sign-in they
+  answer with the CLI command. `backend/.e2e/e2e_mcp.py --permissions` checks them live.
+- **One deploy.** The app looks the Genie space up per request instead of once at boot, so the
+  space the installer creates works without a second deploy. The install notebook's "deploy
+  again" step is gone, and every installer run (notebook or CLI) now ends with the conductor, so
+  the app's views and next step reflect it: to upgrade, deploy and re-run the installer.
+- **An under-privileged banner on every page.** When the jobs are missing permissions, every page
+  says so ("The migration is missing permissions on 2 schemas.") and links to Settings →
+  Permissions. It reads the same plan as that page and never grants.
+- **The Settings grants panel addresses schema grants to the jobs' identity.** Step 2 now reads
+  who the deployed jobs run as (`jobs_identity` on `GET /api/grants/plan`), instead of assuming the
+  app service principal.
+
+### Fixed
+
+- **The `prod` target validates.** A target-level `run_as` also applied to the app, which the
+  Apps platform refuses ("apps do not support a setting a run_as user that is different from the
+  owner"), and the e2e DLT pipeline pinned `development: true`, which production mode rejects.
+  `run_as` now sits on each job, and the pipeline takes development mode from its target.
+
+- **A fresh install's control config is complete before the first profile.** `job_99_setup` now
+  writes `migration_control_config.warehouse_id` from the deploy's `warehouse_id`, so the install
+  check no longer reports it missing until the profiler runs.
+
+- **The profiler skips `information_schema`.** An unfiltered profile listed each catalog's
+  `information_schema` views (reported as `EXTERNAL`, format `UNITY_CATALOG`) as tables to
+  migrate. Both discovery queries now exclude that schema.
+
 ### Changed
+
+- **The profiler preflight no longer offers `READ METADATA` for enrichment.** A live test showed
+  `DESCRIBE DETAIL` and `DESCRIBE HISTORY` still need `SELECT` with `READ METADATA` held on the
+  metastore or catalog. An enrichment gap with no known catalogs now prints `USE CATALOG`,
+  `USE SCHEMA` and `SELECT` on a `<catalog>` placeholder, and the broad alternatives are labelled
+  discovery-only. `backend/docs/operations/privileges.md` records the result, and the new design
+  note `backend/docs/install-and-permissions.md` plans notebook and CLI installs over one
+  permissioning engine.
 
 - **Shorter README, fuller docs.** `README.md` is now a short front door: what the tool does, how it
   works (a lifecycle diagram and app screenshots), prerequisites, the corrected convert
@@ -39,6 +144,11 @@ release may change job parameters or control-table columns; every such change is
   reads each catalog and schema once, at most eight at a time, and reuses a result for a minute
   (Refresh checks again), so a 400-schema estate costs about 430 reads instead of 1,600.
   `GET /api/grants/plan` accepts an optional `scopes` parameter (validated server-side, max 50).
+- **Install docs, with screenshots.** The README's Install section and `docs/00-installation.md`
+  now walk the three front doors (notebook, CLI, Settings → Permissions) and Genie Code, with
+  redacted screenshots under `docs/images/install/` from a live install. `docs/07b`, `docs/11`,
+  `docs/12`, `docs/15`, `app/docs/app-sp-grants.md` and `backend/docs/contracts/jobs.md` (new
+  section 26) cover the installer, and the design note records where the build differs.
 - **Genie Code, front and center.** The README gains a "Drive it with Genie Code" section (what the
   app's MCP server is, how to connect it, example prompts, the `confirm=true` safety model).
   `docs/15-genie-code-mcp.md` adds a "What you can ask" table mapping prompts to tools; the

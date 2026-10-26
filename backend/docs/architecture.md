@@ -314,7 +314,8 @@ Two rules bank out of this design:
 
 `databricks.yml` defines three targets: `dev` (default, development mode), `e2e` (a named
 development-mode target for the live e2e estate; its workspace values come from `BUNDLE_VAR_*`), and
-`prod` (production mode, `run_as` a service principal). In development mode, resources are
+`prod` (production mode). Every stage job carries `run_as: ${var.jobs_run_as}` (default: the
+deployer; `prod`: the service principal in `prod_run_as_sp`). In development mode, resources are
 `[dev <user>]`-prefixed; the cockpit resolves job names by suffix.
 
 All jobs run on serverless compute. The serverless runtime natively satisfies

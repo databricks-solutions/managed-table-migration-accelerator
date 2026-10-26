@@ -79,9 +79,9 @@ In detail, the four identities:
 - **The app service principal** (the app's own identity). `job_99_setup` grants it least-privilege
   access to the control plane (`USE CATALOG`, `USE SCHEMA`, `SELECT` on the control schema, and
   `MODIFY` on `migration_actions` only) and verifies each grant with `SHOW GRANTS`.
-- **The convert identity** (the job's `run_as`, which actually runs `SET MANAGED`). In `dev` and
-  `e2e` (development mode) that is **you**, the deployer. In `prod` it is the service principal in
-  `prod_run_as_sp`, normally the app SP. On each table it needs:
+- **The convert identity** (the jobs' `run_as`, which actually runs `SET MANAGED`). Every stage job
+  runs as the `jobs_run_as` variable: by default **you**, the deployer. In `prod` it is the service
+  principal in `prod_run_as_sp`, normally the app SP. On each table it needs:
   - `USE CATALOG` and `USE SCHEMA`;
   - ownership **or** `MANAGE` on the table, its schema or its catalog (direct, inherited or through
     a group);
@@ -114,8 +114,10 @@ backticks; a display name grants nothing), shown on the app's page in the worksp
 
 ### The Settings page generates the rest
 
-The app's **Settings** page has a **Grants the App SP needs** panel. It generates copy-paste SQL
-and checks with `SHOW GRANTS` which grants have landed:
+The app's **Settings** page (**Connection & policy**) has two panels. **Permissions** checks, grants
+and hands back as the signed-in admin ([Carry on in the app](#carry-on-in-the-app)). Below it,
+**Permissions the app needs** generates copy-paste SQL and checks with `SHOW GRANTS` which grants
+have landed:
 
 - **Tier 1**, control-plane access: the four grants above (also automated by `job_99_setup`).
 - **Tier 2**, per target schema: `USE CATALOG`, `USE SCHEMA`, `SELECT` and `MANAGE` at schema grain,
@@ -129,7 +131,8 @@ and checks with `SHOW GRANTS` which grants have landed:
   the authoritative set once the grants land. On a large metastore the scan stops after about
   20 seconds and says how many catalogs it covered.
 
-The app generates and verifies this SQL; it never runs a `GRANT` or changes an owner. The full grant
+This panel generates and verifies SQL; it never runs a `GRANT` or changes an owner. Grants that run
+go through the Permissions panel, as you, after a confirm. The full grant
 contract, including the `run_as` model and the reasoning behind each tier, is in
 [App service principal grants](../app/docs/app-sp-grants.md).
 
@@ -145,7 +148,9 @@ Set these bundle variables before deploying, either in `databricks.yml` under yo
 | `dataset_catalog` / `dataset_schema` | `main` / `migration` | The same catalog and schema; the dashboard and Genie read from here. |
 | `catalog_filter` / `schema_filter` | `*` / `*` | Glob filters that limit which catalogs and schemas the profiler scans. |
 | `workspace_id` | blank | Your workspace ID, so links from the app open in the right workspace. Optional. |
-| `prod_host` / `prod_run_as_sp` | placeholder / blank | `prod` target only: the prod workspace URL and the service principal application ID that runs the jobs. |
+| `jobs_run_as` | the deployer | Who every stage job runs as: `{service_principal_name: …}`, `{group_name: …}` or `{user_name: …}`. A complex variable: set it in the target or `.databricks/bundle/<target>/variable-overrides.json` (the installer's `jobs_identity` option writes it), not `BUNDLE_VAR_*`. Required when a service principal deploys. |
+| `prod_host` / `prod_run_as_sp` | placeholder / blank | `prod` target only: the prod workspace URL and the service principal application ID the prod jobs run as. |
+| `prod_root_path` | `/Shared/.bundle/<bundle>/prod` | `prod` target only: the deployment folder. The default keeps existing installs in place. For a new install pick a folder only the deployers can edit; the installer warns when every workspace user can edit it. |
 | `mcp_tier` | `v2` | What Genie Code may do through the app: `v2` adds the gated tools that change things; `v1` is reads and non-mutating stages only. |
 | `telemetry_enabled` | `true` | `false` to turn off usage telemetry (see below). |
 
@@ -153,47 +158,208 @@ The `dev` target ships with a placeholder host (`https://CHANGE-ME-dev.cloud.dat
 replace it with your workspace URL. Every other knob (wave sizes, scan caps, parallelism) has a
 safe default and is documented in [the jobs contract](../backend/docs/contracts/jobs.md).
 
-## Install from the workspace (recommended, no local CLI)
+## Install: one engine, three front doors
 
-Installation has three phases. The bundle creates every resource; the installer notebook only
-orchestrates the runtime steps, and it never creates jobs, the app or the dashboard.
+The deploy creates every resource. The **installer** then checks your rights, grants what the
+migration needs, provisions the control plane and verifies it. It is one engine with three front
+doors, and every door records what it did in the same control tables, so you can start in one and
+finish in another:
+
+| Front door | Suits | How |
+|---|---|---|
+| **Notebook** | Workspace-only teams, no local tools | Open `backend/notebooks/install.py`, **Run all** |
+| **CLI** | Engineers, scripted or repeatable installs | `databricks bundle run install -t <target> --profile <profile>` |
+| **App Settings** | After the first install: adding schemas, convert rights per wave, handing rights back | **Connection & policy → Permissions**, as the signed-in admin |
+
+Genie Code can also read the same check and plan, and grant behind `confirm=true`
+([below](#from-genie-code)).
+
+```mermaid
+flowchart LR
+  deploy["Deploy the bundle"] --> check["Check rights<br/>and coverage"]
+  check --> scopes["Pick the schemas<br/>to migrate"]
+  scopes --> plan["Preview the<br/>grant plan"]
+  plan --> apply["Apply, read back,<br/>verify"]
+  apply --> migrate["Profile, plan,<br/>dry run, convert"]
+  migrate --> cleanup["Cleanup"]
+  cleanup --> handback["Hand convert<br/>rights back"]
+```
+
+Every step is idempotent: re-running says "already done" rather than redoing work. Nothing is
+granted until you confirm, and a confirm is pinned to the plan you reviewed by its `plan_id`, so a
+plan that changed since the preview stops before any statement runs.
+
+### What the installer grants
+
+Access is split into four sets, granted in one reviewed plan. Only the last one can change data.
+
+| Set | Grantee | What and why |
+|---|---|---|
+| **Control** | The app's service principal, the jobs' identity, and the installers' group | Read the control plane, write `migration_actions`; the jobs' identity can create and run its own control schema and jobs |
+| **Look** | The jobs' identity | `BROWSE` per catalog (or `READ METADATA` on the metastore) and the `system.access`, `system.compute` and `system.lakeflow` schemas: find tables, owners, grants, lineage and job history |
+| **Read** | The jobs' identity | `USE SCHEMA` and `SELECT` on each schema you migrate: profile and convert need `SELECT` |
+| **Change** | The jobs' identity | `MANAGE` on each schema you migrate: the convert rights. Handed back at the end |
+
+**Convert rights, all at once or per wave.** By default (`convert_rights=all_at_once`) `MANAGE` is
+granted for every chosen schema at install, so no person is needed between waves, and it is handed
+back once cleanup finishes. The stricter option (`per_wave`) grants Control, Look and Read only;
+before each wave converts, `action=grant_convert` (or **Grant convert rights** on the app's convert
+gate) grants `MANAGE` on that wave's schemas. You can switch between the two at any time. The tool
+only ever revokes what it recorded as added; a grant you made yourself is never revoked.
+
+**The jobs' identity** is whoever the deployed jobs run as (`jobs_run_as`, the same on every job).
+The installer reads it from the deployed jobs, names its kind in the plan, and refuses to go on if
+the jobs disagree. A dedicated service principal is recommended for production; the
+`jobs_identity` option writes the override and asks you to redeploy.
+
+### Installer options
+
+The notebook widgets and the CLI read one option set. Through the bundle, each option is an
+`MTM_<NAME>` environment variable (a bundle script takes no arguments). Run
+`python3 backend/scripts/install.py --help` for the same options as flags.
+
+| Option | Default | What it does |
+|---|---|---|
+| `action` | `install` | `install`; `check` (rights and plan only); `grant_convert` (one wave's convert rights); `revoke_convert` (hand convert rights back); `uninstall` (revoke everything the tool granted) |
+| `confirm_grants` | `false` | `false` prints the plan and runs nothing; `true` applies it |
+| `plan_id` | blank | Apply only if the plan still matches the one you reviewed |
+| `scopes` | the stored scopes | `catalog.schema` or `catalog.*`, comma-separated: the schemas to migrate |
+| `convert_rights` | `all_at_once` | `all_at_once` or `per_wave` (above) |
+| `wave_id`, `plan_run_id` | blank | The wave for `grant_convert`, pinned to the wave plan you reviewed |
+| `jobs_identity` | `keep` | `sp:<application-id>`, `group:<name>` or `user:<email>` to move the jobs; needs a redeploy |
+| `grantee_group` | blank | Grant to a group that contains the jobs' identity instead |
+| `data_mode` | `real` | After the grants: `real` profiles the estate, `none` skips it, `fixture` seeds a dev-only sample |
+| `output` (CLI) | `text` | `json` prints one document for scripts and change tickets |
+
+The catalog, schema, target, app and warehouse always come from the deploy, so the installer
+cannot point at a different control plane.
+
+## Install from the workspace (recommended, no local CLI)
 
 1. **Clone** this repository into a Databricks **Git folder** from the workspace UI.
 2. **Deploy the bundle.** Open `databricks.yml`, click the **Deployments** icon, pick a target and
    click **Deploy**. This creates the stage jobs, the setup job, the dashboard and the app.
-3. **Open `backend/notebooks/install.py` and click Run all.** It runs five idempotent steps
-   (re-running is safe and reports "already done"):
-   - **Preflight**: finds the app and its jobs by name and stops with a pointer back to step 2 if
-     anything is missing.
-   - **Provision**: runs `job_99_setup` (control tables, Genie space, app SP grants) and waits.
-   - **Restart**: asks you to **Deploy again**, so the app picks up the new Genie space. Use a
-     bundle deploy, never `databricks apps stop` / `start` (see
-     [Restarting the app](#restarting-the-app)).
-   - **Data**: per the `data_mode` widget: `real` runs the profiler, the wave planner and the
-     conductor against your estate; `fixture` seeds a synthetic estate on an allowlisted dev
-     control plane only; `none` skips it.
-   - **Verify**: checks the control-plane config, the app SP grants, that the app is running, and
-     a representative read. It prints the app URL.
+3. **Open `backend/notebooks/install.py`, set `action` to `check`, and click Run all.** Nothing is
+   granted. The widgets are explained at the top of the run:
+
+   ![The installer notebook's options: each widget with its value and a one-line meaning, set to action=check](images/install/notebook/options.png)
+
+   The rights check gives one go or no-go line per requirement and how much of the estate you can
+   grant on. A `WARN` or `NO-GO` line says what is missing and who can fix it:
+
+   ![The rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity and the install records, a warning for metastore admin, and the coverage headline](images/install/notebook/rights.png)
+
+   Then the grant plan, every grant with its set, grantee, reason and status, ending with the
+   `plan_id` that pins it:
+
+   ![The printed grant plan: Control, Look, Read and Change lines, each marked present or missing, with the plan_id and a count of what is already held](images/install/notebook/plan.png)
+
+4. **Apply.** Set `action=install`, `confirm_grants=true` and `plan_id` to the printed value, then
+   **Run all** again. The installer grants, reads every grant back, records the scopes and the
+   convert rights, runs `job_99_setup` (control tables, Genie space, the app's grants), runs the
+   data step, and verifies:
+
+   ![The apply step: the one missing grant is granted, and the read-back shows 17 present, 0 missing](images/install/notebook/apply.png)
+
+   ![Verify: the control-config handshake, the app service principal's grants, the app status and URL, a representative read and the grant plan, all ok, ending VERIFY PASSED](images/install/notebook/verify.png)
+
+   The run ends with the app URL. Open **Connection & policy** there: every check should be green.
 
 ## Install with the CLI
 
 ```bash
 databricks bundle validate -t dev --profile <profile>
 databricks bundle deploy   -t dev --profile <profile>   # jobs, dashboard, Genie handshake and the app
-databricks bundle run job_99_setup     -t dev --profile <profile>   # control tables, Genie space, app SP grants
-databricks bundle run job_08_conductor -t dev --profile <profile>   # refresh the read views (see below)
+
+# 1. Can I install, and how much of the estate can I grant on? Read-only.
+MTM_ACTION=check databricks bundle run install -t dev --profile <profile>
+
+# 2. Preview the plan for the schemas to migrate, then apply exactly that plan.
+MTM_SCOPES='sales.orders,finance.*' databricks bundle run install -t dev --profile <profile>
+MTM_SCOPES='sales.orders,finance.*' MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+  databricks bundle run install -t dev --profile <profile>
 ```
 
+On a terminal, a blank `MTM_SCOPES` with nothing stored shows a numbered list of the schemas you
+can grant on and asks. In a pipeline nothing is guessed: `MTM_SCOPES` is needed until scopes are
+stored. `MTM_OUTPUT=json` prints the rights, the plan and its `plan_id` as one document, and the
+exit code says what happened: `0` done, `1` a no-go, `2` invalid options, `3` applied with gaps,
+`4` the `plan_id` no longer matches (nothing ran), `5` waiting on a redeploy.
+
+![The CLI check: the rights and coverage report, the stored scopes, and the grant plan with one Change line missing](images/install/cli/check.png)
+
 `databricks bundle deploy` is the only deploy command: it also deploys the app, which the Apps
-platform builds from `app/`. Do not run `databricks apps deploy`. The `Makefile` wraps the common
-commands (`make validate`, `make deploy`, `make test`).
+platform builds from `app/`. Do not run `databricks apps deploy`. After a deploy, the app can still
+be starting: `databricks apps get <app-name>` shows when it is `RUNNING`. The `Makefile` wraps the
+common commands (`make validate`, `make deploy`, `make test`).
 
-`job_99_setup` and the profiler can run in either order. The app SP grants, however, land only on
-the first `job_99_setup` run **after** the app exists; on a fresh workspace a run before the deploy
-logs that the app is not deployed yet and applies nothing. Run it again after deploying.
+With `data_mode=real` (the default) the apply waits for `job_99_setup` and the profiling job, which
+can take half an hour on a large estate. `MTM_DATA_MODE=none` skips the data step; run the profiler
+later from the app.
 
-For production, set `prod_host` and `prod_run_as_sp`, then `databricks bundle deploy -t prod`. Runs
-are approved through job-run permissions and a person triggering each run.
+For production, set `prod_host` and the jobs' identity (`jobs_run_as`, or `prod_run_as_sp`), then
+`databricks bundle deploy -t prod`. Runs are approved through job-run permissions and a person
+triggering each run.
+
+## Carry on in the app
+
+After the first install, **Connection & policy → Permissions** shows the same check, the stored
+scopes with their live status, and the plan, for the signed-in admin. **Add schemas** widens the
+scope; **Grant** runs the plan as you, with your own rights, after a confirm that lists every
+statement. Lines you cannot grant name who can, with a **Copy request**.
+
+![Settings → Permissions: the rights check, who runs the jobs, the migration scope with Look, Read and Change status per schema, convert rights, and the plan](images/install/app/settings-permissions.png)
+
+![Add schemas: a box for catalog.schema or catalog.*, with suggestions of the schemas you can grant on](images/install/app/add-schemas.png)
+
+![The Grant confirm: Grant 1 permission, the exact GRANT statement, who it runs as, and the plan id it is pinned to](images/install/app/grant-dialog.png)
+
+![After Grant: only the two workspace-permission lines are left in the plan, each naming who can grant it](images/install/app/granted.png)
+
+An operator without authority sees the same plan with **Copy request** in place of **Grant**:
+
+![The operator's view: the lines it cannot grant, each naming who can, with Copy request](images/install/app/operator.png)
+
+With convert rights per wave, the convert gate offers **Grant convert rights** for that wave. It
+runs as you and reads the grant back. The convert itself is a separate confirm:
+
+![The convert gate after Grant convert rights: Granted 1, checked after, all in place, with the convert button still behind its own confirm](images/install/app/convert-gate-granted.png)
+
+The gate's permission check updates on the next dry run or Authorize, which write the verdict the
+gate reads.
+
+If the workspace does not let the app run SQL for you, Permissions says so and shows the notebook
+and CLI commands instead.
+
+### From Genie Code
+
+`mtm_get_permissions` returns the same check and plan. `mtm_grant_permissions` and
+`mtm_hand_back_convert_rights` (tier `v2`) grant or hand back as you, and refuse without
+`confirm=true`:
+
+![Genie Code calling mtm_get_permissions, then mtm_grant_permissions without confirm, which asks for confirmation and runs nothing](images/install/mcp/permissions.png)
+
+## Hand convert rights back
+
+Once every table in a schema is `CLEANED` or `ROLLED_BACK`, cleanup (`job_07_post_convert_cleanup`)
+marks its `MANAGE` ready and opens a **Hand back** item on the runbook (**Do by hand**). The jobs'
+identity cannot give up its own `MANAGE`, so a person hands it back, from any door:
+
+![The runbook row Hand back convert rights on a schema, with its Hand back button](images/install/app/runbook-handback.png)
+
+![The Hand back confirm: the exact REVOKE, who it runs as, and the hand-back plan id](images/install/app/runbook-handback-dialog.png)
+
+```bash
+# Everything cleanup marked ready, or name the schemas to hand back now.
+MTM_ACTION=revoke_convert databricks bundle run install -t <target> --profile <profile>
+MTM_ACTION=revoke_convert MTM_SCOPES=sales.orders MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+  databricks bundle run install -t <target> --profile <profile>
+```
+
+![The CLI hand-back dry run: the hand-back plan id and the one REVOKE it would run](images/install/cli/handback.png)
+
+A schema with a table still inside its 14-day rollback window is refused, with the date it becomes
+possible: rollback needs those rights.
 
 ## After every deploy: refresh the read views
 
@@ -213,7 +379,8 @@ recommendation.
 ## Check that it worked
 
 Open the app URL and go to **Settings**. Every control-plane query should report healthy, and the
-**Grants the App SP needs** panel should show the control-plane grants as landed. After the
+**Permissions** panel should list every scope with Look and Read granted (and Change, with
+convert rights all at once). After the
 profiler has run, **Overview** shows your estate and the recommended next step.
 
 ## Connect Genie Code (optional)
@@ -236,15 +403,22 @@ governed Unity Catalog MCP Service alternative are in [Genie Code MCP](./15-geni
 The app reads its whole environment (control catalog and schema, the warehouse and every job
 binding) from the bundle, applied at deploy time. `databricks apps stop` followed by `start`
 restarts the container **without** that environment, and the app crashes at boot with
-`MIGRATION_CATALOG is missing or invalid`. To restart the app, for example to pick up a new
-`genie_space_id`, run `databricks bundle deploy -t <target>` again.
+`MIGRATION_CATALOG is missing or invalid`. To restart the app, run `databricks bundle deploy -t
+<target>` again. A new `genie_space_id` needs no restart: the app looks it up per request.
 
 ## Troubleshooting
 
-- **The app shows `genie_available: false` right after a restart.** The app reads the Genie
-  handshake once at boot with a short timeout so a cold warehouse cannot fail the deploy. If the
-  warehouse was cold, Genie is not registered until the next restart. Warm the warehouse with any
-  query, then deploy again. `genie_space_configured`, read live, already shows `true`.
+- **The rights check says NO-GO or WARN.** Each line names what is missing and who can grant it.
+  Send them the plan (the CLI's `MTM_OUTPUT=json`, or **Copy request** in the app), then re-run the
+  check. Everything you can grant still applies; the rest is listed, never guessed.
+- **"plan_id no longer matches".** Something changed since the preview (a grant landed, a scope was
+  added). Nothing ran. Review the new plan and apply with its `plan_id`.
+- **"Nothing to revoke" on a hand-back.** Cleanup has not marked the schema ready yet: every table
+  in it must be `CLEANED` or `ROLLED_BACK`. The output lists what is still held. To hand a schema
+  back now, name it in `scopes`.
+- **Genie says it isn't set up yet.** The app reads the Genie space per request with a short
+  timeout, so a cold warehouse can delay it. Once the installer has run, reopen the Genie panel
+  (or reload the page) after the warehouse is warm. No redeploy is needed.
 - **Control-plane reads fail with `INSUFFICIENT_PERMISSIONS`.** The app SP grants have not landed.
   Run `job_99_setup` again after the app exists. If `USE CATALOG` still fails, the catalog is a
   shared one the setup identity cannot grant on: the job prints the exact `GRANT` statement for a
@@ -279,7 +453,18 @@ it with `set -a; source .env.e2e; set +a`, and deploy with
 
 ## Uninstalling
 
-`databricks bundle destroy -t <target>` removes the jobs, the dashboard and the app. It does not
+First revoke what the tool granted, then destroy the bundle. `action=uninstall` (notebook or CLI)
+prints every grant the installer recorded as added and revokes them with `confirm_grants=true`. It
+refuses while any table is inside its 14-day rollback window, and it never revokes a grant made
+outside the tool. Your own access to the install records is listed last, to run yourself:
+
+```bash
+MTM_ACTION=uninstall databricks bundle run install -t <target> --profile <profile>
+MTM_ACTION=uninstall MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+  databricks bundle run install -t <target> --profile <profile>
+```
+
+Then `databricks bundle destroy -t <target>` removes the jobs, the dashboard and the app. It does not
 drop the control-plane schema or its tables (the jobs create those at run time) or the Genie space
 (created by `job_99_setup`), and it never touches your tables. Roll back any converted table you
 want to keep EXTERNAL **before** the 14-day window closes; see

@@ -98,6 +98,7 @@ from migration import compat as cm
 from migration import conductor as cd
 from migration import lineage as ln
 from migration import executor as ex
+from migration import install as ins
 from migration import parallelism as pl
 from migration import progress as pg
 import uc_ext2managed  # noqa: F401,E402  product marker (opt-out: telemetry_enabled=false)
@@ -160,11 +161,21 @@ def _resolve_job_ids() -> dict:
     except Exception as e:  # noqa: BLE001
         print(f"could not list jobs: {type(e).__name__}")
         return ids
-    for key, suffix in BULK_STAGE_SUFFIXES.items():
-        for name, job_id in all_jobs:
-            if name and name.endswith(suffix):
-                ids[key] = job_id
-                break
+    try:
+        _nb_path = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
+    except Exception:  # noqa: BLE001
+        _nb_path = ""
+    # Prefer this deployment's own jobs (a workspace can hold dev + prod); else the bare tail.
+    for deployment in (ins.deployment_of_path(_nb_path), None):
+        for key, suffix in BULK_STAGE_SUFFIXES.items():
+            if ids[key]:
+                continue
+            for name, job_id in all_jobs:
+                if ins.name_matches(name, suffix, deployment):
+                    ids[key] = job_id
+                    break
+        if any(ids.values()):
+            break
     return ids
 
 

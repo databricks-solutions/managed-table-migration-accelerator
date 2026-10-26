@@ -136,6 +136,53 @@ def test_resolve_job_ids_maps_every_key_and_reads_jobs_once():
     assert consumed["n"] == 1  # materialized once, not per label
 
 
+def test_resolve_job_id_with_deployment_ignores_another_target():
+    jobs = _deployed({
+        "[dev alice] [fevm] managed-table-migration :: 00 profiler": 1,
+        "[dev alice] [e2e] managed-table-migration :: 00 profiler": 2,
+        "[prod] managed-table-migration :: 00 profiler": 3,
+    })
+    assert ins.resolve_job_id(jobs, "00 profiler") == 1
+    e2e = ins.deployment_qualifier("managed-table-migration", "e2e")
+    assert ins.resolve_job_id(jobs, "00 profiler", e2e) == 2
+    prod = ins.deployment_qualifier("managed-table-migration", "prod")
+    assert ins.resolve_job_ids(jobs, {"p": "00 profiler"}, prod) == {"p": 3}
+    other = ins.deployment_qualifier("managed-table-migration", "staging")
+    assert ins.resolve_job_id(jobs, "00 profiler", other) is None
+
+
+def test_deployment_qualifier_needs_both_parts():
+    assert ins.deployment_qualifier("b", "dev") == "[dev] b"
+    assert ins.deployment_qualifier("", "dev") is None
+    assert ins.deployment_qualifier("b", None) is None
+
+
+def test_deployment_from_path_reads_bundle_name_and_target():
+    p = "/Workspace/Users/a@x.com/.bundle/managed-table-migration/e2e/files/backend/notebooks/install"
+    assert ins.deployment_from_path(p) == ("managed-table-migration", "e2e")
+    shared = "/Shared/.bundle/managed-table-migration/prod/files/backend/notebooks/install"
+    assert ins.deployment_from_path(shared) == ("managed-table-migration", "prod")
+    assert ins.deployment_from_path("/Workspace/Repos/a/mtm/backend/notebooks/install") is None
+    assert ins.deployment_from_path(None) is None
+    assert ins.deployment_of_path(p) == "[e2e] managed-table-migration"
+    assert ins.deployment_of_path("/Repos/x") is None
+
+
+def test_name_matches_accepts_suffix_with_or_without_leading_space():
+    name = "[dev a] [e2e] b :: 11 bulk convert"
+    assert ins.name_matches(name, ":: 11 bulk convert", "[e2e] b")
+    assert ins.name_matches(name, " :: 11 bulk convert", "[e2e] b")
+    assert not ins.name_matches(name, ":: 11 bulk convert", "[prod] b")
+    assert ins.name_matches(name, ":: 11 bulk convert", None)
+    assert not ins.name_matches(None, ":: x", None)
+
+
+def test_name_matches_suffix_that_already_names_the_bundle():
+    assert ins.name_matches("[e2e] b :: 04 convert", "b :: 04 convert", "[e2e] b")
+    assert not ins.name_matches("[fevm] b :: 04 convert", "b :: 04 convert", "[e2e] b")
+    assert not ins.name_matches("[e2e] b :: 04 convert", "c :: 04 convert", "[e2e] b")
+
+
 def test_missing_job_keys_preserves_order():
     resolved = {"a": 1, "b": None, "c": 0, "d": 3}
     assert ins.missing_job_keys(resolved) == ["b", "c"]
@@ -273,17 +320,18 @@ def test_normalize_data_mode_rejects_unknown():
 
 
 def test_data_mode_sequences():
-    # real now delegates to the single 09 get_started orchestrator (discover→plan→conduct); the
-    # standalone conductor was dropped once the wave planner started tailing it.
+    # real delegates to the single 09 get_started orchestrator (discover→plan→conduct), which tails
+    # the conductor itself; the other modes end with the conductor so every run refreshes the views.
     assert ins.data_mode_job_sequence("real") == ["09_get_started"]
-    assert ins.data_mode_job_sequence("fixture") == [ins.FIXTURE_JOB_KEY]
-    assert ins.data_mode_job_sequence("none") == []
+    assert ins.data_mode_job_sequence("fixture") == [ins.FIXTURE_JOB_KEY, ins.CONDUCTOR_JOB_KEY]
+    assert ins.data_mode_job_sequence("none") == [ins.CONDUCTOR_JOB_KEY]
+    assert ins.CONDUCTOR_JOB_KEY in ins.ALL_JOB_LABELS
 
 
 def test_real_and_fixture_sequences_are_disjoint():
     # They both rewrite wave_plan, so the notebook must never run both — the plans never overlap.
     real = set(ins.data_mode_job_sequence("real"))
-    fixture = set(ins.data_mode_job_sequence("fixture"))
+    fixture = set(ins.data_mode_job_sequence("fixture")) - {ins.CONDUCTOR_JOB_KEY}
     assert real.isdisjoint(fixture)
 
 
@@ -324,36 +372,32 @@ def test_missing_config_fields_handles_none_row():
 
 
 # --------------------------------------------------------------------------- #
-# App-restart decision (Step 3) — always SAFE (re-deploy, never stop/start)
+# One deploy: no restart step, and every run ends with the conductor
 # --------------------------------------------------------------------------- #
 
-def test_restart_needed_when_space_exists_and_app_unaware():
-    assert ins.genie_restart_needed("space123", False) is True
+def test_the_restart_step_is_gone():
+    assert not hasattr(ins, "app_restart_plan")
+    assert not hasattr(ins, "genie_restart_needed")
 
 
-def test_restart_not_needed_when_app_already_aware():
-    assert ins.genie_restart_needed("space123", True) is False
+# --------------------------------------------------------------------------- #
+# Notebook exits keep what their cell printed
+# --------------------------------------------------------------------------- #
+
+_INSTALL_NB = os.path.join(os.path.dirname(__file__), "..", "..", "notebooks", "install.py")
 
 
-def test_restart_needed_defaults_true_when_boot_flag_unknown_and_space_exists():
-    assert ins.genie_restart_needed("space123", None) is True
+def _code_cells(src: str) -> list:
+    cells = [c.strip() for c in src.split("# COMMAND ----------")]
+    return [c for c in cells if c and not c.startswith("# MAGIC")]
 
 
-def test_restart_not_needed_without_a_space_id():
-    assert ins.genie_restart_needed("", None) is False
-    assert ins.genie_restart_needed(None, False) is False
-
-
-def test_restart_plan_message_is_safe_redeploy_only():
-    plan = ins.app_restart_plan("space123", False)
-    assert plan["needed"] is True
-    msg = plan["message"]
-    assert "Deploy" in msg
-    # NEVER proposes the crash-inducing restart paths.
-    assert "stop/start" in msg  # only as the explicit DON'T
-    assert "Do NOT use `databricks apps stop/start`" in msg
-
-
-def test_restart_plan_no_op_message_when_not_needed():
-    assert ins.app_restart_plan("space123", True)["needed"] is False
-    assert ins.app_restart_plan(None, None)["needed"] is False
+def test_a_deferred_exit_is_taken_by_the_next_code_cell():
+    """A notebook exit replaces everything its cell printed, so a cell that prints a plan or a
+    remediation defers the exit (``_exit_after``) and the very next code cell takes it."""
+    with open(_INSTALL_NB) as f:
+        cells = _code_cells(f.read())
+    deferring = [i for i, c in enumerate(cells) if "_exit_after(" in c and "def _exit_after" not in c]
+    assert len(deferring) >= 6
+    for i in deferring:
+        assert cells[i + 1].startswith("_exit_pending()"), cells[i][:120]

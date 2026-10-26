@@ -5,8 +5,7 @@ A profiler run only sees "what this `run_as` identity, in this workspace, may ac
 passes have DIFFERENT privilege needs (the design-delta "Privilege contract (tiered)" table):
 
   Discovery       information_schema.tables          BROWSE per catalog (auto-filtered)
-  Enrichment      DESCRIBE DETAIL / DESCRIBE HISTORY USE CATALOG+USE SCHEMA+SELECT, or
-                                                     READ METADATA at the metastore*
+  Enrichment      DESCRIBE DETAIL / DESCRIBE HISTORY USE CATALOG+USE SCHEMA+SELECT*
   System tables   system.access/compute/lakeflow.*  USE CATALOG system + explicit SELECT
   Workspace reach all of the above                  run IN each workspace with bound catalogs
 
@@ -17,8 +16,9 @@ This module turns cheap boolean PROBE results into a per-tier satisfied/gap verd
 
 Pure and unit-testable: no Spark import at module load. The ``probe_*`` / ``collect_probes``
 edges at the bottom use local ``spark.sql`` in try/except and degrade honestly (a denial or
-missing object -> ``False``, never a crash). (*Enrichment via READ METADATA is flagged
-"validate empirically" in the design-delta; see the operations doc.)
+missing object -> ``False``, never a crash). (*READ METADATA does not substitute: with it held on
+the metastore or catalog, DESCRIBE DETAIL / HISTORY are still refused for missing SELECT. See the
+operations doc.)
 """
 
 from __future__ import annotations
@@ -159,9 +159,8 @@ def grant_statements_for_gaps(
       catalog list is unknown). ``BROWSE`` is catalog-level only and auto-filters
       information_schema without USE CATALOG/USE SCHEMA/SELECT.
     - Enrichment gap -> granular least-privilege ``USE CATALOG`` + ``USE SCHEMA`` + ``SELECT``
-      per catalog (all inherit to child schemas/tables). When catalogs are unknown, fall
-      back to the metastore-wide ``READ METADATA ON METASTORE`` (inherits to every object;
-      "validate empirically" per the design-delta).
+      per catalog (all inherit to child schemas/tables), on a ``<catalog>`` placeholder when the
+      catalog list is unknown. Never ``READ METADATA``: it does not unlock DESCRIBE.
     - System-tables gap -> ``USE CATALOG ON CATALOG system`` + one ``SELECT`` per system
       schema (these do NOT auto-filter).
     - Workspace reach is advisory and NEVER emits a grant (bindings can't be granted around).
@@ -178,13 +177,9 @@ def grant_statements_for_gaps(
             out.append(grant_statement("BROWSE", "CATALOG", "<catalog>", principal))
 
     if _is_gap(tiers, TIER_ENRICHMENT):
-        if cats:
-            for c in cats:
-                out.append(grant_statement("USE CATALOG", "CATALOG", _bt(c), principal))
-                out.append(grant_statement("USE SCHEMA", "CATALOG", _bt(c), principal))
-                out.append(grant_statement("SELECT", "CATALOG", _bt(c), principal))
-        else:
-            out.append(grant_statement("READ METADATA", "METASTORE", "", principal))
+        for c in ([_bt(c) for c in cats] or ["<catalog>"]):
+            for priv in ("USE CATALOG", "USE SCHEMA", "SELECT"):
+                out.append(grant_statement(priv, "CATALOG", c, principal))
 
     if _is_gap(tiers, TIER_SYSTEM_TABLES):
         out.append(grant_statement("USE CATALOG", "CATALOG", _bt("system"), principal))
@@ -194,13 +189,20 @@ def grant_statements_for_gaps(
     return out
 
 
-def broad_grant_alternatives(principal: str) -> List[str]:
-    """The estate-wide shortcuts recommended for the single-profiler-SP setup (pure).
+BROAD_ALTERNATIVES_NOTE = (
+    "Broad estate-wide alternatives for discovery and grant visibility only (READ METADATA is "
+    "sensitive: grant it only to a trusted profiler SP). Enrichment still needs USE CATALOG + "
+    "USE SCHEMA + SELECT on each catalog or schema you assess:"
+)
 
-    Databricks recommends ``BROWSE`` to ``All account users`` for org-wide discovery, and
-    a single metastore-wide ``READ METADATA`` covers enrichment everywhere (broad + sensitive
-    — grant only to a trusted profiler SP; "validate empirically"). Surfaced in the report as
-    an alternative to the per-catalog least-privilege grants above.
+
+def broad_grant_alternatives(principal: str) -> List[str]:
+    """The estate-wide discovery shortcuts for the single-profiler-SP setup (pure).
+
+    Databricks recommends ``BROWSE`` to ``All account users`` for org-wide discovery, and a
+    metastore-wide ``READ METADATA`` exposes every owner and grant to the convert-permission
+    check. Neither unlocks DESCRIBE DETAIL / HISTORY, so they never replace the enrichment
+    grants; ``BROAD_ALTERNATIVES_NOTE`` is the header printed above them.
     """
     return [
         grant_statement("BROWSE", "CATALOG", "<catalog>", "All account users"),

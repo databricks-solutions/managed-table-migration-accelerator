@@ -10,12 +10,10 @@ import { SECTION_COPY } from '../lib/sectionCopy';
  * once at the shell level, `fixed`) opens a right-hand drawer. Genie is READ-ONLY: it answers
  * from the control views and cannot trigger a job or change a table — the panel says so.
  *
- * The server plumbing is already in place: the `genie()` plugin is registered when a space id
- * exists in the handshake (server.ts), and `/api/config` exposes two booleans that
- * `useCatalog()` carries — `genieAvailable` (chat works in THIS process) and
- * `genieSpaceConfigured` (a space id exists now, but a restart is needed if the app booted
- * before it). This component is the front-of-house for that: it mounts AppKit's <GenieChat>
- * when Genie is live, and otherwise shows the correct dead-end-breaking state.
+ * The `genie()` plugin is always registered and looks the space up per request
+ * (server/config/genieSpace.ts); `/api/config` reports `genieAvailable` live. This component
+ * mounts AppKit's <GenieChat> when a space exists, and otherwise says to run the installer,
+ * re-reading the config each time the panel opens so a space created meanwhile comes online.
  *
  * Suggested questions are STATIC client content (per spec) — informational prompts the
  * operator can type; the chat owns its own input, so we don't inject them programmatically.
@@ -30,7 +28,7 @@ const SUGGESTED_QUESTIONS = [
 
 export function GenieDock() {
   const [open, setOpen] = useState(false);
-  const { genieAvailable, genieSpaceConfigured } = useCatalog();
+  const { genieAvailable, refreshConfig } = useCatalog();
 
   // Esc closes the drawer — a dialog affordance the hand-rolled panel must provide itself.
   useEffect(() => {
@@ -46,7 +44,10 @@ export function GenieDock() {
     <>
       <button
         type="button"
-        onClick={() => setOpen(true)}
+        onClick={() => {
+          setOpen(true);
+          if (!genieAvailable) void refreshConfig();
+        }}
         className="fixed bottom-4 right-4 z-40 flex items-center gap-2 rounded-full bg-[var(--brand)] px-4 py-2.5 text-sm font-medium text-[var(--fg-on-dark)] shadow-lg transition-colors hover:bg-[var(--brand-hover)]"
         aria-label="Ask Genie"
       >
@@ -94,7 +95,7 @@ export function GenieDock() {
               {genieAvailable ? (
                 <GenieLive />
               ) : (
-                <GenieUnavailable configured={genieSpaceConfigured} />
+                <GenieUnavailable />
               )}
             </div>
           </aside>
@@ -131,31 +132,17 @@ function GenieLive() {
   );
 }
 
-function GenieUnavailable({ configured }: { configured: boolean }) {
+function GenieUnavailable() {
   return (
     <div className="flex flex-1 flex-col items-center justify-center gap-3 p-6 text-center">
       <div className="flex size-10 items-center justify-center rounded-full bg-muted">
         <Info className="size-5 text-muted-foreground" aria-hidden />
       </div>
-      {configured ? (
-        <>
-          <p className="text-sm font-medium text-foreground">Genie is ready — restart to use it</p>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            The Genie space now exists, but this app started before it. Redeploy (
-            <code className="font-mono text-[11px]">databricks bundle deploy</code>) to bring Genie
-            online — a standalone restart won&rsquo;t re-apply config.
-          </p>
-        </>
-      ) : (
-        <>
-          <p className="text-sm font-medium text-foreground">Genie isn&rsquo;t set up yet</p>
-          <p className="max-w-xs text-xs text-muted-foreground">
-            Run <code className="font-mono text-[11px]">job_99_setup</code> first — it creates the
-            Genie space over the control tables and writes it to the handshake. Genie comes online
-            after the next deploy (<code className="font-mono text-[11px]">databricks bundle deploy</code>).
-          </p>
-        </>
-      )}
+      <p className="text-sm font-medium text-foreground">Genie isn&rsquo;t set up yet</p>
+      <p className="max-w-xs text-xs text-muted-foreground">
+        Run the installer first. It creates the Genie space over the control tables. Genie comes
+        online here when it finishes, with no redeploy.
+      </p>
     </div>
   );
 }

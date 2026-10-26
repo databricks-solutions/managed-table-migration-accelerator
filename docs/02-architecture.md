@@ -147,8 +147,8 @@ This monorepo is a **single Databricks Asset Bundle**. The root `databricks.yml`
 and only bundle root; it `include`s both `backend/resources/*.yml` (one Workflow job per
 stage, plus the dashboard) and `app/resources/*.yml` (the app resource). It defines three
 targets: `dev` (default, development mode), `e2e` (a named development-mode target for the
-live e2e estate, with its workspace values supplied as `BUNDLE_VAR_*`), and `prod` (production mode, `run_as` a service
-principal). The `backend/` and `app/` directories share the one bundle and one
+live e2e estate, with its workspace values supplied as `BUNDLE_VAR_*`), and `prod` (production mode). Every stage job runs as `var.jobs_run_as`
+(default: the deployer; `prod`: the service principal in `prod_run_as_sp`). The `backend/` and `app/` directories share the one bundle and one
 `warehouse_id`.
 
 **Deploy with `databricks bundle deploy`, not `databricks apps deploy`.** One

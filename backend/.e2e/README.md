@@ -514,6 +514,17 @@ errors. `--how` also scrolls each page's focus-mode section into view and captur
 dark-mode pass to run. `backend/.e2e/artifacts/` is git-ignored. `e2e_all.py` runs `--pins` read-only in L3 and
 `--how` in L4; the mutating focus / pin modes stay opt-in.
 
+## Install permissions over MCP (`e2e_mcp.py --permissions`)
+
+Runs as **you** (the profile's sign-in is the forwarded token): `mtm_get_permissions` with an optional
+`--scopes`, then the refusals that must run nothing (no `confirm`, a stale `plan_id`, a jobs identity
+change), and the hand-back plan read. With `--confirm-execute` it grants the previewed plan through
+`mtm_grant_permissions` and checks the read-back. It never revokes: hand-back is a human step.
+
+```bash
+python backend/.e2e/e2e_mcp.py --profile $P --permissions [--scopes <cat.schema>,<cat>.*] [--confirm-execute]
+```
+
 ## `e2e_notify.py` — L5 notify/comms surfaces (comms_feed / digest / runbook export)
 
 Closes the golden thread at **hop 4**: the operator-facing "how do I learn what's still pending"

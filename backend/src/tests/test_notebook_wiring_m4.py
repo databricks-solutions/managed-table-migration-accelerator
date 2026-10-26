@@ -98,6 +98,20 @@ def test_07_revokes_added_grants_audit_first_then_verifies_then_marks():
         assert forbidden not in _code(cell)
 
 
+def test_07_marks_installer_manage_ready_and_opens_the_hand_back_in_every_mode():
+    src = _read("07_post_convert_cleanup.py")
+    i_cell = src.index("# MAGIC ## Installer convert rights")
+    cell = src[i_cell:src.index("# MAGIC ## Legacy ownership restore")]
+    i_ready = cell.index("pv.handback_ready_keys(_installer_rows, _schema_states)")
+    i_mark = cell.index("status=pv.LEDGER_STATUS_HANDBACK_READY")
+    i_open = cell.index("pv.handback_action_rows(_installer_rows, _ready")
+    assert i_ready < i_mark < i_open
+    code = _code(cell)
+    assert "CONFIRM_EXECUTE" not in code
+    for forbidden in ("REVOKE ", "OWNER TO", "VACUUM", "UNSET MANAGED"):
+        assert forbidden not in code.replace("[HAND BACK]", "")
+
+
 def test_07_keeps_the_legacy_lease_drain_and_fails_loud_after_both():
     src = _read("07_post_convert_cleanup.py")
     i_legacy = src.index("# MAGIC ## Legacy ownership restore")

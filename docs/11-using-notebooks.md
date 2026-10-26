@@ -39,6 +39,23 @@ Stage numbers are execution order. The core path and the optional side-stages:
 See [Cockpit and conductor](./10-cockpit-and-conductor.md) for the recommend/approve/launch
 loop and [Conversion and validation](./08-conversion-and-validation.md) for the convert stage.
 
+## The installer notebook
+
+`backend/notebooks/install.py` is not a stage: it is the install front door for workspace-only
+teams. Open it after the bundle deploy and **Run all**. Its `action` widget picks what it does:
+`install` (the default), `check` (rights and plan only), `grant_convert` (one wave's convert rights),
+`revoke_convert` (hand convert rights back) or `uninstall` (revoke what the tool granted, before
+`bundle destroy`). With `confirm_grants=false`, the default, it prints the rights check and the
+grant plan with its `plan_id` and grants nothing. Set `confirm_grants=true` and that `plan_id` to
+apply exactly the plan you reviewed: it grants, reads every grant back, runs `99 setup` and the data
+step, and ends with `VERIFY PASSED` and the app URL.
+
+![The grant plan the installer prints: each grant's set, grantee, reason and status, ending with what is already held and what it will grant](images/install/notebook/plan.png)
+
+A run that stops (a no-go, a changed plan) keeps what it printed, so the reason is in the job-run
+output too. The CLI (`databricks bundle run install`) and the app's Permissions page run the same
+engine; the full walkthrough is [Installation](./00-installation.md#install-from-the-workspace-recommended-no-local-cli).
+
 ## Bundle commands
 
 ```bash

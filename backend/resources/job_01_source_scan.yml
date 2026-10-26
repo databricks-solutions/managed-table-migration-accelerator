@@ -7,6 +7,7 @@ resources:
   jobs:
     job_01_source_scan:
       name: "[${bundle.target}] ${bundle.name} :: 01 source scan (optional)"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "01-source-scan"

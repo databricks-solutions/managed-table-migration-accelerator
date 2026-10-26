@@ -326,7 +326,7 @@ The sidebar has four groups (labels exact; routes in `code`):
 
 **SETUP**
 
-- **Connection & policy** (`/settings`) — the warehouse, dashboard and Genie wiring. If Genie is not configured it says to run `job_99_setup`; if the space exists but the App started before it, it says to restart or redeploy the App.
+- **Connection & policy** (`/settings`) — the warehouse, dashboard and Genie wiring. If Genie is not configured it says to run `job_99_setup`; the App looks the space up per request, so it comes online without a restart.
 
 **Bulk convert** (`/bulk`) has no sidebar entry; open it by its address. It shows one card per parallel-safe batch (`wave_parallel_groups` joined to `wave_status`). Each card launches the bulk journey as separate clicks pinned to (`plan_run_id`, `batch_id`): bulk-freeze, the optional batch Authorize, bulk-convert, bulk-validate, bulk-unfreeze, then the batch's finish steps through the same finish card. Streaming waves are never batched. The App always sends safe gate values and cannot lower a gate. Its app-free peer is the bulk cockpit.
 

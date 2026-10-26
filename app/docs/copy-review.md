@@ -871,7 +871,7 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Title | Permissions the app needs |
 | Subtitle | SQL to give the app the access it needs. A person with rights runs it. |
 | Tooltip | The app writes and checks these grants but never runs them. Convert permission is checked per table before each convert. |
-| Technical detail | Grants for the app service principal. The app never runs a GRANT or changes a table owner. |
+| Technical detail | Step 1 is for the app service principal. Step 2 is for whoever the jobs run as. The app never runs a GRANT or changes a table owner. |
 
 ### `grantsTier1`
 
@@ -904,6 +904,65 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | --- | --- |
 | Title | Convert permission |
 | Subtitle | Converting needs ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes. |
+
+### `permissions`
+
+| Field | Text |
+| --- | --- |
+| Title | Permissions |
+| Subtitle | Check and grant what the migration needs. Grants run as you, with your own rights. |
+| Tooltip | Each grant is recorded first, then run, then checked. The app never changes a table owner. |
+| Technical detail | GET /api/permissions previews the plan. POST /api/permissions/grant and /hand-back run it as the signed-in user, pinned to plan_id. |
+
+### `permissionsRights`
+
+| Field | Text |
+| --- | --- |
+| Title | Can you grant here? |
+| Subtitle | What your account can grant, and who to ask for the rest. |
+
+### `permissionsJobs`
+
+| Field | Text |
+| --- | --- |
+| Title | Who runs the jobs |
+| Subtitle | Every grant goes to this identity. To change it, use the installer, then redeploy. |
+| Technical detail | Set with the jobs_run_as bundle variable or the installer jobs_identity option. |
+
+### `permissionsScope`
+
+| Field | Text |
+| --- | --- |
+| Title | Migration scope |
+| Subtitle | The schemas the migration may read and convert. |
+
+### `permissionsConvert`
+
+| Field | Text |
+| --- | --- |
+| Title | Convert rights |
+| Subtitle | MANAGE on a schema lets the jobs convert it. It is handed back at the end. |
+
+### `permissionsPlan`
+
+| Field | Text |
+| --- | --- |
+| Title | Plan |
+| Subtitle | The grants still missing. Grant the ones you can, and send the rest. |
+
+### `permissionsFinish`
+
+| Field | Text |
+| --- | --- |
+| Title | Finish install |
+| Subtitle | The control tables do not exist yet. Run the installer from a notebook or the CLI. |
+
+### `permissionsCannotAct`
+
+| Field | Text |
+| --- | --- |
+| Title | Grant from the CLI |
+| Subtitle | The app cannot run grants for you here. Run the command, or use the SQL below. |
 
 ### `grantsScope`
 
@@ -1856,6 +1915,36 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Technical detail | Runs job_00_profiler with catalog_filter and schema_filter. |
 ## Dialogs
 
+### `grantPermissions`
+
+| Field | Text |
+| --- | --- |
+| Button | Grant |
+| Title | Grant {what}? |
+| Description | These run as you, with your own rights. Each grant is recorded, then checked. |
+| Confirm button | Grant |
+| Technical detail | POST /api/permissions/grant with plan_id. Audit row first, then GRANT, then SHOW GRANTS. |
+
+### `grantWaveRights`
+
+| Field | Text |
+| --- | --- |
+| Button | Grant convert rights |
+| Title | Grant convert rights for {wave}? |
+| Description | Gives the jobs MANAGE on the schemas in this wave. It is handed back at the end. |
+| Confirm button | Grant |
+| Technical detail | POST /api/permissions/grant with action=grant_convert, wave_id and plan_run_id. |
+
+### `handBackRights`
+
+| Field | Text |
+| --- | --- |
+| Button | Hand back |
+| Title | Hand back convert rights? |
+| Description | Revokes the MANAGE the migration added. Rights a table still needs for rollback stay. |
+| Confirm button | Hand back |
+| Technical detail | POST /api/permissions/hand-back with plan_id. Audit row first, then REVOKE. |
+
 ### `pinAdd`
 
 | Field | Text |
@@ -2499,6 +2588,42 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Field | Text |
 | --- | --- |
 | Button | Group by reason |
+
+### `previewPlan`
+
+| Field | Text |
+| --- | --- |
+| Button | Preview |
+
+### `downloadPlan`
+
+| Field | Text |
+| --- | --- |
+| Button | Download plan |
+
+### `copyRequest`
+
+| Field | Text |
+| --- | --- |
+| Button | Copy request |
+
+### `addSchemas`
+
+| Field | Text |
+| --- | --- |
+| Button | Add schemas |
+
+### `changeIdentity`
+
+| Field | Text |
+| --- | --- |
+| Button | Change |
+
+### `checkAgain`
+
+| Field | Text |
+| --- | --- |
+| Button | Check again |
 ## Primers
 
 ### `workstreams`

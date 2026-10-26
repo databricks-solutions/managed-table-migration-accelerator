@@ -66,6 +66,8 @@ interface GrantStatus {
 }
 interface GrantsPlan {
   sp_client_id: string | null;
+  jobs_identity: string | null;
+  jobs_identity_mixed: boolean;
   control: { catalog: string; schema: string };
   tier1: GrantStatus[];
   tier2: { catalog: string; schema: string; source: 'scan' | 'selected'; grants: GrantStatus[] }[];
@@ -270,6 +272,28 @@ function SpLine({ spClientId }: { spClientId: string | null }) {
   );
 }
 
+function JobsIdentityLine({ plan }: { plan: GrantsPlan }) {
+  if (plan.jobs_identity) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        These grants are for the identity the jobs run as:{' '}
+        <span className="font-mono text-foreground">{plan.jobs_identity}</span>.
+      </p>
+    );
+  }
+  return (
+    <Alert>
+      <AlertTitle>{plan.jobs_identity_mixed ? 'The jobs run as different identities' : 'Jobs’ identity not resolved'}</AlertTitle>
+      <AlertDescription>
+        The SQL below uses <code>&lt;jobs-run-as&gt;</code>.{' '}
+        {plan.jobs_identity_mixed
+          ? 'Redeploy so every job uses the jobs_run_as variable, then refresh.'
+          : 'Open any migration job’s Run as setting and substitute it before running the grants.'}
+      </AlertDescription>
+    </Alert>
+  );
+}
+
 function GrantGroup({
   copy,
   title,
@@ -372,6 +396,7 @@ function Tier2Section({ plan, busy, selection }: { plan: GrantsPlan; busy: boole
           </div>
         }
       />
+      <JobsIdentityLine plan={plan} />
       <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-muted-foreground">
         <span aria-live="polite">
           <strong className="text-foreground">

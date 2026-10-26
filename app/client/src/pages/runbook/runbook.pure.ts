@@ -17,3 +17,22 @@ export function filterRunbookToScope<T extends RunbookScopeRow>(
 ): T[] {
   return (rows ?? []).filter((r) => r.catalog === scopeCatalog && r.schema === scopeSchema);
 }
+
+const HANDBACK_TITLE = 'Hand back convert rights on ';
+
+/**
+ * The scope an open installer hand-back row covers (`catalog.schema` or `catalog.*`), or null for
+ * every other row. Only these rows get the Hand back button: the REVOKE comes from the server's
+ * hand-back plan for that scope, never from the row's own statement.
+ */
+export function handbackScope(r: {
+  item_kind?: string | null;
+  title?: string | null;
+  catalog?: string | null;
+  schema?: string | null;
+  status?: string | null;
+}): string | null {
+  if (r.item_kind !== 'RESTORE_OWNERSHIP' || !r.title?.startsWith(HANDBACK_TITLE) || !r.catalog) return null;
+  if (r.status === 'DONE' || r.status === 'OBSOLETE') return null;
+  return `${r.catalog}.${r.schema || '*'}`.toLowerCase();
+}

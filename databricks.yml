@@ -24,6 +24,23 @@ include:
   - backend/resources/*.yml
   - app/resources/*.yml
 
+# The install CLI (backend/scripts/install.py), run in the bundle's auth context:
+#   databricks bundle run install -t <target> --profile <p>
+# A bundle script takes no arguments: pass options as MTM_<NAME> environment variables
+# (MTM_ACTION=check, MTM_SCOPES=..., MTM_CONFIRM_GRANTS=true, MTM_PLAN_ID=..., MTM_OUTPUT=json).
+# The deploy-fixed values below come from this target and cannot be overridden that way.
+scripts:
+  install:
+    env:
+      MTM_CATALOG: ${var.manifest_catalog}
+      MTM_SCHEMA: ${var.manifest_schema}
+      MTM_TARGET: ${bundle.target}
+      MTM_DEPLOYMENT: "[${bundle.target}] ${bundle.name}"
+      MTM_APP_NAME: ${var.app_name}
+      MTM_WAREHOUSE_ID: ${var.warehouse_id}
+      MTM_FIXTURE_CONTROL_PLANE: ${var.e2e_fixture_control_plane}
+    content: python3 backend/scripts/install.py
+
 variables:
   manifest_catalog:
     description: Catalog holding the control tables (manifest, audit_log, plans).
@@ -176,8 +193,26 @@ variables:
     description: Workspace host for the prod target.
     default: "https://CHANGE-ME-prod.cloud.databricks.com"
   prod_run_as_sp:
-    description: Service principal application id to run prod jobs as.
+    description: >-
+      Service principal application id the prod jobs run as when jobs_run_as is not set for
+      prod (the compatibility default: today's prod runs as the app's service principal).
     default: ""
+  prod_root_path:
+    description: >-
+      Workspace folder for the prod deployment. The default keeps existing installs where they
+      are (the deployment state lives there; moving it creates a second copy of every job). For
+      a new install, pick a folder only the deployers can edit, such as
+      /Workspace/Users/<deployer>/.bundle/managed-table-migration/prod.
+    default: /Shared/.bundle/${bundle.name}/${bundle.target}
+  jobs_run_as:
+    description: >-
+      Who every stage job runs as (a job-level run_as on each job): service_principal_name,
+      group_name or user_name. Default: whoever deploys. The installer's jobs_identity option
+      writes it to .databricks/bundle/<target>/variable-overrides.json. A complex variable cannot
+      come from BUNDLE_VAR_*. Deploying as a service principal? Set it: the default names a user.
+    type: complex
+    default:
+      user_name: ${workspace.current_user.userName}
 
   # Control plane (stage 08 Conductor + stage 09 cockpit + stage 10 gated campaign).
   conductor_schedule_cron:
@@ -207,8 +242,17 @@ variables:
       mcp-${bundle.name} (the app is `mcp-`-prefixed so Databricks recognizes it as a custom
       MCP server), a bundle-level substitution (NOT a resource reference), so it creates
       no deploy cycle — the App binds the profiler job, so job_99_setup must not bind the
-      App back. Keep the app resource's `name` at mcp-${bundle.name} too so the two stay in sync.
+      App back. The app resource's `name` reads this variable, so the two cannot drift; keep
+      the `mcp-` prefix when overriding it.
     default: mcp-${bundle.name}
+  installer_group:
+    description: >-
+      Group whose members run the installer (notebook, CLI or app Settings). job_99_setup grants
+      it SELECT on the control schema and MODIFY on the install records (audit_log,
+      migration_scope, ownership_ledger), so an installer never grants themselves. It must be an
+      account group: Unity Catalog cannot grant to a workspace-local group. Blank = each
+      installer grants themselves that access on their first run.
+    default: ""
   dataset_catalog:
     description: Catalog the dashboard/Genie read control tables from (defaults to the manifest catalog).
     default: main
@@ -251,6 +295,7 @@ targets:
     mode: production
     workspace:
       host: ${var.prod_host}
-      root_path: /Shared/.bundle/${bundle.name}/${bundle.target}
-    run_as:
-      service_principal_name: ${var.prod_run_as_sp}
+      root_path: ${var.prod_root_path}
+    variables:
+      jobs_run_as:
+        service_principal_name: ${var.prod_run_as_sp}

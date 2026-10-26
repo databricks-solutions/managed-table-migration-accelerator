@@ -22,6 +22,7 @@ import { RunPill } from './RunPill';
 import { RunFailureBanner } from './RunFailureBanner';
 import { PageIntro } from './PageIntro';
 import { RunSuccessBanner } from './RunSuccessBanner';
+import { PermissionsBanner } from './PermissionsBanner';
 import { ReReadButton } from './ReReadButton';
 import { GenieDock } from './GenieDock';
 import { TourProvider } from '../tours/TourProvider';
@@ -117,6 +118,7 @@ export function AppShell() {
             <PageIntro />
             <RunFailureBanner />
             <RunSuccessBanner />
+            <PermissionsBanner />
             <Outlet />
             <TourAutoStart />
           </main>

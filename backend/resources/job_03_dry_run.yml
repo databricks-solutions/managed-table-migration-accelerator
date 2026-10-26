@@ -3,6 +3,7 @@ resources:
   jobs:
     job_03_dry_run:
       name: "[${bundle.target}] ${bundle.name} :: 03 dry run"
+      run_as: ${var.jobs_run_as}
       tags:
         project: managed-migration
         stage: "03-dry-run"

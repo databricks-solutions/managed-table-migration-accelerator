@@ -593,7 +593,7 @@ export const SECTION_COPY = {
       title: 'Permissions the app needs',
       subtitle: 'SQL to give the app the access it needs. A person with rights runs it.',
       detail: 'The app writes and checks these grants but never runs them. Convert permission is checked per table before each convert.',
-      technical: 'Grants for the app service principal. The app never runs a GRANT or changes a table owner.',
+      technical: 'Step 1 is for the app service principal. Step 2 is for whoever the jobs run as. The app never runs a GRANT or changes a table owner.',
     },
     grantsTier1: {
       title: 'Step 1 · Control tables',
@@ -614,6 +614,41 @@ export const SECTION_COPY = {
     grantsOwnership: {
       title: 'Convert permission',
       subtitle: 'Converting needs ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes.',
+    },
+    permissions: {
+      title: 'Permissions',
+      subtitle: 'Check and grant what the migration needs. Grants run as you, with your own rights.',
+      detail: 'Each grant is recorded first, then run, then checked. The app never changes a table owner.',
+      technical: 'GET /api/permissions previews the plan. POST /api/permissions/grant and /hand-back run it as the signed-in user, pinned to plan_id.',
+    },
+    permissionsRights: {
+      title: 'Can you grant here?',
+      subtitle: 'What your account can grant, and who to ask for the rest.',
+    },
+    permissionsJobs: {
+      title: 'Who runs the jobs',
+      subtitle: 'Every grant goes to this identity. To change it, use the installer, then redeploy.',
+      technical: 'Set with the jobs_run_as bundle variable or the installer jobs_identity option.',
+    },
+    permissionsScope: {
+      title: 'Migration scope',
+      subtitle: 'The schemas the migration may read and convert.',
+    },
+    permissionsConvert: {
+      title: 'Convert rights',
+      subtitle: 'MANAGE on a schema lets the jobs convert it. It is handed back at the end.',
+    },
+    permissionsPlan: {
+      title: 'Plan',
+      subtitle: 'The grants still missing. Grant the ones you can, and send the rest.',
+    },
+    permissionsFinish: {
+      title: 'Finish install',
+      subtitle: 'The control tables do not exist yet. Run the installer from a notebook or the CLI.',
+    },
+    permissionsCannotAct: {
+      title: 'Grant from the CLI',
+      subtitle: 'The app cannot run grants for you here. Run the command, or use the SQL below.',
     },
     grantsScope: {
       title: 'What you can see',
@@ -801,6 +836,27 @@ export const ACTION_COPY = {
 // --------------------------------------------------------------------------- dialogs
 
 export const DIALOG_COPY = {
+  grantPermissions: {
+    title: 'Grant {what}?',
+    label: 'Grant',
+    description: 'These run as you, with your own rights. Each grant is recorded, then checked.',
+    confirm: 'Grant',
+    technical: 'POST /api/permissions/grant with plan_id. Audit row first, then GRANT, then SHOW GRANTS.',
+  },
+  grantWaveRights: {
+    title: 'Grant convert rights for {wave}?',
+    label: 'Grant convert rights',
+    description: 'Gives the jobs MANAGE on the schemas in this wave. It is handed back at the end.',
+    confirm: 'Grant',
+    technical: 'POST /api/permissions/grant with action=grant_convert, wave_id and plan_run_id.',
+  },
+  handBackRights: {
+    title: 'Hand back convert rights?',
+    label: 'Hand back',
+    description: 'Revokes the MANAGE the migration added. Rights a table still needs for rollback stay.',
+    confirm: 'Hand back',
+    technical: 'POST /api/permissions/hand-back with plan_id. Audit row first, then REVOKE.',
+  },
   pinAdd: {
     title: 'Pin for the team',
     description: 'Puts {scope} first for everyone, after any work already in flight. Every check still runs.',
@@ -1207,6 +1263,12 @@ export const LABEL_COPY = {
   openSchema: 'Open',
   showAsTable: 'Show as one table',
   groupByReason: 'Group by reason',
+  previewPlan: 'Preview',
+  downloadPlan: 'Download plan',
+  copyRequest: 'Copy request',
+  addSchemas: 'Add schemas',
+  changeIdentity: 'Change',
+  checkAgain: 'Check again',
 } satisfies Record<string, string>;
 
 // --------------------------------------------------------------------------- focus mode

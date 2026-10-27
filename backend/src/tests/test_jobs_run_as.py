@@ -31,14 +31,15 @@ def test_e2e_seed_jobs_run_as_the_deployer():
     assert seeds and all("run_as" not in s for s in seeds.values())
 
 
-def test_jobs_run_as_defaults_to_the_deployer_and_prod_overrides_it():
+def test_jobs_run_as_the_deployer_on_every_target_including_prod():
     var = _BUNDLE["variables"]["jobs_run_as"]
     assert var["type"] == "complex"
     assert var["default"] == {"user_name": "${workspace.current_user.userName}"}
     for name, target in _BUNDLE["targets"].items():
         assert "run_as" not in target, name
-    prod = _BUNDLE["targets"]["prod"]
-    assert prod["variables"]["jobs_run_as"] == {"service_principal_name": "${var.prod_run_as_sp}"}
+        assert "jobs_run_as" not in (target.get("variables") or {}), name
+    assert "prod_run_as_sp" not in _BUNDLE["variables"]
+    assert "prod_run_as_sp" not in (ROOT / "databricks.yml").read_text()
 
 
 def test_prod_folder_is_a_variable_that_keeps_existing_installs_in_place():

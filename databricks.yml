@@ -195,11 +195,6 @@ variables:
   prod_host:
     description: Workspace host for the prod target.
     default: "https://CHANGE-ME-prod.cloud.databricks.com"
-  prod_run_as_sp:
-    description: >-
-      Service principal application id the prod jobs run as when jobs_run_as is not set for
-      prod (the compatibility default: today's prod runs as the app's service principal).
-    default: ""
   prod_root_path:
     description: >-
       Workspace folder for the prod deployment. The default keeps existing installs where they
@@ -210,9 +205,11 @@ variables:
   jobs_run_as:
     description: >-
       Who every stage job runs as (a job-level run_as on each job): service_principal_name,
-      group_name or user_name. Default: whoever deploys. The installer's jobs_identity option
-      writes it to .databricks/bundle/<target>/variable-overrides.json. A complex variable cannot
-      come from BUNDLE_VAR_*. Deploying as a service principal? Set it: the default names a user.
+      group_name or user_name. Default on every target, prod included: whoever deploys. To use a
+      service principal, the installer's jobs_identity=sp:<application-id> option writes it to
+      .databricks/bundle/<target>/variable-overrides.json, then redeploy. A complex variable
+      cannot come from BUNDLE_VAR_*. Deploying as a service principal? Set it: the default names
+      a user.
     type: complex
     default:
       user_name: ${workspace.current_user.userName}
@@ -301,10 +298,9 @@ targets:
     # production mode: pauses schedules on deploy by the operator's choosing, prefixes
     # nothing, and enforces that the bundle is deployed from a clean state. Manual
     # approval is enforced via job-run permissions + a human triggering the run.
+    # The jobs run as the deployer here too (jobs_run_as default); production mode accepts a
+    # user identity because every job sets run_as and root_path is explicit.
     mode: production
     workspace:
       host: ${var.prod_host}
       root_path: ${var.prod_root_path}
-    variables:
-      jobs_run_as:
-        service_principal_name: ${var.prod_run_as_sp}

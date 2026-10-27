@@ -5,6 +5,8 @@
  * `sql` section of backend/src/tests/fixtures/provision_cases.json by provisionSql.pure.test.ts.
  */
 import {
+  AUDIT_INSTALL_GRANT,
+  AUDIT_INSTALL_REVOKE,
   AUDIT_TABLE,
   type PlanLine,
   SCOPE_TABLE,
@@ -214,6 +216,11 @@ export const installerLedgerSql = (catalog: string, schema: string): string =>
 
 export const manifestStatesSql = (catalog: string, schema: string): string =>
   `SELECT catalog, schema, state FROM ${catalog}.${schema}.table_manifest`;
+
+/** `provision.install_audit_sql`: every install grant and revoke the tool recorded. */
+export const installAuditSql = (catalog: string, schema: string): string =>
+  `SELECT action, phase, detail, created_at FROM ${catalog}.${schema}.${AUDIT_TABLE} ` +
+  `WHERE action IN ('${AUDIT_INSTALL_GRANT}', '${AUDIT_INSTALL_REVOKE}')`;
 
 export const windowEndsSql = (catalog: string, schema: string): string =>
   "SELECT lower(concat(split(full_name, '[.]')[0], '.', split(full_name, '[.]')[1])) AS scope, " +

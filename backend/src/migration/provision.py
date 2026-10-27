@@ -87,8 +87,20 @@ WARN = "WARN"
 UNKNOWN = "UNKNOWN"
 
 # Bumped whenever the plan rules change, so a release that changes the plan invalidates a plan_id
-# approved under the old rules (CUJ-5).
-PLAN_RULES_VERSION = "1"
+# approved under the old rules (CUJ-5). 2: blank scopes with none stored plan ``all``.
+PLAN_RULES_VERSION = "2"
+
+# ``scopes=all``: every catalog with external tables the installer can grant on, at catalog level.
+SCOPES_ALL = "all"
+SCOPES_FROM_OPTION = "option"
+SCOPES_FROM_STORED = "stored"
+SCOPES_FROM_ALL = "all"
+SCOPES_FROM_NONE = "none"
+# Never migrated, whatever their tables report.
+NON_MIGRATABLE_CATALOGS = frozenset({"system", "hive_metastore", "samples", "__databricks_internal"})
+# Unity Catalog catalog types that hold no tables this tool converts (Delta Sharing, foreign, …).
+EXCLUDED_CATALOG_TYPES = frozenset({"DELTASHARING_CATALOG", "FOREIGN_CATALOG", "INTERNAL_CATALOG",
+                                    "SYSTEM_CATALOG", "MANAGED_ONLINE_CATALOG"})
 
 # Exit codes shared by the CLI and the notebook's exit message (design section 21).
 EXIT_OK = 0
@@ -171,8 +183,8 @@ OPTIONS: Tuple[Option, ...] = (
            ("false", "true"), "dropdown", CLI_FLAG, True),
     Option("jobs_identity", "keep", "Who the jobs run as: keep, sp:<application-id>, "
            "group:<name>, user:<email>. A change needs a redeploy.", None, "text", CLI_FLAG, True),
-    Option("scopes", "", "Schemas to migrate: catalog.schema or catalog.*, comma-separated. "
-           "Blank uses the stored scopes, or lists the candidates.", None, "text", CLI_FLAG, True),
+    Option("scopes", "", "What to migrate: catalog.schema, catalog.* or all, comma-separated. "
+           "Blank uses the stored scopes, or all when none are stored.", None, "text", CLI_FLAG, True),
     Option("convert_rights", CONVERT_ALL_AT_ONCE, "all_at_once grants convert rights on the scopes "
            "now (handed back at the end); per_wave leaves them to grant_convert.", CONVERT_RIGHTS,
            "dropdown", CLI_FLAG, True),
@@ -236,15 +248,16 @@ def options_fixture() -> List[dict]:
 
 
 def parse_scopes(raw: Optional[str]) -> Tuple[List[str], List[str]]:
-    """``"a.b, c.*"`` → (``["a.b", "c.*"]``, errors). Lower-cased, de-duplicated, order kept."""
+    """``"a.b, c.*"`` → (``["a.b", "c.*"]``, errors). Lower-cased, de-duplicated, order kept.
+    The token ``all`` is kept as is (``parse_options`` turns it into ``scope_all``)."""
     out: List[str] = []
     errors: List[str] = []
     for part in (raw or "").split(","):
         s = part.strip().replace("`", "").lower()
         if not s:
             continue
-        if not _SCOPE_RE.match(s):
-            errors.append(f"scopes: '{part.strip()}' is not catalog.schema or catalog.*.")
+        if s != SCOPES_ALL and not _SCOPE_RE.match(s):
+            errors.append(f"scopes: '{part.strip()}' is not catalog.schema, catalog.* or all.")
             continue
         if s not in out:
             out.append(s)
@@ -307,7 +320,10 @@ def parse_options(raw: Mapping[str, Any], door: str = DOOR_NOTEBOOK) -> Tuple[di
         errors.append("action: uninstall runs from the notebook or the CLI only.")
     scope_list, scope_errors = parse_scopes(opts["scopes"])
     errors.extend(scope_errors)
-    opts["scope_list"] = scope_list
+    opts["scope_all"] = SCOPES_ALL in scope_list
+    opts["scope_list"] = [s for s in scope_list if s != SCOPES_ALL]
+    if opts["scope_all"] and opts["action"] not in (ACTION_INSTALL, ACTION_CHECK):
+        errors.append(f"scopes: all applies to install and check only, not {opts['action']}.")
     identity, identity_error = parse_jobs_identity(opts["jobs_identity"])
     if identity_error:
         errors.append(identity_error)
@@ -774,8 +790,72 @@ def coverage(estate: Iterable[Mapping[str, Any]]) -> dict:
                 "No schemas with external tables are visible to you.")
     return {"schemas": total_s, "tables": total_t, "grantable_schemas": got_s,
             "grantable_tables": got_t, "uncovered": sorted(by_cat.values(), key=lambda c: c["catalog"]),
-            "candidates": sorted(f"{r['catalog']}.{r['schema']}" for r in granted),
+            "candidates": expand_all(rows),
             "headline": headline, "band": coverage_band(got_s, total_s)}
+
+
+def excluded_catalogs(catalog_types: Optional[Mapping[str, Optional[str]]] = None) -> set:
+    """Catalog names never migrated: the fixed names, plus every catalog whose Unity Catalog type
+    holds nothing to convert (``catalog_types``: name → ``catalog_type``; unknown types stay in)."""
+    out = set(NON_MIGRATABLE_CATALOGS)
+    for name, ctype in (catalog_types or {}).items():
+        if str(ctype or "").upper() in EXCLUDED_CATALOG_TYPES:
+            out.add(str(name).lower())
+    return out
+
+
+def expand_all(estate: Iterable[Mapping[str, Any]]) -> List[str]:
+    """``scopes=all`` (pure): per catalog with external tables, ``catalog.*`` when the installer can
+    grant on the whole catalog (``catalog_can_grant``), else each schema they can grant on.
+    Catalog order, then schema order; a catalog nobody here can grant on yields nothing."""
+    by_cat: Dict[str, List[Mapping[str, Any]]] = {}
+    for r in estate or []:
+        c = str(r.get("catalog") or "").lower()
+        if c and c not in NON_MIGRATABLE_CATALOGS:
+            by_cat.setdefault(c, []).append(r)
+    out: List[str] = []
+    for c in sorted(by_cat):
+        rows = by_cat[c]
+        if any(r.get("catalog_can_grant") for r in rows):
+            out.append(f"{c}.*")
+        else:
+            out += sorted(f"{c}.{str(r['schema']).lower()}" for r in rows if r.get("can_grant"))
+    return out
+
+
+def resolve_scopes(scope_list: Sequence[str], scope_all: bool, stored: Sequence[str],
+                   expansion: Sequence[str]) -> Tuple[List[str], str]:
+    """``(scopes, scopes_from)`` for a run (pure).
+
+    Named scopes win; blank keeps the stored scopes (a deliberate narrowing is never widened);
+    blank with nothing stored is ``all``. ``all`` named adds the expansion to the stored scopes."""
+    if scope_all:
+        out: List[str] = []
+        for s in [*stored, *expansion, *scope_list]:
+            if s not in out:
+                out.append(s)
+        return out, SCOPES_FROM_ALL
+    if scope_list:
+        return list(scope_list), SCOPES_FROM_OPTION
+    if stored:
+        return list(stored), SCOPES_FROM_STORED
+    if expansion:
+        return list(expansion), SCOPES_FROM_ALL
+    return [], SCOPES_FROM_NONE
+
+
+SCOPES_FROM_LABEL = {SCOPES_FROM_OPTION: "from the scopes option",
+                     SCOPES_FROM_STORED: "stored by an earlier install",
+                     SCOPES_FROM_ALL: "all you can grant on"}
+
+NARROWING_NOTE = ("Catalog-level grants also cover schemas created later, and are handed back when every "
+                  "table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> "
+                  "for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time.")
+
+
+def narrowing_note(scopes: Iterable[str]) -> Optional[str]:
+    """How to lower the grain, shown only when a ``catalog.*`` scope is in the plan."""
+    return NARROWING_NOTE if any(str(s).endswith(".*") for s in scopes or ()) else None
 
 
 def coverage_band(got: int, total: int) -> str:
@@ -787,7 +867,7 @@ def coverage_band(got: int, total: int) -> str:
 
 
 def suggested_scopes(cov: Mapping[str, Any]) -> str:
-    """The ready-to-paste ``scopes`` value: every schema the installer can grant on."""
+    """The ``scopes`` value ``all`` expands to (``expand_all``), comma-separated."""
     return ",".join(cov.get("candidates") or [])
 
 
@@ -813,6 +893,8 @@ def pick_scopes(text: Optional[str], candidates: Sequence[str]) -> Tuple[List[st
         else:
             picked, errs = parse_scopes(p)
             errors.extend(errs)
+            if SCOPES_ALL in picked:
+                picked = cands
         out += [s for s in picked if s not in out]
     return out, errors
 
@@ -881,9 +963,12 @@ def rights_report(probes: Mapping[str, Any], *, door: str = DOOR_NOTEBOOK) -> di
     ident = jobs.get("identity")
     if ident and jobs.get("agree"):
         active = jobs.get("active")
-        label = f"{KIND_LABEL.get(ident['kind'], ident['kind'])} {ident['name']}"
+        you = ident["kind"] == KIND_USER and same_principal(ident["name"], probes.get("installer"))
+        label = f"you ({ident['name']})" if you else f"{KIND_LABEL.get(ident['kind'], ident['kind'])} {ident['name']}"
         jstatus = GO if active is not False else NO_GO
         jdetail = f"{label}{' (inactive)' if active is False else ''}, all {jobs.get('count', 0)} jobs agree"
+        if ident["kind"] == KIND_USER:
+            jdetail += ". " + person_identity_note(you)
     elif jobs.get("distinct"):
         jstatus, jdetail = NO_GO, (f"the deployed jobs run as {len(jobs['distinct'])} different identities; "
                                    "redeploy so every job uses jobs_run_as")
@@ -914,6 +999,58 @@ def rights_report(probes: Mapping[str, Any], *, door: str = DOOR_NOTEBOOK) -> di
     return {"installer": probes.get("installer"), "checks": checks, "coverage": cov,
             "caveat": None if ma else VISIBILITY_CAVEAT, "can_install": can_install,
             "suggested_scopes": suggested_scopes(cov)}
+
+
+SP_SWITCH = "jobs_identity=sp:<application-id>"
+
+
+def person_identity_note(you: bool) -> str:
+    """What running the jobs as a person means (stated on the GO line, never a warning)."""
+    whose = "your" if you else "that person's"
+    return (f"Anyone who can start these jobs runs them with {whose} access. "
+            f"To use a service principal: {SP_SWITCH}")
+
+
+def recorded_identities(audit_rows: Iterable[Mapping[str, Any]]) -> List[str]:
+    """The people and service principals the tool granted Look, Read or Change to and has not
+    revoked since (groups are skipped: they are a deliberate ``grantee_group``)."""
+    out: List[str] = []
+    for d in granted_by_tool(audit_rows):
+        if d.get("set") not in (SET_LOOK, SET_READ, SET_CHANGE) or d.get("grantee_kind") == KIND_GROUP:
+            continue
+        g = str(d.get("grantee") or "").strip()
+        if g and not any(same_principal(g, o) for o in out):
+            out.append(g)
+    return sorted(out, key=str.casefold)
+
+
+def identity_drift(current: Optional[Mapping[str, str]], recorded: Sequence[str],
+                   requested: Optional[Mapping[str, str]] = None) -> Optional[str]:
+    """The stop when the deployed jobs moved to a new identity while this install's grants still
+    sit on the old one (an upgrade that changed the default ``run_as``), else None.
+
+    An explicit ``jobs_identity`` (``requested``) is the decision, so it clears the stop."""
+    if requested or not current or not recorded:
+        return None
+    if any(same_principal(current.get("name"), r) for r in recorded):
+        return None
+    old = recorded[0]
+    keep = f"sp:{old}" if _UUID_RE.match(old) else f"user:{old}"
+    move = f"{'sp' if current.get('kind') == KIND_SERVICE_PRINCIPAL else current.get('kind')}:{current.get('name')}"
+    return (f"the jobs now run as {current.get('name')}, but this install's grants went to "
+            f"{', '.join(recorded)}. To keep {old}: jobs_identity={keep}, then redeploy. "
+            f"To move to {current.get('name')}: jobs_identity={move}")
+
+
+def apply_identity_drift(report: Mapping[str, Any], drift: Optional[str]) -> dict:
+    """``rights_report`` with the jobs' identity line turned NO-GO by ``drift`` (pure)."""
+    out = dict(report)
+    if not drift:
+        return out
+    out["checks"] = [{**c, "status": NO_GO, "detail": drift} if c["key"] == "jobs_identity" else dict(c)
+                     for c in report["checks"]]
+    out["can_install"] = False
+    return out
 
 
 def rights_text(report: Mapping[str, Any]) -> List[str]:
@@ -998,15 +1135,30 @@ def verify_summary(results: Iterable[Mapping[str, Any]]) -> Dict[str, int]:
     return out
 
 
+def person_grantee_line(lines: Iterable[Mapping[str, Any]], installer: Optional[str] = None) -> Optional[str]:
+    """When Look, Read and Change go to a person (the jobs run as them), say so before the grants
+    (SR17 condition 3), else None."""
+    who = next((ln["grantee"] for ln in lines if ln.get("set") in (SET_LOOK, SET_READ, SET_CHANGE)
+                and ln.get("grantee_kind") == KIND_USER), None)
+    if not who:
+        return None
+    if same_principal(who, installer):
+        return "The jobs run as you, so Look, Read and Change go to you."
+    return f"The jobs run as {who}, a person, so Look, Read and Change go to {who}."
+
+
 def plan_text(lines: Iterable[Mapping[str, Any]], *, statuses: Optional[Mapping[Tuple, str]] = None,
               grantors: Optional[Mapping[Tuple, str]] = None, limit: Optional[int] = None,
-              dry_run: bool = True) -> List[str]:
+              dry_run: bool = True, installer: Optional[str] = None) -> List[str]:
     """The plan as the lines every text door prints."""
     lines = list(lines)
     pid = plan_id(lines)
     head = (f"Grant plan {pid}  (dry run — set confirm_grants=true to apply; plan_id={pid} pins it)"
             if dry_run else f"Grant plan {pid}")
     out = [head]
+    person = person_grantee_line(lines, installer)
+    if person:
+        out.append("  " + person)
     shown = 0
     for ln in lines:
         if limit is not None and shown >= limit:

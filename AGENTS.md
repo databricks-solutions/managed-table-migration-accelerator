@@ -661,6 +661,48 @@ the finish steps through the shared `FinishStepCta` with `batch_id`). Batches co
   through `createTaggedWorkspaceClient` (`client.guard.test.ts`). A new blocker literal with no
   constant goes in `telemetry._LITERAL_BLOCKERS`. Catalogue: `backend/docs/operations/telemetry.md`.
 
+## Install and permissions (invariants)
+
+- **One engine, four doors.** `provision.py` (pure: options, rights report, the four-set grant plan
+  Control / Look / Read / Change, `plan_id`, read-backs, hand-back and uninstall plans) and
+  `provision_io.py` (the thin edge) serve the notebook `backend/notebooks/install.py` and the CLI
+  `backend/scripts/install.py` (`databricks bundle run install`). The app's Settings → Permissions
+  (`app/client/src/lib/provision.pure.ts`, `app/server/permissions/provisionFlow.ts`,
+  `/api/permissions*`) and MCP (`mtm_get_permissions`, v2 `mtm_grant_permissions` /
+  `mtm_hand_back_convert_rights`) are its TypeScript mirror, pinned by the shared golden fixture
+  `backend/src/tests/fixtures/provision_cases.json` (regenerate with `MTM_REGEN_FIXTURES=1`). A rule
+  change bumps `PLAN_RULES_VERSION` in both languages, so an old `plan_id` stops matching.
+- **Safety rules SR15–SR17** (`app/docs/control_plane.md` §0.4,
+  `backend/docs/install-and-permissions.md` §9): the app's own identity never grants; the convert
+  identity grants only through Authorize; the human installer grants only the closed plan, to the
+  grantee rule's principal, on the resolved scopes, dry-run by default (`confirm_grants`, or
+  **Grant** after a preview with the same `plan_id`), audit row first then a `SHOW GRANTS`
+  read-back, and a line they cannot grant is printed with its grantor, never retried as another
+  identity. The app door never changes the jobs' identity and never uninstalls.
+- **The jobs run as the deployer on every target, `prod` included.** Every stage job carries
+  `run_as: ${var.jobs_run_as}` (default `{user_name: <the deployer>}`); no target sets `run_as` or
+  overrides `jobs_run_as` (pinned by `test_jobs_run_as.py`). The service principal is an opt-in:
+  `jobs_identity=sp:<application-id>` writes `variable-overrides.json`, then redeploy. A person-run
+  install says so on the jobs line (`provision.person_identity_note`) and in the plan header
+  (`person_grantee_line`). **Identity drift is NO-GO**: when the deployed identity is not the
+  non-group grantee of this install's held Look / Read / Change grants
+  (`recorded_identities` → `identity_drift`), the install stops and names both fixes; an explicit
+  `jobs_identity` clears it. Never grant a second identity silently.
+- **Scopes resolve, they are never widened** (`provision.resolve_scopes`, install and check only):
+  named scopes win (`option`); blank keeps the stored `migration_scope` rows (`stored`); blank with
+  nothing stored is `all` (`expand_all`: `catalog.*` where the installer can grant on the catalog,
+  else its grantable schemas); the `all` token adds the expansion to the named or stored scopes.
+  `system`, `hive_metastore`, `samples`, `__databricks_internal` and the non-standard catalog types
+  (`EXCLUDED_CATALOG_TYPES`, read with `catalogs.list`; an unreadable read stamps
+  `catalog_types_error` and only the name rule applies) are never planned. A `catalog.*` scope
+  carries `NARROWING_NOTE` on every door (`scope_note`). Other actions reject `all`.
+- **Records are never deleted.** `migration_scope` rows are flagged on removal; installer
+  `INSTALL|…` `ownership_ledger` rows go `GRANTED` → `HANDBACK_READY` (by `07`, when every table in
+  the scope is `CLEANED` or `ROLLED_BACK`) → `REVOKED` (by the installer's `revoke_convert`); `07`
+  never revokes them itself. The jobs-permission line (`CAN_MANAGE_RUN`) is a Permissions API update,
+  never bundle state; the app infers it from evidence (`jobsEvidence.pure.ts`) and writes no audit
+  row for an inference.
+
 ## Dev workflow
 
 ```bash

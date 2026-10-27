@@ -46,11 +46,13 @@ teams. Open it after the bundle deploy and **Run all**. Its `action` widget pick
 `install` (the default), `check` (rights and plan only), `grant_convert` (one wave's convert rights),
 `revoke_convert` (hand convert rights back) or `uninstall` (revoke what the tool granted, before
 `bundle destroy`). With `confirm_grants=false`, the default, it prints the rights check and the
-grant plan with its `plan_id` and grants nothing. Set `confirm_grants=true` and that `plan_id` to
+grant plan with its `plan_id` and grants nothing. With no scopes stored it plans `scopes=all`:
+every catalog with external tables you can grant on, as `catalog.*`, with a note on how to narrow
+it in the `scopes` widget. Set `confirm_grants=true` and that `plan_id` to
 apply exactly the plan you reviewed: it grants, reads every grant back, runs `99 setup` and the data
 step, and ends with `VERIFY PASSED` and the app URL.
 
-![The grant plan the installer prints: each grant's set, grantee, reason and status, ending with what is already held and what it will grant](images/install/notebook/plan.png)
+![The grant plan the installer prints: each grant's set, grantee (you, since the jobs run as you), reason and status, ending with what is already held and what it will grant](images/install/notebook/plan.png)
 
 A run that stops (a no-go, a changed plan) keeps what it printed, so the reason is in the job-run
 output too. The CLI (`databricks bundle run install`) and the app's Permissions page run the same

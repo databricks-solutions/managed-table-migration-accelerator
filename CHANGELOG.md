@@ -39,7 +39,7 @@ release may change job parameters or control-table columns; every such change is
 - **Read-backs see privileges held through groups.** A grant held through one of the grantee's
   groups (or `account users`) now reads as present instead of missing.
 - **Choose who the jobs run as.** New complex bundle variable `jobs_run_as`, set as `run_as` on
-  all 24 stage jobs (default: the deployer; `prod`: `prod_run_as_sp`, as before). The installer's
+  all 24 stage jobs (default: the deployer, on every target). The installer's
   `jobs_identity` option writes it to `variable-overrides.json`, and the CLI offers to redeploy
   (`--yes` skips the prompt). The grant plan gains a line that gives the jobs' identity
   `CAN_MANAGE_RUN` on every job, so the cockpits and conductor tails can start other jobs. New
@@ -133,8 +133,33 @@ release may change job parameters or control-table columns; every such change is
   `information_schema` views (reported as `EXTERNAL`, format `UNITY_CATALOG`) as tables to
   migrate. Both discovery queries now exclude that schema.
 
+- **Settings → Permissions reads more accurately.** A saved `catalog.*` scope covers every schema
+  of that catalog in **Add schemas**, so they are not offered again. Convert rights says "All N
+  tables still to convert are authorized" when none is blocked, instead of empty counts. The toast
+  after **Grant** counts the lines the app cannot read as not checked, apart from missing ones.
+
 ### Changed
 
+- **The jobs run as you on every target, prod included.** The `prod` target no longer overrides
+  `jobs_run_as`, and the `prod_run_as_sp` variable is gone (contract change: see
+  `backend/docs/contracts/jobs.md` and `backend/docs/integration/job-api.md`). A person-run install
+  says so on the jobs' identity line ("Anyone who can start these jobs runs them with your
+  access") and in the grant plan's header, with the switch: `jobs_identity=sp:<application-id>`,
+  then redeploy. An upgrade that moves the jobs off the identity holding this install's grants
+  stops with NO-GO and both fixes (keep the old identity, or move to the new one), instead of
+  granting a second identity silently. If your prod jobs ran as a service principal, keep it with
+  `jobs_identity=sp:<application-id>` before you redeploy.
+- **Blank scopes cover your catalogs.** `scopes` takes the new token `all`, and a blank value with
+  no stored scopes now means `all`: every catalog with external tables you can grant on, as
+  `catalog.*`, or the schemas you can grant on where you cannot grant on the whole catalog
+  (`system`, `hive_metastore`, `samples` and shared or foreign catalogs are left out). Stored scopes
+  still win, so an earlier narrowing is never widened. Every door prints a note on catalog-level
+  grants and how to narrow (`scopes=<catalog.schema,...>` or `convert_rights=per_wave`). The CLI no
+  longer refuses a non-interactive install without scopes, the notebook no longer asks you to
+  paste a list, and Settings → Permissions starts with the expansion as removable rows.
+  `GET /api/permissions` and `mtm_get_permissions` gain `scopes_from: "all"` and `scope_note`, the
+  CLI's JSON gains both, and `PLAN_RULES_VERSION` is `2`, so a `plan_id` reviewed before this
+  release is re-reviewed.
 - **Recommended installer.** [Installation](docs/00-installation.md#recommended-installer) and
   the README now recommend installing as a workspace admin who is also a metastore admin, say what
   each role covers and that account admin is not needed, and correct "creating the app needs

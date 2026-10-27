@@ -397,28 +397,29 @@ if PREP:
 
 # MAGIC %md
 # MAGIC ## Step 4 — Scopes (which schemas to migrate)
-# MAGIC `scopes` takes `catalog.schema` or `catalog.*`, comma-separated. Blank uses the scopes stored
-# MAGIC by an earlier install. With none stored, the schemas you can grant on are listed with a
-# MAGIC ready-to-paste value; the install then sets up the control plane only.
+# MAGIC `scopes` takes `catalog.schema`, `catalog.*` or `all`, comma-separated. Blank uses the scopes
+# MAGIC stored by an earlier install; with none stored it is `all`: every catalog with external tables
+# MAGIC you can grant on (`catalog.*`), or the schemas you can grant on where you cannot grant on the
+# MAGIC whole catalog. `system`, `hive_metastore`, `samples` and shared or foreign catalogs are left out.
 
 # COMMAND ----------
 
 if PREP:
     _src = PREP["scopes_from"]
     if PREP["scopes"]:
-        print(f"Scopes ({'from the scopes option' if _src == 'option' else 'stored by an earlier install'}):")
-        for _s in PREP["scopes"]:
+        print(f"Scopes ({pv.SCOPES_FROM_LABEL.get(_src, _src)}):")
+        for _s in PREP["scopes"][:40]:
             print(f"  {_s}")
-    else:
-        _cands = PREP["rights"]["coverage"]["candidates"]
-        print("No scopes yet. Schemas with external tables you can grant on:")
-        for _s in _cands[:40]:
-            print(f"  {_s}")
-        if len(_cands) > 40:
-            print(f"  … {len(_cands) - 40} more.")
-        if PREP["rights"]["suggested_scopes"]:
-            print("Paste into the scopes widget (or narrow it):")
-            print(f"  {PREP['rights']['suggested_scopes']}")
+        if len(PREP["scopes"]) > 40:
+            print(f"  … {len(PREP['scopes']) - 40} more.")
+        if PREP.get("scope_note"):
+            print(PREP["scope_note"])
+    elif IS_INSTALL or ACTION == pv.ACTION_CHECK:
+        print("No scopes: you can grant on no catalog or schema with external tables, so the plan covers "
+              "the control plane only.")
+    if PREP["context"].get("catalog_types_error") and _src == pv.SCOPES_FROM_ALL:
+        print("  note: could not read catalog types, so only system, hive_metastore and samples are left "
+              f"out ({str(PREP['context']['catalog_types_error'])[:120]}).")
     if PREP["wave"]:
         _wv = PREP["wave"]
         if _wv["error"] or not _wv["schemas"]:
@@ -442,7 +443,7 @@ _exit_pending()
 
 if PREP and ACTION not in (pv.ACTION_REVOKE_CONVERT, pv.ACTION_UNINSTALL):
     for _line in pv.plan_text(PREP["lines"], statuses=PREP["statuses"], grantors=PREP["grantors"],
-                              limit=80, dry_run=not CONFIRM):
+                              limit=80, dry_run=not CONFIRM, installer=PREP["probes"].get("installer")):
         print(_line)
     _summary = pv.verify_summary(PREP["checked"])
     _TM_COUNTS.update({"planned": len(PREP["checked"]), "present": _summary[pv.STATUS_PRESENT],

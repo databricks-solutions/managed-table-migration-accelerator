@@ -59,7 +59,7 @@ const byName = (a: Scope, b: Scope) => a.catalog.localeCompare(b.catalog) || a.s
  * Every chip the picker shows: discovered scopes, plus any picked `catalog.schema` the scan did
  * not list (kept, so a truncated scan never silently drops a pick). Keyed in lower case, sorted.
  * `selected` and `covered` hold lower-case keys; anything that is not `catalog.schema` (a
- * `catalog.*` scope) is not a chip.
+ * `catalog.*` scope) is not a chip, but a covered `catalog.*` covers every schema of that catalog.
  */
 export function mergeScopes(
   obo: SchemaVisibilityLite[],
@@ -71,7 +71,8 @@ export function mergeScopes(
   const put = (s: Scope, source: MergedScope['source'], count: number | null) => {
     const key = scopeKey(s);
     const [catalog, schema] = key.split('.');
-    map.set(key, { catalog, schema, source, externalTableCount: count, selected: picked.has(key), covered: covered.has(key) });
+    const isCovered = covered.has(key) || covered.has(`${catalog}.*`);
+    map.set(key, { catalog, schema, source, externalTableCount: count, selected: picked.has(key), covered: isCovered });
   };
   for (const o of obo ?? []) put(o, 'obo', o.externalTableCount ?? null);
   for (const key of picked) {

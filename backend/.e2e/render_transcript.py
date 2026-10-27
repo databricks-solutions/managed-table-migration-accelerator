@@ -15,6 +15,7 @@ Usage:
       --redact /tmp/redact.json --out docs/images/install/cli/check.png
   python .e2e/render_transcript.py --notebook-html /tmp/export.json --redact /tmp/redact.json \\
       --from-text "Can you install" --to-text "Grant plan" --out docs/images/install/notebook/rights.png
+  Add ``--wrap N`` when a notebook line runs past the cell: it wraps, continuing under column N.
 """
 from __future__ import annotations
 
@@ -52,6 +53,22 @@ _UNCAP_JS = """() => {
       if (parseFloat(getComputedStyle(n).height) < o.scrollHeight) {
         n.style.height = 'auto'; n.style.maxHeight = 'none'; n.style.overflow = 'visible';
       }
+    }
+  }
+}"""
+
+# ``--wrap N``: each output line wraps inside the cell, continuing N characters in (a hanging indent).
+_WRAP_JS = """(n) => {
+  for (const o of document.querySelectorAll('.ansiout')) {
+    const lines = o.textContent.split('\\n');
+    o.textContent = '';
+    for (const ln of lines) {
+      const d = document.createElement('div');
+      d.textContent = ln || ' ';
+      d.style.whiteSpace = 'pre-wrap';
+      d.style.paddingLeft = n + 'ch';
+      d.style.textIndent = '-' + n + 'ch';
+      o.appendChild(d);
     }
   }
 }"""
@@ -132,7 +149,7 @@ def notebook_html(path: Path) -> str:
 
 
 def render(page_html: str, out: Path | None, *, pairs, width: int, notebook: bool, from_text: str | None,
-           to_text: str | None, print_text: bool = False) -> None:
+           to_text: str | None, print_text: bool = False, wrap: int = 0) -> None:
     from playwright.sync_api import sync_playwright
 
     if out:
@@ -152,6 +169,9 @@ def render(page_html: str, out: Path | None, *, pairs, width: int, notebook: boo
                 page.evaluate("(ts) => document.querySelectorAll('.ansiout').forEach((e, i) => { e.textContent = ts[i]; })",
                               [redact(t, pairs) for t in texts])
                 page.evaluate(_REDACT_JS, [list(p) for p in pairs])
+            if wrap:
+                page.evaluate(_WRAP_JS, wrap)
+                page.evaluate(_UNCAP_JS)
             page.wait_for_timeout(300)
         if print_text:
             print(page.inner_text("body"))
@@ -195,6 +215,8 @@ def main() -> int:
     ap.add_argument("--width", type=int, default=980)
     ap.add_argument("--from-text", help="clip from the first element with this text")
     ap.add_argument("--to-text", help="clip to the first element with this text")
+    ap.add_argument("--wrap", type=int, default=0, metavar="N",
+                    help="notebook: wrap long output lines, continuing N characters in")
     a = ap.parse_args()
     pairs = load_redactions(a.redact)
     if a.text:
@@ -204,7 +226,8 @@ def main() -> int:
     if not a.out and not a.print_text:
         ap.error("give --out, --print-text, or both")
     render(page_html, Path(a.out) if a.out else None, pairs=pairs, width=a.width,
-           notebook=bool(a.notebook_html), from_text=a.from_text, to_text=a.to_text, print_text=a.print_text)
+           notebook=bool(a.notebook_html), from_text=a.from_text, to_text=a.to_text, print_text=a.print_text,
+           wrap=a.wrap)
     if a.out:
         print(f"wrote {a.out}")
     return 0

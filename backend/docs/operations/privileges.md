@@ -61,8 +61,8 @@ rather than reported as corrupted. The full matrix and its limits are in
 ## Recommended setup: one profiler service principal, wired via `run_as`
 
 1. Create/choose a **single profiler service principal** and set `job_00_profiler` to
-   `run_as` that SP (the bundle's `prod` target already runs jobs as `${var.prod_run_as_sp}`;
-   set it per target in `databricks.yml`). One identity = one attributable
+   `run_as` that SP (the bundle's jobs run as the deployer on every target; the installer's
+   `jobs_identity=sp:<application-id>` moves every job to the SP, then redeploy). One identity = one attributable
    `discovered_by_principal` in the manifest (WS1 provenance) and one `principal` per
    `profiler_run_ledger` row.
 2. Grant the SP the tiers above. For the widest one-shot **discovery**, use the estate-wide
@@ -86,8 +86,9 @@ The opt-in `scan_bindings=true` profiler scan enumerates this blind-spot matrix
 
 The tiers above are what the **profiler** needs to *read* the estate. Converting is different:
 `ALTER TABLE ... SET MANAGED` (and the in-window `UNSET MANAGED` rollback) runs as the
-**executing identity** (`job_04_convert`'s `run_as`, which in production is the App service
-principal), and that identity needs, per table:
+**executing identity** (`job_04_convert`'s `run_as`: the deployer by default on every target, or
+the service principal chosen with the installer's `jobs_identity`), and that identity needs, per
+table:
 
 - `USE CATALOG` on the catalog and `USE SCHEMA` on the schema (a catalog owner has the first
   implicitly but not the second; a schema owner has `USE SCHEMA`);

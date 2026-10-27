@@ -8,6 +8,7 @@ import {
   auditInsertSql,
   handbackDoneSql,
   installAuditRow,
+  installAuditSql,
   installerLedgerSql,
   ledgerMergeSql,
   ledgerRow,
@@ -40,6 +41,7 @@ const SQL = (JSON.parse(
   handback_done: string;
   installer_ledger: string;
   manifest_states: string;
+  install_audit: string;
   window_ends: string;
 };
 const TS = '2026-10-26 12:00:00';
@@ -92,6 +94,7 @@ describe('install-record SQL equals provision.py (golden fixture)', () => {
   it('record reads', () => {
     expect(installerLedgerSql('main', 'migration')).toBe(SQL.installer_ledger);
     expect(manifestStatesSql('main', 'migration')).toBe(SQL.manifest_states);
+    expect(installAuditSql('main', 'migration')).toBe(SQL.install_audit);
     expect(windowEndsSql('main', 'migration')).toBe(SQL.window_ends);
   });
 

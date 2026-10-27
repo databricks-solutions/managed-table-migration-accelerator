@@ -46,8 +46,8 @@ admin). Those two roles cover every grant the install makes, so nobody else has 
   `system.lakeflow`.
 
 The admin roles are for the install and the grants only. Every stage job runs as the jobs'
-identity (a service principal, `prod_run_as_sp`, on `prod`), and operators need only `CAN_USE` on
-the app.
+identity, which is you, the deployer, on every target unless you choose a service principal, and
+operators need only `CAN_USE` on the app.
 
 Without both roles, install with what you hold: the installer grants what it can and names who
 must grant the rest, and the app's Settings page lists those lines with a **Copy request** for
@@ -60,9 +60,9 @@ Each has a default, so you can take them as they come:
 | Decision | Default | Where you set it |
 |---|---|---|
 | Where the control tables live | `main.migration` | `manifest_catalog` / `manifest_schema` in the `dev` target ([Configure the bundle](#configure-the-bundle)). Changing it later starts a new, empty control plane. |
-| Which schemas to migrate | none yet: the installer lists the ones you can grant on | The installer's `scopes`; add more later from the app |
+| Which schemas to migrate | every catalog with external tables you can grant on (`scopes=all`), as `catalog.*` | The installer's `scopes`, to narrow to named schemas; add or remove later from the app |
 | Convert rights at install, or wave by wave | at install (`all_at_once`) | The installer's `convert_rights`; switch at any time ([What the installer grants](#what-the-installer-grants)) |
-| Who the jobs run as | you, the deployer | The installer's `jobs_identity`; a service principal is recommended for production |
+| Who the jobs run as | you, the deployer, on every target | The installer's `jobs_identity=sp:<application-id>`, then redeploy, if the jobs should not run with your access |
 
 ## Install from the workspace (recommended, no local CLI)
 
@@ -91,19 +91,21 @@ Each has a default, so you can take them as they come:
    **Run all**. With the default widgets (`confirm_grants=false`) nothing is granted. The run
    explains each widget first (here with `action=check`, which stops after the plan):
 
-   ![The installer notebook's options: each widget with its value and a one-line meaning, set to action=check](images/install/notebook/options.png)
+   ![The installer notebook's options: each widget with its value and a one-line meaning, set to action=check with scopes blank, which uses the stored scopes or all](images/install/notebook/options.png)
 
    The rights check gives one GO, WARN or NO-GO line per requirement and how much of the estate
    you can grant on ([what each means](#check-that-it-worked)):
 
-   ![The rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity and the install records, a warning for metastore admin, and the coverage headline](images/install/notebook/rights.png)
+   ![The rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity (you, with how to switch to a service principal) and the install records, a warning for metastore admin, and the coverage headline](images/install/notebook/rights.png)
 
-   With no scopes yet, the run lists the schemas with external tables you can grant on and prints
-   a line to paste. Paste it (or your own `catalog.schema` / `catalog.*` list) into the `scopes`
-   widget and click **Run all** again. Now the run prints the grant plan, every grant with its
-   set, grantee, reason and status, ending with the `plan_id` that pins it:
+   With no scopes stored yet, the run plans `scopes=all`: every catalog with external tables you
+   can grant on, as `catalog.*` (or the schemas you can grant on, where you cannot grant on the
+   whole catalog). It prints the scopes, a note on catalog-level grants and how to narrow them,
+   then the grant plan, every grant with its set, grantee, reason and status, ending with the
+   `plan_id` that pins it. To narrow, set the `scopes` widget to a `catalog.schema` list and click
+   **Run all** again:
 
-   ![The printed grant plan: Control, Look, Read and Change lines, each marked present or missing, with the plan_id and a count of what is already held](images/install/notebook/plan.png)
+   ![The printed grant plan: the jobs run as you, so every Control, Look, Read and Change line goes to you; each is marked present, with the plan_id and a count of what is already held](images/install/notebook/plan.png)
 
    Leave `target`, `catalog` and `schema` as they are unless you changed them in step 2: they must
    match the deploy, and a run that does not match stops and names the deployed values.
@@ -112,7 +114,7 @@ Each has a default, so you can take them as they come:
    convert rights, runs `job_99_setup` (control tables, Genie space, the app's grants), profiles
    your estate (`data_mode=real`; expect 30 to 45 minutes, even for a few schemas), and verifies:
 
-   ![The apply step: the one missing grant is granted, and the read-back shows 17 present, 0 missing](images/install/notebook/apply.png)
+   ![The apply step's read-back: 18 present, 0 missing, 0 unreadable, since every grant was already held](images/install/notebook/apply.png)
 
    ![Verify: the control-config handshake, the app service principal's grants, the app status and URL, a representative read and the grant plan, all ok, ending VERIFY PASSED](images/install/notebook/verify.png)
 
@@ -139,10 +141,13 @@ databricks bundle deploy   -t dev --profile <profile>   # jobs, dashboard, Genie
 # Optional: can I install, and how much of the estate can I grant on? Read-only.
 MTM_ACTION=check databricks bundle run install -t dev --profile <profile>
 
-# Preview the plan for the schemas to migrate, then apply exactly that plan.
-MTM_SCOPES='sales.orders,finance.*' databricks bundle run install -t dev --profile <profile>
-MTM_SCOPES='sales.orders,finance.*' MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+# Preview the plan for every catalog you can grant on, then apply exactly that plan.
+databricks bundle run install -t dev --profile <profile>
+MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
   databricks bundle run install -t dev --profile <profile>
+
+# Or narrow it to named schemas: the same MTM_SCOPES on both commands.
+MTM_SCOPES='sales.orders,finance.*' databricks bundle run install -t dev --profile <profile>
 ```
 
 Set the variables once, as above or in the `dev` target, so the deploy and every `bundle run` see
@@ -150,13 +155,17 @@ the same values: `bundle run` resolves them again, so a `--var` given only to th
 A run with no warehouse stops with `dashboard warehouse_id is required`; a run that resolves a
 different control schema from the deploy stops with exit code `2` and names the deployed one.
 
-On a terminal, a blank `MTM_SCOPES` with nothing stored shows a numbered list of the schemas you
-can grant on and asks. In a pipeline nothing is guessed: `MTM_SCOPES` is needed until scopes are
-stored. `MTM_OUTPUT=json` prints the rights, the plan and its `plan_id` as one document, and the
+A blank `MTM_SCOPES` keeps the stored scopes; with nothing stored it means `all`. On a terminal,
+the installer then lists what `all` covers, with table counts, and asks which to keep (Enter keeps
+all); in a pipeline it plans all of it. A run prints where its scopes came from (the scopes option,
+stored by an earlier install, or all you can grant on). `MTM_SCOPES=all` adds every catalog you can
+grant on to the stored scopes. `system`, `hive_metastore`, `samples` and shared or foreign catalogs
+are never included. `MTM_OUTPUT=json` prints the rights, the scopes (with `scopes_from` and `scope_note`), the plan and its `plan_id`
+as one document, and the
 exit code says what happened: `0` done, `1` a no-go, `2` invalid options, `3` applied with gaps,
 `4` the `plan_id` no longer matches (nothing ran), `5` waiting on a redeploy.
 
-![The CLI check: the rights and coverage report, the stored scopes, and the grant plan with one Change line missing](images/install/cli/check.png)
+![The CLI check: the rights and coverage report, the scopes it covers (every catalog you can grant on, as catalog.*) with how to narrow, and the grant plan, every line already held](images/install/cli/check.png)
 
 `databricks bundle deploy` is the only deploy command: it also deploys the app, which the Apps
 platform builds from `app/`. Do not run `databricks apps deploy`. After a deploy, the app can still
@@ -167,9 +176,11 @@ With `data_mode=real` (the default) the apply waits for `job_99_setup` and the p
 expect 30 to 45 minutes, even for a few schemas. `MTM_DATA_MODE=none` skips the profiling, so the
 apply finishes in a few minutes; run the profiler later from the app.
 
-For production, set `prod_host` and the jobs' identity (`jobs_run_as`, or `prod_run_as_sp`), then
-`databricks bundle deploy -t prod`. Runs are approved through job-run permissions and a person
-triggering each run.
+For production, set `prod_host`, then `databricks bundle deploy -t prod`. The jobs run as you
+there too: anyone who can start them runs them with your access, which the installer says on the
+jobs' identity line. To use a service principal instead, run the installer with
+`jobs_identity=sp:<application-id>` and redeploy. Runs are approved through job-run permissions
+and a person triggering each run.
 
 ## Check that it worked
 
@@ -180,7 +191,9 @@ triggering each run.
   metastore admin, for example, the jobs can read the system tables only if a metastore admin
   has already granted them.
 - **NO-GO**: something you cannot grant yourself. The line names who can. A NO-GO on the control
-  catalog or the jobs' identity stops the install; for any other line, everything you can grant
+  catalog or the jobs' identity stops the install (including when the jobs now run as someone other
+  than the identity this install's grants went to: the line gives the `jobs_identity` value for
+  each way out); for any other line, everything you can grant
   still applies and the rest is listed for whoever can grant it.
 - **UNKNOWN**: the installer could not read the answer. It is never treated as GO.
 
@@ -195,21 +208,39 @@ profiling finishes, **Overview** shows your estate and the recommended next step
 ## Carry on in the app
 
 The app takes over once the first install has run. After the first install, **Connection & policy → Permissions** shows the same check, the stored
-scopes with their live status, and the plan, for the signed-in admin. **Add schemas** widens the
-scope; **Grant** runs the plan as you, with your own rights, after a confirm that lists every
+scopes with their live status, and the plan, for the signed-in admin. With nothing stored yet,
+**Migration scope** starts with every catalog you can grant on, as rows you can remove to narrow.
+**Add schemas** widens the scope; **Grant** runs the plan as you, with your own rights, after a confirm that lists every
 statement. Lines you cannot grant name who can, with a **Copy request**.
 
-![Settings → Permissions: the rights check, who runs the jobs, the migration scope with Look, Read and Change status per schema, convert rights, and the plan](images/install/app/settings-permissions.png)
+![Settings → Permissions: the rights check, who runs the jobs (you), the migration scope starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
 
-![Add schemas: a box for catalog.schema or catalog.*, with suggestions of the schemas you can grant on](images/install/app/add-schemas.png)
+When you deployed the jobs, you own them, so **Who runs the jobs** reads the run permission as held
+without asking for it:
 
-![The Grant confirm: Grant 1 permission, the exact GRANT statement, who it runs as, and the plan id it is pinned to](images/install/app/grant-dialog.png)
+![Who runs the jobs: person, all 19 jobs the app knows, and Can Manage Run held because you deployed these jobs](images/install/app/jobs-held.png)
 
-![After Grant: only the two workspace-permission lines are left in the plan, each naming who can grant it](images/install/app/granted.png)
+Before the first profile, **Convert rights** has no tables to check yet and offers the profiler:
+
+![Convert rights before profiling: all at once, handed back at the end, the jobs hold MANAGE on the catalog, and No tables profiled yet with Run the profiler](images/install/app/convert-rights-empty.png)
+
+![Add schemas: the schemas with external tables you can see, grouped by catalog with table counts, and a box for catalog.schema or catalog.*](images/install/app/add-schemas.png)
+
+When the jobs run as a service principal (`jobs_identity=sp:<application-id>`), the plan lists what
+it still needs, and **Grant** gives it:
+
+![The Grant confirm: Grant 5 permissions, the exact GRANT statements, who they run as, and the plan id they are pinned to](images/install/app/grant-dialog.png)
+
+![After Grant: Look, Read and Change are all granted, and only the deployment-folder and jobs permission lines the app cannot read are left, as not checked, with the CLI check that reads them](images/install/app/granted.png)
+
+The app cannot read workspace permissions on the deployment folder or the jobs, so it lists those
+lines as **not checked** rather than missing. The CLI check reads them as you:
+
+![Not checked from the app: the deployment folder's CAN_READ and the jobs' CAN_MANAGE_RUN for the service principal, each marked not checked, with the CLI check command](images/install/app/not-checked.png)
 
 An operator without authority sees the same plan with **Copy request** in place of **Grant**:
 
-![The operator's view: the lines it cannot grant, each naming who can, with Copy request](images/install/app/operator.png)
+![The operator's view: the lines it cannot grant, each naming who can, and the lines the app cannot read, with Copy request](images/install/app/operator.png)
 
 With convert rights per wave, the convert gate offers **Grant convert rights** for that wave. It
 runs as you and reads the grant back. The convert itself is a separate confirm:
@@ -230,7 +261,7 @@ sign-in prompt, then press **Check again**.
 `mtm_hand_back_convert_rights` (tier `v2`) grant or hand back as you, and refuse without
 `confirm=true`:
 
-![Genie Code calling mtm_get_permissions, then mtm_grant_permissions without confirm, which asks for confirmation and runs nothing](images/install/mcp/permissions.png)
+![Genie Code calling mtm_get_permissions, which reports the rights, the stored scopes and a plan with every line in place, then mtm_grant_permissions without confirm, which asks for confirmation and runs nothing](images/install/mcp/permissions.png)
 
 ## Hand convert rights back
 
@@ -249,7 +280,7 @@ MTM_ACTION=revoke_convert MTM_SCOPES=sales.orders MTM_PLAN_ID=<plan_id> MTM_CONF
   databricks bundle run install -t <target> --profile <profile>
 ```
 
-![The CLI hand-back dry run: the hand-back plan id and the one REVOKE it would run](images/install/cli/handback.png)
+![The CLI hand-back dry run for a catalog scope: the hand-back plan id and the one REVOKE MANAGE ON CATALOG it would run](images/install/cli/handback.png)
 
 A schema with a table still inside its 14-day rollback window is refused, with the date it becomes
 possible: rollback needs those rights.
@@ -339,7 +370,7 @@ Genie Code can also read the same check and plan, and grant behind `confirm=true
 ```mermaid
 flowchart LR
   deploy["Deploy the bundle"] --> check["Check rights<br/>and coverage"]
-  check --> scopes["Pick the schemas<br/>to migrate"]
+  check --> scopes["Scopes: all you can<br/>grant on, or narrow"]
   scopes --> plan["Preview the<br/>grant plan"]
   plan --> apply["Apply, read back,<br/>verify"]
   apply --> migrate["Profile, plan,<br/>dry run, convert"]
@@ -359,20 +390,24 @@ Access is split into four sets, granted in one reviewed plan. Only the last one 
 |---|---|---|
 | **Control** | The app's service principal, the jobs' identity, and the installers' group | Read the control plane, write `migration_actions`; the jobs' identity can create and run its own control schema and jobs |
 | **Look** | The jobs' identity | `BROWSE` per catalog (or `READ METADATA` on the metastore) and the `system.access`, `system.compute` and `system.lakeflow` schemas: find tables, owners, grants, lineage and job history |
-| **Read** | The jobs' identity | `USE SCHEMA` and `SELECT` on each schema you migrate: profile and convert need `SELECT` |
-| **Change** | The jobs' identity | `MANAGE` on each schema you migrate: the convert rights. Handed back at the end |
+| **Read** | The jobs' identity | `USE SCHEMA` and `SELECT` on each scope you migrate (a whole catalog for `catalog.*`, else the schema): profile and convert need `SELECT` |
+| **Change** | The jobs' identity | `MANAGE` on each scope you migrate: the convert rights. Handed back at the end |
 
 **Convert rights, all at once or per wave.** By default (`convert_rights=all_at_once`) `MANAGE` is
-granted for every chosen schema at install, so no person is needed between waves, and it is handed
-back once cleanup finishes. The stricter option (`per_wave`) grants Control, Look and Read only;
+granted on every scope at install, so no person is needed between waves, and it is handed back
+once every table in that scope is cleaned up or rolled back. A catalog-level grant also covers
+schemas created in that catalog later; to grant narrower, name the schemas in `scopes`. The stricter option (`per_wave`) grants Control, Look and Read only;
 before each wave converts, `action=grant_convert` (or **Grant convert rights** on the app's convert
 gate) grants `MANAGE` on that wave's schemas. You can switch between the two at any time. The tool
 only ever revokes what it recorded as added; a grant you made yourself is never revoked.
 
 **The jobs' identity** is whoever the deployed jobs run as (`jobs_run_as`, the same on every job).
-The installer reads it from the deployed jobs, names its kind in the plan, and refuses to go on if
-the jobs disagree. A dedicated service principal is recommended for production; the
-`jobs_identity` option writes the override and asks you to redeploy.
+By default that is you, the deployer, on every target, `prod` included, so Look, Read and Change go
+to you, and the plan's header says so. Anyone who can start the jobs then runs them with your
+access. The installer reads the identity from the deployed jobs, names its kind in the plan, and
+refuses to go on if the jobs disagree, or if they now run as someone other than the identity this
+install's grants went to. To run them as a service principal, `jobs_identity=sp:<application-id>`
+writes the override and asks you to redeploy.
 
 #### Installer options
 
@@ -385,7 +420,7 @@ The notebook widgets and the CLI read one option set. Through the bundle, each o
 | `action` | `install` | `install`; `check` (rights and plan only); `grant_convert` (one wave's convert rights); `revoke_convert` (hand convert rights back); `uninstall` (revoke everything the tool granted) |
 | `confirm_grants` | `false` | `false` prints the plan and runs nothing; `true` applies it |
 | `plan_id` | blank | Apply only if the plan still matches the one you reviewed |
-| `scopes` | the stored scopes | `catalog.schema` or `catalog.*`, comma-separated: the schemas to migrate |
+| `scopes` | the stored scopes, else `all` | `catalog.schema`, `catalog.*` or `all`, comma-separated: what to migrate. `all` is every catalog with external tables you can grant on, as `catalog.*`, or its schemas you can grant on |
 | `convert_rights` | `all_at_once` | `all_at_once` or `per_wave` (above) |
 | `wave_id`, `plan_run_id` | blank | The wave for `grant_convert`, pinned to the wave plan you reviewed |
 | `jobs_identity` | `keep` | `sp:<application-id>`, `group:<name>` or `user:<email>` to move the jobs; needs a redeploy |
@@ -426,7 +461,7 @@ flowchart LR
 ```
 
 A click in the app never runs as you. The app's service principal starts the run, and the job runs
-as its **convert identity**: you on `dev` and `e2e`, a service principal on `prod`. The operator's
+as its **convert identity**: by default you, the deployer, on every target. The operator's
 name is recorded for the audit trail only.
 
 What each step needs:
@@ -459,8 +494,9 @@ In detail, the four identities:
   access to the control plane (`USE CATALOG`, `USE SCHEMA`, `SELECT` on the control schema, and
   `MODIFY` on `migration_actions` only) and verifies each grant with `SHOW GRANTS`.
 - **The convert identity** (the jobs' `run_as`, which actually runs `SET MANAGED`). Every stage job
-  runs as the `jobs_run_as` variable: by default **you**, the deployer. In `prod` it is the service
-  principal in `prod_run_as_sp`, normally the app SP. On each table it needs:
+  runs as the `jobs_run_as` variable: by default **you**, the deployer, on every target, `prod`
+  included. `jobs_identity=sp:<application-id>` moves it to a service principal. On each table it
+  needs:
   - `USE CATALOG` and `USE SCHEMA`;
   - ownership **or** `MANAGE` on the table, its schema or its catalog (direct, inherited or through
     a group);
@@ -525,7 +561,7 @@ them again:
 | `catalog_filter` / `schema_filter` | `*` / `*` | Glob filters that limit which catalogs and schemas the profiler scans. |
 | `workspace_id` | blank | Your workspace ID, so links from the app open in the right workspace. Optional. |
 | `jobs_run_as` | the deployer | Who every stage job runs as: `{service_principal_name: …}`, `{group_name: …}` or `{user_name: …}`. A complex variable: set it in the target or `.databricks/bundle/<target>/variable-overrides.json` (the installer's `jobs_identity` option writes it), not `BUNDLE_VAR_*`. Required when a service principal deploys. |
-| `prod_host` / `prod_run_as_sp` | placeholder / blank | `prod` target only: the prod workspace URL and the service principal application ID the prod jobs run as. |
+| `prod_host` | placeholder | `prod` target only: the prod workspace URL. |
 | `prod_root_path` | `/Shared/.bundle/<bundle>/prod` | `prod` target only: the deployment folder. The default keeps existing installs in place. For a new install pick a folder only the deployers can edit; the installer warns when every workspace user can edit it. |
 | `mcp_tier` | `v2` | What Genie Code may do through the app: `v2` adds the gated tools that change things; `v1` is reads and non-mutating stages only. |
 | `telemetry_enabled` | `true` | `false` to turn off usage telemetry (see below). |
@@ -561,7 +597,12 @@ targets:
   Send them the plan (the CLI's `MTM_OUTPUT=json`, or **Copy request** in the app), then re-run the
   check. Everything you can grant still applies; the rest is listed, never guessed.
 - **"plan_id no longer matches".** Something changed since the preview (a grant landed, a scope was
-  added). Nothing ran. Review the new plan and apply with its `plan_id`.
+  added). Nothing ran. Review the new plan and apply with its `plan_id`. A `plan_id` from before an
+  upgrade that changed the plan rules never matches: preview again.
+- **NO-GO: "the jobs now run as …, but this install's grants went to …".** The jobs' identity
+  changed since the install (a different person deployed, or a service principal was dropped). The
+  line gives both ways out: `jobs_identity=` the old identity, then redeploy, to keep the grants
+  where they are; or `jobs_identity=` the new one to grant it instead.
 - **"Nothing to revoke" on a hand-back.** Cleanup has not marked the schema ready yet: every table
   in it must be `CLEANED` or `ROLLED_BACK`. The output lists what is still held. To hand a schema
   back now, name it in `scopes`.

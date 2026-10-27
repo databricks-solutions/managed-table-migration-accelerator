@@ -50,8 +50,9 @@ says "already done", or stops with one sentence naming what is missing and who c
 2. **A view refresh after every deploy.** Until `job_08_conductor` recreates `wave_status`, the
    Waves and Convert boards fail on unresolved columns. That is easy to forget and every upgrade
    hits it.
-3. **A circular prod identity.** `prod` sets `run_as` to `var.prod_run_as_sp`, which must be the
-   app's service principal, and that principal only exists after the first deploy.
+3. **A circular prod identity.** `prod` set `run_as` to the app's service principal, and that
+   principal only exists after the first deploy. (Resolved: the jobs run as the deployer on every
+   target, section 13 decision 1a.)
 
 **Permissions**
 
@@ -242,9 +243,9 @@ Workspace permissions on other teams' resources (`CAN_MANAGE` on their OPTIMIZE 
 pipelines for the freeze bracket, share ownership for re-share) are not granted by the installer.
 They stay MANUAL actions on the runbook, as today.
 
-Today `dev` and `e2e` run jobs as the deployer, and `prod` requires `var.prod_run_as_sp` to be the
-app's service principal ([`app-sp-grants.md`](../../app/docs/app-sp-grants.md), "one service
-principal does everything"). That requirement is a design choice, not a platform rule: the backend
+Before this design, `dev` and `e2e` ran jobs as the deployer, and `prod` required the app's
+service principal ([`app-sp-grants.md`](../../app/docs/app-sp-grants.md), then "one service
+principal does everything"). That requirement was a design choice, not a platform rule: the backend
 is already identity-agnostic (every `convert_authority` verdict records the identity the job
 actually ran as), and the only code that assumes the two are the same is the app's grants panel,
 which addresses `SELECT current_user()`.
@@ -253,12 +254,18 @@ which addresses `SELECT current_user()`.
 
 | Jobs' identity | Suits | Watch out for |
 |---|---|---|
-| **A dedicated service principal** the customer names or the installer creates (recommended for production) | Production | Creating one needs a workspace admin; whoever deploys needs the **Service Principal User** role on it |
+| **The deployer** (`run_as.user_name`, the default on every target) | The usual case: the installer is also the operator, and the app is rarely shared | Every app user who can launch a job acts with **all** of the deployer's rights, not just migration rights, and the installer says so. Jobs break when the person leaves or loses access |
+| **A dedicated service principal** the customer names or the installer creates | Shared apps, long-lived production estates, separation of duties | Creating one needs a workspace admin; whoever deploys needs the **Service Principal User** role on it |
 | **A group** (`run_as.group_name`) | Teams that already govern a migration group | Newer platform feature; deploying needs membership of the group or its **Assume** permission. Untested here for `SET MANAGED` and for the Jobs and Pipelines API calls of the freeze bracket |
-| **A named person** (`run_as.user_name`) | Pilots, or one operator who is also the only app user | Every app user who can launch a job acts with **all** of that person's rights, not just migration rights. Jobs break when the person leaves or loses access. A non-admin can only name themselves |
-| **The app's service principal** (today's `prod`) | Kept for compatibility | Deleted with the app, taking every grant with it mid-migration. Its credentials sit in the app's runtime, so anyone who can deploy app code can act with its data rights |
+| **Another named person** (`run_as.user_name`) | One operator who is not the deployer | The same as the deployer row. A non-admin can only name themselves |
+| **The app's service principal** (the earlier `prod` default) | Kept for compatibility | Deleted with the app, taking every grant with it mid-migration. Its credentials sit in the app's runtime, so anyone who can deploy app code can act with its data rights |
 
-**Why a dedicated service principal is the recommended default:**
+**The deployer is the default; a dedicated service principal is the opt-in for shared or
+long-lived estates.** The app is rarely shared beyond the installer, so a mandatory service
+principal was friction with no safety gain: the grants still go only where the installer can grant,
+and the plan names the person before you confirm. Choose a service principal when several people
+can start the jobs, or when the migration must not depend on one person's account. Prefer a
+dedicated one over the app's own:
 
 1. **It outlives the app.** Databricks deletes an app's service principal when the app is deleted.
    A migration runs for weeks and rollback depends on the same rights for 14 days after each
@@ -267,9 +274,7 @@ which addresses `SELECT current_user()`.
    With a separate jobs' identity, the app holds only Control and run permission on the jobs, and
    every data action goes through job code fixed at deploy time, which re-checks every gate. That
    is "the app reflects; the job enforces" applied to identity.
-3. **It removes the circular production identity** (section 2, item 3): the principal exists
-   before the first deploy.
-4. **It is the customer's principal**: their name, their rotation, their audit trail.
+3. **It is the customer's principal**: their name, their rotation, their audit trail.
 
 **Where the choice lives.** One complex bundle variable, `jobs_run_as`, set on every job at the job
 level (`run_as: ${var.jobs_run_as}`). Validated with CLI 1.20.0: a job-level `run_as` taken from a
@@ -282,7 +287,12 @@ roles above were not exercised.
 
 **Grantee rule.** Control goes to the app's service principal. Look, Read and Change go to the
 jobs' identity **as deployed**: the installer reads it from the jobs' `run_as`, never from a typed
-value, and names its kind (service principal, group or person) in the plan before you confirm.
+value, and names its kind (service principal, group or person) in the plan before you confirm. For a
+person, the jobs' identity line adds "Anyone who can start these jobs runs them with your access"
+with the `jobs_identity=sp:<application-id>` switch, and the plan opens with "The jobs run as you, so
+Look, Read and Change go to you." When the deployed identity is not the non-group grantee of this
+install's held Look, Read or Change grants (`provision.identity_drift`), the check is NO-GO with
+both fixes, so a redeploy by someone else never silently grants a second identity.
 
 **Changing the jobs' identity is a deploy, not a setting.** The bundle owns each job's `run_as`;
 a change made in the Jobs UI or by the app would be reverted by the next `bundle deploy`. So the
@@ -302,8 +312,8 @@ between them (checked against the Databricks docs):
 | Metastore admin | Look, Read and Change on every in-scope catalog, the control catalog, the system schemas | A metastore admin can manage privileges on any object in the metastore. A workspace admin cannot grant on existing objects it does not own. |
 | Account admin | Not needed, except to create or rotate a service principal | The docs say granting system-table access takes an admin who is both a metastore admin and an account admin; the installer reports a failed system-schema line for whoever holds both. |
 
-The roles are for the install and its grants only: the jobs run as the jobs' identity
-(`prod_run_as_sp` on `prod`), and operators need only `CAN_USE` on the app. An installer without
+The roles are for the install and its grants only: the jobs run as the jobs' identity (the
+deployer by default, on every target), and operators need only `CAN_USE` on the app. An installer without
 both roles grants what it can, and the rest is routed to its grantor (CUJ-4). The operator guide
 carries the same advice: [Recommended installer](../../docs/00-installation.md#recommended-installer).
 
@@ -398,7 +408,7 @@ Settings control against `provision.OPTIONS`, so a switch cannot exist on one do
 | `action` | `install`, `check`, `grant_convert`, `revoke_convert`, `uninstall` | dropdown | `--action` (`--check-only` = `check`) | Full install; the rights and coverage report alone; the per-wave Change grant (section 6, stricter option); handing Change back (step 6); or revoking everything the tool granted before `bundle destroy` (CUJ-12). The app offers every action except `uninstall` |
 | `plan_id` | blank, or the fingerprint a dry run printed | text | `--plan-id` | Apply only if the plan still matches the one reviewed; a changed plan stops and shows the difference (CUJ-5) |
 | `jobs_identity` | `keep`, `sp:<application-id>`, `group:<name>`, `user:<email>`, `create` | text | `--jobs-identity` | Who the jobs run as (section 5). `keep` uses what is deployed; `create` makes a dedicated service principal when the installer is a workspace admin. A change is written to the target's variables and needs a redeploy, which the CLI offers and the notebook prints |
-| `scopes` | blank, or `catalog.schema` / `catalog.*`, comma-separated | text | `--scopes` | The schemas to add to `migration_scope` and grant Read (and Change) on. Blank: use the stored scopes; with none stored, list the candidates and stop before Read |
+| `scopes` | blank, or `catalog.schema` / `catalog.*` / `all`, comma-separated | text | `--scopes` | The scopes to add to `migration_scope` and grant Read (and Change) on. Blank: use the stored scopes; with none stored, `all` (every catalog with external tables the installer can grant on, as `catalog.*`, else its grantable schemas). `all` (install and check only) adds that expansion to the named or stored scopes |
 | `convert_rights` | `all_at_once`, `per_wave` | dropdown | `--convert-rights` | `all_at_once` grants Change on the scopes at install, handed back at the end; `per_wave` leaves it to `grant_convert` |
 | `wave_id` | blank, or a wave of the current plan | text | `--wave-id` | Required by `grant_convert` |
 | `plan_run_id` | blank, or the plan the wave was reviewed in | text | `--plan-run-id` | Pins `grant_convert`: a newer wave plan stops it before any grant |
@@ -411,13 +421,14 @@ Settings control against `provision.OPTIONS`, so a switch cannot exist on one do
 | `output` | `text`, `json` | none | `--output` | CLI only: `json` prints the rights report and plan as one JSON document for scripts and change tickets (section 21) |
 
 **Notebook experience.** Widgets are ordered by when you need them. **Run all** with the defaults
-checks rights, lists candidate scopes and prints the plan, changing nothing. The candidate list ends
-with a ready-to-paste `scopes` value. `scopes` is a text widget, not a multiselect: a multiselect's
-choices are fixed when the widget is created and become unwieldy at hundreds of schemas, while text
-takes `catalog.*`. Set `confirm_grants=true` and run all again to apply.
+checks rights, plans `scopes=all` (every catalog the installer can grant on) with the note on how to
+narrow, and prints the plan, changing nothing. `scopes` is a text widget, not a multiselect: a
+multiselect's choices are fixed when the widget is created and become unwieldy at hundreds of
+schemas, while text takes `catalog.*` and `all`. Set `confirm_grants=true` and run all again to apply.
 
-**CLI experience.** On a terminal, a blank `scopes` shows a numbered list and asks. A
-non-interactive run (no terminal, or `yes=true`) needs `scopes` and never guesses. A bundle script
+**CLI experience.** On a terminal with nothing stored, a blank `scopes` shows what `all` covers as a
+numbered list and asks which to keep (Enter keeps all). A non-interactive run (no terminal, or
+`yes=true`) plans `all` without the prompt; stored scopes are never widened by a blank value. A bundle script
 takes no arguments, so through the bundle every option is an `MTM_<NAME>` environment variable;
 `python3 backend/scripts/install.py --help` lists the same options as flags for a direct run.
 
@@ -545,12 +556,18 @@ repoint the code comments that cite SR12 for grants:
   2. **From a closed plan**: the four sets in section 4, built by `provision.grant_plan`. Never
      `ALL PRIVILEGES`, never an ownership change, never metastore admin.
   3. **To the grantee rule's principal** (section 5): the app's service principal for Control, the
-     jobs' identity as deployed for the rest, or a designated group that contains them (checked
-     before use). A person receives grants only when the customer deployed the jobs to run as that
-     person, and the plan says so before you confirm.
-  4. **On explicit scopes only**: the control schema, the Look set, the scopes stored in
-     `migration_scope`, and Change only on those scopes (all at once) or for a named wave (per
-     wave).
+     jobs' identity as deployed for the rest (the deployer by default, on every target), or a
+     designated group that contains them (checked before use). When that identity is a person, the
+     jobs' identity line and the plan's header say so before you confirm, with the switch to a
+     service principal. When the deployed identity is not the one this install's grants went to,
+     the install stops (`provision.identity_drift`) instead of granting a second identity.
+  4. **On the resolved scopes only**: the control schema, the Look set, and the scopes the run
+     resolves (`provision.resolve_scopes`): the named scopes, else the scopes stored in
+     `migration_scope`, else `all` (every catalog with external tables the installer can grant on,
+     at catalog level where they can grant on the whole catalog; never `system`,
+     `hive_metastore`, `samples` or a shared or foreign catalog). The plan lists every scope and,
+     for a `catalog.*` scope, how to narrow it, before you confirm. Change only on those scopes
+     (all at once) or for a named wave (per wave).
   5. **Dry run by default.** The plan prints with the reason for each grant; executing needs
      `confirm_grants=true` (notebook widget), `--confirm-grants` (CLI), or **Grant** after
      **Preview** (app).
@@ -680,7 +697,7 @@ implemented, the docs must **show** each step, not only describe it.
 |---|---|---|
 | Deploy from the workspace | The **Deployments** panel with a target picked | `databricks bundle deploy -t <t> --profile <p>` |
 | Rights and coverage check | The go / no-go report with the coverage headline, notebook, terminal and Settings | `MTM_ACTION=check` |
-| Pick scopes | The candidate list with counts and the ready-to-paste value; the Settings scope picker | `MTM_SCOPES` (both forms) |
+| Pick scopes | The resolved scopes with where they came from and the narrowing note; the Settings scope rows | `MTM_SCOPES` to narrow (both forms) |
 | Grant plan (dry run) | The printed plan with a reason per grant; the Settings **Preview** | The `GRANT` statements it prints |
 | Apply and verify | The read-back with `present` / `missing` | `MTM_CONFIRM_GRANTS=true` |
 | Carry on in the app | Settings → Permissions listing scopes added from the CLI, with their door and status | none |
@@ -689,7 +706,7 @@ implemented, the docs must **show** each step, not only describe it.
 | Hand Change back | The open `RESTORE_OWNERSHIP` runbook item, its button, and the revoke read-back | `MTM_ACTION=revoke_convert` |
 | When the app cannot grant | The Settings message for a blocked `sql` scope, with the fallback commands | The notebook and CLI commands |
 | Under-privileged banner | The app banner and the Settings page it links to | none |
-| Production identity | The `run_as` mismatch prompt | The redeploy command with `BUNDLE_VAR_prod_run_as_sp` |
+| Production identity | The jobs' identity line for a person ("Anyone who can start these jobs runs them with your access") and the drift NO-GO | `MTM_JOBS_IDENTITY=sp:<application-id>`, then redeploy |
 
 **Rules for every visual:**
 
@@ -708,8 +725,9 @@ implemented, the docs must **show** each step, not only describe it.
 | # | Question | Decision |
 |---|---|---|
 | 1 | Grantee: the SP or a group? | The grantee rule's principal directly by default (section 5); optional `grantee_group`, used only after checking membership. |
-| 1a | Who do the jobs run as? | The customer's choice (`jobs_run_as`, per job): a dedicated service principal (recommended), a group, a named person, or the app's service principal (compatibility). The app's identity holds no data rights unless it is chosen. |
-| 2 | How is the scope chosen before the first scan? | From the installer's own view of schemas with external tables, defaulting to those they can grant on. No discovery-only profiler run (it cannot reveal a schema the installer could grant on but not see). |
+| 1a | Who do the jobs run as? | **The deployer, on every target, `prod` included** (`jobs_run_as` default; no target override). The app is rarely shared and the installer is usually the operator, so a mandatory service principal was friction with no safety gain. A service principal, a group or another person stays one option away (`jobs_identity`, then redeploy). A person-run install says so on the jobs' identity line and in the plan header. The app's identity holds no data rights unless it is chosen. |
+| 1b | What if the jobs' identity changes after install? | **NO-GO, never a silent second grantee.** `provision.identity_drift` compares the deployed identity with the non-group grantees of this install's held Look / Read / Change grants and names both fixes; an explicit `jobs_identity` clears it. |
+| 2 | How is the scope chosen before the first scan? | **`scopes=all` by default**: with nothing named or stored, every catalog with external tables the installer can grant on, as `catalog.*`, else its grantable schemas (`provision.expand_all`); `system`, `hive_metastore`, `samples` and non-standard catalog types are left out. Stored scopes are never widened by a blank value, and every door prints how to narrow (`NARROWING_NOTE`). No discovery-only profiler run (it cannot reveal a schema the installer could grant on but not see). |
 | 3 | Prod `run_as` mismatch | Detect and guide: the CLI asks before redeploying (`--yes` for scripts); the notebook prints the value. Never silent. |
 | 4 | Where the rules live | SR15–SR17 in `control_plane.md` §0.4; grant-code comments repointed from SR12. |
 | 5 | CLI entry point | `databricks bundle run install` via a bundle `scripts:` entry; `make install` remains an alias. |
@@ -736,8 +754,9 @@ implemented, the docs must **show** each step, not only describe it.
     the grant", from Authorize or `grant_convert`; `leased_by` names who. `07` marks a schema
     `MANAGE` row ready to hand back and `revoke_convert` stamps `revoked_at`. No new column.
 - **`databricks.yml` and every job resource:** `jobs_run_as` (complex) on each job, replacing the
-  target-level `prod` `run_as`; `prod_run_as_sp` kept as the compatibility default. A restricted
-  `prod` root path with top-level `permissions`.
+  target-level `prod` `run_as`; the deployer by default on every target (the earlier `prod`
+  service-principal variable is removed). A restricted `prod` root path with top-level
+  `permissions`.
 - **App:** the grants panel addresses the jobs' identity (read from the jobs' `run_as`), not
   `SELECT current_user()`. [`app-sp-grants.md`](../../app/docs/app-sp-grants.md) "one service
   principal does everything" becomes "the app's identity and the jobs' identity", and its line
@@ -870,10 +889,11 @@ to migrate.
 
 1. **Deploy.** Open `databricks.yml`, the **Deployments** panel, pick the target, **Deploy**.
 2. **Look first.** Open `backend/notebooks/install.py` and **Run all** with the defaults. It checks
-   rights and coverage, lists the candidate scopes ending in a ready-to-paste `scopes` value, and
-   prints the grant plan with its fingerprint. Nothing changes.
-3. **Choose.** Set `jobs_identity` (for production, `create` or `sp:<application-id>`), paste
-   `scopes`, set `confirm_grants=true`.
+   rights and coverage, plans `scopes=all` (every catalog the installer can grant on, as
+   `catalog.*`) with the note on how to narrow, and prints the grant plan with its fingerprint.
+   Nothing changes.
+3. **Choose.** Optionally narrow `scopes` to named schemas, or set `jobs_identity=sp:<application-id>`
+   to run the jobs as a service principal; then set `confirm_grants=true` and `plan_id`.
 4. **Apply.** **Run all** again. If the jobs' identity changed, the notebook stops at that cell and
    asks for one more **Deploy**; the next **Run all** resumes there.
 5. **Finish.** The grants are applied and read back, setup runs, the profiler and planner run
@@ -889,10 +909,12 @@ installer can grant, and the rest is listed with who can grant it (CUJ-4).
 ```bash
 databricks bundle deploy -t prod --profile <p>
 MTM_ACTION=check MTM_OUTPUT=json databricks bundle run install -t prod --profile <p> > rights.json
-MTM_JOBS_IDENTITY=sp:<application-id> MTM_SCOPES='sales.*,finance.orders' MTM_OUTPUT=json \
+# blank scopes = all (every catalog you can grant on); add MTM_JOBS_IDENTITY=sp:<application-id>
+# to both commands to run the jobs as a service principal instead of the deployer.
+MTM_SCOPES='sales.*,finance.orders' MTM_OUTPUT=json \
   databricks bundle run install -t prod --profile <p> > plan.json
 # after approval of plan.json (its plan_id is inside):
-MTM_JOBS_IDENTITY=sp:<application-id> MTM_SCOPES='sales.*,finance.orders' \
+MTM_SCOPES='sales.*,finance.orders' \
   MTM_PLAN_ID=<fingerprint> MTM_CONFIRM_GRANTS=true MTM_YES=true \
   databricks bundle run install -t prod --profile <p>
 ```
@@ -963,7 +985,10 @@ the signed-in installer, is read back, and closes the item. A schema with a tabl
 
 ### CUJ-9 · Move production off the app's service principal
 
-Existing production installs run the jobs as the app's service principal.
+Installs from before the deployer default ran the `prod` jobs as the app's service principal. A
+redeploy now moves them to the deployer, and the next install check is NO-GO ("the jobs now run as
+…, but this install's grants went to …"). To keep the service principal, run the installer with
+`jobs_identity=sp:<application-id>` and redeploy. To move off it:
 
 1. Between waves (refused while any table is `CONVERTING` or `ROLLING_BACK`), run the installer with
    `jobs_identity=sp:<application-id>` (or `create`) and redeploy.
@@ -1116,7 +1141,7 @@ the permission cells. Cells, in order (new ones marked):
 | 2 · Preflight | Proves the app and jobs were deployed (exists) | No |
 | 3 · Rights and coverage (new) | The section 10 report as the notebook user | No |
 | 4 · Jobs' identity (new) | Shows the deployed `run_as`; on a change, writes the variable and stops for a **Deploy** | Only `variable-overrides.json` |
-| 5 · Scopes (new) | Candidates with counts and grantors; stored scopes; the ready-to-paste value | No |
+| 5 · Scopes (new) | The resolved scopes and where they came from (the option, stored, or all you can grant on), with the narrowing note for a `catalog.*` scope | No |
 | 6 · Grant plan (new) | The plan with reasons and `plan_id` | No |
 | 7 · Apply and verify (new) | Runs only when `confirm_grants=true`; audit row first, then grant, then read-back | Grants |
 | 8 · Provision | Runs setup (exists) | Control tables, Genie, Control grant |
@@ -1129,7 +1154,7 @@ the permission cells. Cells, in order (new ones marked):
 ┌ install.py ─────────────────────────────────────────────────────────────────┐
 │ action          [ install        ▾]   confirm_grants [ false ▾]              │
 │ jobs_identity   [ keep                                  ]                    │
-│ scopes          [                                       ]  (blank = list)    │
+│ scopes          [                                       ]  (blank = all)     │
 │ convert_rights  [ all_at_once    ▾]   wave_id        [            ]          │
 │ plan_id         [                ]    grantee_group  [            ]          │
 │ data_mode       [ real           ▾]   app_name       [            ]          │
@@ -1179,11 +1204,13 @@ $ databricks bundle run install -t prod --profile <p>
 Rights and coverage (as alice@corp.example)
   GO  Workspace admin   NO-GO  Metastore admin   GO  Control catalog   …
   You can grant on 38 of 52 schemas (1,140 of 1,610 tables). 14 need someone else (listed above).
-No scopes stored yet. Schemas you can grant on:
-   1  sales.orders        212 tables
-   2  sales.returns        48 tables
+No scopes stored yet, so scopes=all: the catalogs and schemas you can grant on.
+    1  sales.*                    260 tables
+    2  finance.orders             212 tables
    …
-Pick scopes (numbers, ranges, or catalog.*; Enter = all 38): 1-2,finance.orders
+Pick scopes (numbers, ranges, or catalog.*; Enter = all 12): 1-2
+Scopes (from the scopes option): sales.*, finance.orders
+Catalog-level grants also cover schemas created later, …
 Grant plan 7f3c9a: 118 grants (Control 0, Look 3, Read 57, Change 58). Show it? [y/N] y
   …
 Apply these grants now? [y/N] y
@@ -1191,9 +1218,10 @@ Apply these grants now? [y/N] y
 Next: open the app at https://<app-url>, or run `databricks bundle run job_00_profiler -t prod`.
 ```
 
-**Non-interactive** (no terminal, or `MTM_YES=true`): nothing is guessed. `MTM_SCOPES` is required
-unless scopes are stored, and applying needs `MTM_CONFIRM_GRANTS=true`. `MTM_OUTPUT=json` prints one document with
-`rights`, `coverage`, `plan`, `plan_id` and, after applying, `results`.
+**Non-interactive** (no terminal, or `MTM_YES=true`): no prompt. A blank `MTM_SCOPES` keeps the
+stored scopes, or plans `all` when none are stored, and applying needs `MTM_CONFIRM_GRANTS=true`.
+`MTM_OUTPUT=json` prints one document with `rights`, `coverage`, `scopes`, `scopes_from`,
+`scope_note`, `plan`, `plan_id` and, after applying, `results`.
 
 **Exit codes**, so scripts and change pipelines can branch:
 
@@ -1317,4 +1345,6 @@ workspace, and each is covered by a test or a live check.
 | Re-installing over a held grant | Recorded once | A re-install keeps `added = true` on a grant the tool already added, so the hand-back still revokes it. |
 | Runbook Hand back | Shows "Handed back" | The refresh closes the action and its row leaves the list, so the confirmation goes with it. The audit row and the ledger record the revoke. |
 | After a deploy | The app is ready | `bundle deploy` can finish while the app is still starting. Check `databricks apps get` for `RUNNING` and an active deployment before using it. |
+| Default scopes | Named scopes; a blank value offered a list to pick from | `scopes=all` when nothing is named or stored: the installer's grantable catalogs as `catalog.*` (else the grantable schemas), never `system`, `hive_metastore`, `samples` or a shared or foreign catalog (types read from the catalogs API; an unreadable read says so and applies the name rule only). The CLI still offers the picker on a terminal; the notebook no longer asks for a pasted list; Settings seeds the rows. `PLAN_RULES_VERSION` became `2`. |
+| Production identity | A service principal variable on `prod` | The deployer on every target. The person is named on the jobs' identity line and in the plan header, and a change of identity after install is NO-GO (`identity_drift`) rather than a second grantee. |
 | Screenshots | Captured by `e2e_app_ui.py --docs-shots` and Playwright on the notebook | The app images come from the live journeys in `backend/.e2e/e2e_install_permissions.py --shots`, redacted in the page before capture (`E2E_SHOT_REDACT`). The notebook, CLI and MCP images are rendered from real run output by `backend/.e2e/render_transcript.py`, with the same redaction. The "app cannot act" state was validated but not photographed: it needs the app redeployed without its `sql` scope and back. |

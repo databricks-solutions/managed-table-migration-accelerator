@@ -31,8 +31,9 @@ button, backed by the Genie space).
 **Permissions** (`/settings#permissions`, under **Connection & policy**) carries on after the first
 install, which runs from the notebook or the CLI. It runs the same rights check and grant plan as
 they do, for the signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
-after a confirm that lists each statement and pins the previewed `plan_id`. From there you can tick the
-schemas you can see into the migration scope, switch convert rights between all at once and per wave, and hand
+after a confirm that lists each statement and pins the previewed `plan_id`. With nothing stored yet, the
+migration scope starts with every catalog you can grant on, as rows you can remove to narrow. From there you
+can tick more schemas you can see into the migration scope, switch convert rights between all at once and per wave, and hand
 convert rights back. Lines you cannot grant name who can, with **Copy request**. When a stored scope
 or the control plane is missing a grant, a banner on every page links here. The convert gate offers
 **Grant convert rights** for a per-wave install, and the runbook's **Hand back convert rights** rows
@@ -42,7 +43,11 @@ private window and approve the sign-in prompt to grant from the app. Below it, *
 access** checks the app service principal's control-table grants. Step by step, with screenshots:
 [Installation](./00-installation.md#carry-on-in-the-app).
 
-![Settings → Permissions: the rights check, who runs the jobs, the migration scope with Look, Read and Change status per schema, convert rights, and the plan](images/install/app/settings-permissions.png)
+![Settings → Permissions: the rights check, who runs the jobs (you), the migration scope starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
+
+Until the profiler has run, **Convert rights** has no tables to check and offers **Run the profiler**:
+
+![Convert rights before profiling: No tables profiled yet, with Run the profiler](images/install/app/convert-rights-empty.png)
 
 The app is also an **MCP server** at `POST /mcp` (`app/server/mcp/`). Connected to Genie Code as
 a custom MCP server, it exposes the same reads and job triggers as tools, so the migration can be

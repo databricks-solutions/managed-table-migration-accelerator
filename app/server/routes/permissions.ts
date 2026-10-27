@@ -3,6 +3,7 @@ import type { Application, Request, Response } from 'express';
 import { getExecutionContext } from '@databricks/appkit';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
+import type { UcRequest } from './estate-discovery.js';
 import { forwardedToken, oboSql, tokenScopes } from '../permissions/oboSql.js';
 import { createTaggedWorkspaceClient } from '../telemetry/client.js';
 import {
@@ -112,6 +113,7 @@ export function viewOf(prep: Prep, deps: Pick<FlowDeps, 'target'>, raw: RawOptio
     scopes: prep.scopes,
     stored_scopes: prep.stored_scopes,
     scopes_from: prep.scopes_from,
+    scope_note: prep.scope_note,
     convert_rights: prep.convert_rights,
     wave: prep.wave,
     plan_id: prep.plan_id,
@@ -125,6 +127,7 @@ export function viewOf(prep: Prep, deps: Pick<FlowDeps, 'target'>, raw: RawOptio
     handback,
     record_errors: prep.records.errors,
     estate_error: ctx.estate_error,
+    catalog_types_error: ctx.catalog_types_error,
     cli_command: installCommand(deps.target, commandOptions(prep, raw, state === 'cannot_act')),
     check_command: installCommand(deps.target, commandOptions(prep, raw, true)),
   };
@@ -270,7 +273,34 @@ export async function jobsRunHeld(client: JobsClient, jobIds: string[], principa
   return unreadable ? null : new Set([JOB_RUN_PRIVILEGE]);
 }
 
-type MeClient = { currentUser: { me(): Promise<{ userName?: string; groups?: { display?: string }[] }> } };
+type MeClient = {
+  currentUser: { me(): Promise<{ userName?: string; groups?: { display?: string }[] }> };
+  apiClient: {
+    request(opts: {
+      path: string;
+      method: 'GET';
+      headers: Headers;
+      raw: false;
+      query: Record<string, string>;
+    }): Promise<unknown>;
+  };
+};
+
+/** Catalog name → `catalog_type`, as the signed-in user sees them (throws when unreadable). */
+export async function catalogTypesOf(request: UcRequest): Promise<Record<string, string | null>> {
+  const out: Record<string, string | null> = {};
+  let pageToken: string | undefined;
+  do {
+    const query: Record<string, string> = { max_results: '0' };
+    if (pageToken) query.page_token = pageToken;
+    const resp = await request('/api/2.1/unity-catalog/catalogs', query);
+    for (const c of (resp.catalogs as { name?: string; catalog_type?: string }[] | undefined) ?? []) {
+      if (c.name) out[c.name.toLowerCase()] = c.catalog_type ?? null;
+    }
+    pageToken = typeof resp.next_page_token === 'string' && resp.next_page_token ? resp.next_page_token : undefined;
+  } while (pageToken);
+  return out;
+}
 
 /** The request's dependencies. Throws 401 without a forwarded token: there is never an app-identity fallback. */
 export function depsFor(req: Request): FlowDeps {
@@ -296,6 +326,13 @@ export function depsFor(req: Request): FlowDeps {
     },
     jobs: () => deployedJobs(appClient, MIGRATION_ALIASES.map((a) => jobIdFor(a)).filter((id): id is number => id != null)),
     jobRunHeld: (ids, principals) => jobsRunHeld(appClient, ids, principals),
+    catalogTypes: () =>
+      catalogTypesOf(
+        (path, query) =>
+          userClient.apiClient.request({ path, method: 'GET', headers: new Headers(), raw: false, query }) as Promise<
+            Record<string, unknown>
+          >
+      ),
     appSp: process.env.DATABRICKS_CLIENT_ID?.trim() || null,
     installerGroup: installerGroupFromEnv(process.env.MTM_INSTALLER_GROUP),
     deployment: process.env.MTM_DEPLOYMENT?.trim() || null,

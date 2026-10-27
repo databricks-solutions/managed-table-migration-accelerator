@@ -17,7 +17,8 @@ export const GRANT_PERMISSIONS_TOOL_NAME = 'mtm_grant_permissions';
 export const HAND_BACK_TOOL_NAME = 'mtm_hand_back_convert_rights';
 
 const PLAN_ARGS = {
-  scopes: z.string().optional().describe('Optional: comma-separated catalog.schema or catalog.* the jobs may touch. Omit to use the stored scopes.'),
+  scopes: z.string().optional().describe('Optional: comma-separated catalog.schema, catalog.* or all, the scopes the jobs may touch. ' +
+    'Omit to use the stored scopes, or all (every catalog you can grant on, at catalog level) when none are stored.'),
   convert_rights: z.enum(['all_at_once', 'per_wave']).optional().describe('Optional: how convert rights are given (default all_at_once).'),
   wave_id: z.string().optional().describe('With action=grant_convert: the wave to give convert rights for.'),
   plan_run_id: z.string().optional().describe('With action=grant_convert: the wave plan you reviewed (a newer plan stops it).'),
@@ -48,7 +49,8 @@ export const HAND_BACK_ARGS = z
 
 export const PERMISSIONS_DESCRIPTION =
   'Install permissions, read as YOU (your own sign-in): your rights (and who to ask for the rest), ' +
-  'who the jobs run as, the schemas in scope, how convert rights are given, and the grant plan with ' +
+  'who the jobs run as, the scopes (`scopes`, where they came from in `scopes_from`, and `scope_note` on ' +
+  'how to narrow catalog-level scopes: relay it), how convert rights are given, and the grant plan with ' +
   'each line\u2019s status (present / missing / unknown), its grantor when you cannot grant it, and a ' +
   '`plan_id`. With action=revoke_convert it returns `handback` (the REVOKE statements, refusals and ' +
   'their plan_id). Read-only. Relay `state` and `reason`; when state is not `ready`, give the user ' +

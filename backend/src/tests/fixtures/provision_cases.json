@@ -1,4 +1,651 @@
 {
+ "drift": [
+  {
+   "audit": [
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    },
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"mtm-ops\", \"grantee_kind\": \"group\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    }
+   ],
+   "current": {
+    "kind": "user",
+    "name": "ann@x.com"
+   },
+   "drift": "the jobs now run as ann@x.com, but this install's grants went to 11111111-2222-3333-4444-555555555555. To keep 11111111-2222-3333-4444-555555555555: jobs_identity=sp:11111111-2222-3333-4444-555555555555, then redeploy. To move to ann@x.com: jobs_identity=user:ann@x.com",
+   "name": "moved_to_person",
+   "recorded": [
+    "11111111-2222-3333-4444-555555555555"
+   ],
+   "report": {
+    "can_install": false,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "the jobs now run as ann@x.com, but this install's grants went to 11111111-2222-3333-4444-555555555555. To keep 11111111-2222-3333-4444-555555555555: jobs_identity=sp:11111111-2222-3333-4444-555555555555, then redeploy. To move to ann@x.com: jobs_identity=user:ann@x.com",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "NO-GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": null
+  },
+  {
+   "audit": [
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    },
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"mtm-ops\", \"grantee_kind\": \"group\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    }
+   ],
+   "current": {
+    "kind": "service_principal",
+    "name": "11111111-2222-3333-4444-555555555555"
+   },
+   "drift": null,
+   "name": "same_identity",
+   "recorded": [
+    "11111111-2222-3333-4444-555555555555"
+   ],
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "service principal 11111111-2222-3333-4444-555555555555, all 26 jobs agree",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": null
+  },
+  {
+   "audit": [
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    },
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"mtm-ops\", \"grantee_kind\": \"group\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    }
+   ],
+   "current": {
+    "kind": "user",
+    "name": "ann@x.com"
+   },
+   "drift": null,
+   "name": "explicit_identity_clears",
+   "recorded": [
+    "11111111-2222-3333-4444-555555555555"
+   ],
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "service principal 11111111-2222-3333-4444-555555555555, all 26 jobs agree",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": {
+    "kind": "user",
+    "name": "ann@x.com"
+   }
+  },
+  {
+   "audit": [
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    },
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"mtm-ops\", \"grantee_kind\": \"group\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    },
+    {
+     "action": "INSTALL_REVOKE",
+     "created_at": "2026-10-02 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    }
+   ],
+   "current": {
+    "kind": "user",
+    "name": "ann@x.com"
+   },
+   "drift": null,
+   "name": "grants_revoked",
+   "recorded": [],
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "service principal 11111111-2222-3333-4444-555555555555, all 26 jobs agree",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": null
+  },
+  {
+   "audit": [],
+   "current": {
+    "kind": "user",
+    "name": "ann@x.com"
+   },
+   "drift": null,
+   "name": "fresh_install",
+   "recorded": [],
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "service principal 11111111-2222-3333-4444-555555555555, all 26 jobs agree",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": null
+  },
+  {
+   "audit": [
+    {
+     "action": "INSTALL_GRANT",
+     "created_at": "2026-10-01 10:00:00",
+     "detail": "{\"added\": true, \"front_door\": \"cli\", \"grantee\": \"ann@x.com\", \"grantee_kind\": \"user\", \"plan_id\": \"p\", \"prior_held\": null, \"privilege\": \"SELECT\", \"scope\": null, \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Read\"}",
+     "phase": "SUCCESS"
+    }
+   ],
+   "current": {
+    "kind": "service_principal",
+    "name": "11111111-2222-3333-4444-555555555555"
+   },
+   "drift": "the jobs now run as 11111111-2222-3333-4444-555555555555, but this install's grants went to ann@x.com. To keep ann@x.com: jobs_identity=user:ann@x.com, then redeploy. To move to 11111111-2222-3333-4444-555555555555: jobs_identity=sp:11111111-2222-3333-4444-555555555555",
+   "name": "moved_to_sp",
+   "recorded": [
+    "ann@x.com"
+   ],
+   "report": {
+    "can_install": false,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "the jobs now run as 11111111-2222-3333-4444-555555555555, but this install's grants went to ann@x.com. To keep ann@x.com: jobs_identity=user:ann@x.com, then redeploy. To move to 11111111-2222-3333-4444-555555555555: jobs_identity=sp:11111111-2222-3333-4444-555555555555",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "NO-GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   },
+   "requested": null
+  }
+ ],
+ "expand": [
+  {
+   "estate": [
+    {
+     "can_grant": true,
+     "catalog": "sales",
+     "catalog_can_grant": true,
+     "schema": "orders",
+     "tables": 212
+    },
+    {
+     "can_grant": true,
+     "catalog": "sales",
+     "catalog_can_grant": true,
+     "schema": "returns",
+     "tables": 48
+    },
+    {
+     "can_grant": true,
+     "catalog": "hr",
+     "catalog_can_grant": false,
+     "schema": "pay",
+     "tables": 5
+    },
+    {
+     "can_grant": false,
+     "catalog": "hr",
+     "catalog_can_grant": false,
+     "schema": "leave",
+     "tables": 3
+    },
+    {
+     "can_grant": false,
+     "catalog": "ops",
+     "catalog_can_grant": false,
+     "schema": "x",
+     "tables": 1
+    },
+    {
+     "can_grant": true,
+     "catalog": "samples",
+     "catalog_can_grant": true,
+     "schema": "nyctaxi",
+     "tables": 1
+    }
+   ],
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "mixed",
+   "narrowing": "Catalog-level grants also cover schemas created later, and are handed back when every table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time."
+  },
+  {
+   "estate": [],
+   "expansion": [],
+   "name": "empty",
+   "narrowing": null
+  },
+  {
+   "estate": [
+    {
+     "can_grant": true,
+     "catalog": "hr",
+     "catalog_can_grant": false,
+     "schema": "pay",
+     "tables": 5
+    },
+    {
+     "can_grant": false,
+     "catalog": "hr",
+     "catalog_can_grant": false,
+     "schema": "leave",
+     "tables": 3
+    }
+   ],
+   "expansion": [
+    "hr.pay"
+   ],
+   "name": "schema_only",
+   "narrowing": null
+  },
+  {
+   "excluded": [
+    "__databricks_internal",
+    "hive_metastore",
+    "pg",
+    "samples",
+    "shared_in",
+    "system"
+   ],
+   "name": "excluded_catalogs",
+   "types": {
+    "Lake": "managed_catalog",
+    "odd": null,
+    "pg": "FOREIGN_CATALOG",
+    "sales": "MANAGED_CATALOG",
+    "shared_in": "DELTASHARING_CATALOG"
+   }
+  }
+ ],
  "grantable": [
   {
    "context": {
@@ -1749,7 +2396,7 @@
      "sales.orders"
     ]
    },
-   "plan_id": "380ec9ca185d",
+   "plan_id": "0a32e8843214",
    "scopes": [],
    "states": {
     "finance.billing": {
@@ -1938,7 +2585,7 @@
     ],
     "waiting": []
    },
-   "plan_id": "27277a4db07b",
+   "plan_id": "5a459985cd10",
    "scopes": [
     "sales.orders",
     "hr.pay",
@@ -2053,7 +2700,7 @@
    "default": "",
    "env": "MTM_SCOPES",
    "flag": "--scopes",
-   "help": "Schemas to migrate: catalog.schema or catalog.*, comma-separated. Blank uses the stored scopes, or lists the candidates.",
+   "help": "What to migrate: catalog.schema, catalog.* or all, comma-separated. Blank uses the stored scopes, or all when none are stored.",
    "name": "scopes",
    "values": null,
    "widget": "text"
@@ -2251,6 +2898,7 @@
     "plan_id": "",
     "plan_run_id": "",
     "schema": "migration",
+    "scope_all": false,
     "scope_list": [],
     "scopes": "",
     "target": "dev",
@@ -2278,6 +2926,7 @@
     "plan_id": "abcdef012345",
     "plan_run_id": "pr-7",
     "schema": "migration",
+    "scope_all": false,
     "scope_list": [
      "sales.orders",
      "finance.*"
@@ -2316,6 +2965,7 @@
     "plan_id": "",
     "plan_run_id": "",
     "schema": "migration",
+    "scope_all": false,
     "scope_list": [],
     "scopes": "",
     "target": "dev",
@@ -2331,7 +2981,7 @@
    "errors": [
     "action: 'nuke' is not one of install, check, grant_convert, revoke_convert, uninstall.",
     "convert_rights: 'sometimes' is not one of all_at_once, per_wave.",
-    "scopes: 'a.b; DROP' is not catalog.schema or catalog.*.",
+    "scopes: 'a.b; DROP' is not catalog.schema, catalog.* or all.",
     "wave_id: 'w 1' is not a wave id.",
     "plan_run_id: '-x' is not a plan id.",
     "plan_id: 'xyz' is not a 12-character plan fingerprint.",
@@ -2353,6 +3003,7 @@
     "plan_id": "xyz",
     "plan_run_id": "-x",
     "schema": "migration",
+    "scope_all": false,
     "scope_list": [],
     "scopes": "a.b; DROP",
     "target": "dev",
@@ -2391,6 +3042,7 @@
     "plan_id": "",
     "plan_run_id": "",
     "schema": "migration",
+    "scope_all": false,
     "scope_list": [],
     "scopes": "",
     "target": "dev",
@@ -2401,6 +3053,1206 @@
     "confirm_grants": true,
     "jobs_identity": "group:mtm-jobs"
    }
+  },
+  {
+   "door": "app",
+   "errors": [],
+   "name": "scopes_all",
+   "options": {
+    "action": "install",
+    "app_name": "",
+    "catalog": "main",
+    "confirm_grants": false,
+    "convert_rights": "all_at_once",
+    "data_mode": "real",
+    "fixture_control_plane": "",
+    "grantee_group": "",
+    "identity": null,
+    "jobs_identity": "keep",
+    "output": "text",
+    "plan_id": "",
+    "plan_run_id": "",
+    "schema": "migration",
+    "scope_all": true,
+    "scope_list": [
+     "sales.orders"
+    ],
+    "scopes": "ALL, sales.orders",
+    "target": "dev",
+    "wave_id": "",
+    "yes": false
+   },
+   "raw": {
+    "scopes": "ALL, sales.orders"
+   }
+  },
+  {
+   "door": "app",
+   "errors": [
+    "scopes: all applies to install and check only, not revoke_convert."
+   ],
+   "name": "scopes_all_on_revoke",
+   "options": {
+    "action": "revoke_convert",
+    "app_name": "",
+    "catalog": "main",
+    "confirm_grants": false,
+    "convert_rights": "all_at_once",
+    "data_mode": "real",
+    "fixture_control_plane": "",
+    "grantee_group": "",
+    "identity": null,
+    "jobs_identity": "keep",
+    "output": "text",
+    "plan_id": "",
+    "plan_run_id": "",
+    "schema": "migration",
+    "scope_all": true,
+    "scope_list": [],
+    "scopes": "all",
+    "target": "dev",
+    "wave_id": "",
+    "yes": false
+   },
+   "raw": {
+    "action": "revoke_convert",
+    "scopes": "all"
+   }
+  }
+ ],
+ "person": [
+  {
+   "header": "The jobs run as you, so Look, Read and Change go to you.",
+   "installer": "ann@x.com",
+   "lines": [
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "the jobs' identity works in the control catalog",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "bootstrap",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT SELECT ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.audit_log",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`audit_log` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.migration_scope",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`migration_scope` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.ownership_ledger",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`ownership_ledger` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "BROWSE",
+     "reason": "find tables, owners and grants",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT BROWSE ON CATALOG `sales` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `system` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`access` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`access` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`compute` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`compute` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`lakeflow` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`lakeflow` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `sales` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON CATALOG `sales` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT SELECT ON CATALOG `sales` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MANAGE",
+     "reason": "convert rights, handed back at the end",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Change",
+     "stage": "main",
+     "statement": "GRANT MANAGE ON CATALOG `sales` TO `ann@x.com`",
+     "wave_id": null
+    }
+   ],
+   "name": "you",
+   "probes": {
+    "app_can_grant": true,
+    "control": {
+     "can_grant": true,
+     "catalog": "main",
+     "exists": false,
+     "schema": "migration"
+    },
+    "estate": [],
+    "installer": "ann@x.com",
+    "jobs": {
+     "active": null,
+     "agree": true,
+     "count": 30,
+     "identity": {
+      "kind": "user",
+      "name": "ann@x.com"
+     }
+    },
+    "metastore_admin": false,
+    "records": {
+     "can_self_grant": true,
+     "group": ""
+    },
+    "workspace_admin": true
+   },
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "you (ann@x.com), all 30 jobs agree. Anyone who can start these jobs runs them with your access. To use a service principal: jobs_identity=sp:<application-id>",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "ann@x.com",
+    "suggested_scopes": ""
+   }
+  },
+  {
+   "header": "The jobs run as bob@x.com, a person, so Look, Read and Change go to bob@x.com.",
+   "installer": "ann@x.com",
+   "lines": [
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "the jobs' identity works in the control catalog",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "bootstrap",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT SELECT ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.audit_log",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`audit_log` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.migration_scope",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`migration_scope` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.ownership_ledger",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`ownership_ledger` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "BROWSE",
+     "reason": "find tables, owners and grants",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT BROWSE ON CATALOG `sales` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `system` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`access` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`access` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`compute` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`compute` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`lakeflow` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`lakeflow` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `sales` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON CATALOG `sales` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT SELECT ON CATALOG `sales` TO `bob@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "bob@x.com",
+     "grantee_kind": "user",
+     "privilege": "MANAGE",
+     "reason": "convert rights, handed back at the end",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Change",
+     "stage": "main",
+     "statement": "GRANT MANAGE ON CATALOG `sales` TO `bob@x.com`",
+     "wave_id": null
+    }
+   ],
+   "name": "another_person",
+   "probes": {
+    "app_can_grant": true,
+    "control": {
+     "can_grant": true,
+     "catalog": "main",
+     "exists": false,
+     "schema": "migration"
+    },
+    "estate": [],
+    "installer": "bob2@x.com",
+    "jobs": {
+     "active": null,
+     "agree": true,
+     "count": 30,
+     "identity": {
+      "kind": "user",
+      "name": "ann@x.com"
+     }
+    },
+    "metastore_admin": false,
+    "records": {
+     "can_self_grant": true,
+     "group": ""
+    },
+    "workspace_admin": true
+   },
+   "report": {
+    "can_install": true,
+    "caveat": "You see only what you have access to. A metastore admin sees the whole estate; run this check as one for the full picture.",
+    "checks": [
+     {
+      "ask": null,
+      "detail": "",
+      "key": "workspace_admin",
+      "label": "Workspace admin",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "system tables need a metastore admin unless already granted",
+      "key": "metastore_admin",
+      "label": "Metastore admin",
+      "status": "WARN"
+     },
+     {
+      "ask": null,
+      "detail": "you can let the jobs' identity create the control schema",
+      "key": "control_catalog",
+      "label": "Control catalog `main`",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "you need CAN_USE on the SQL warehouse",
+      "key": "warehouse",
+      "label": "Warehouse",
+      "status": "UNKNOWN"
+     },
+     {
+      "ask": null,
+      "detail": "person ann@x.com, all 30 jobs agree. Anyone who can start these jobs runs them with that person's access. To use a service principal: jobs_identity=sp:<application-id>",
+      "key": "jobs_identity",
+      "label": "Jobs' identity",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "no installer_group: you grant yourself access to the install records",
+      "key": "install_records",
+      "label": "Install records",
+      "status": "GO"
+     },
+     {
+      "ask": null,
+      "detail": "",
+      "key": "app_can_grant",
+      "label": "App can grant for you",
+      "status": "GO"
+     }
+    ],
+    "coverage": {
+     "band": "none",
+     "candidates": [],
+     "grantable_schemas": 0,
+     "grantable_tables": 0,
+     "headline": "No schemas with external tables are visible to you.",
+     "schemas": 0,
+     "tables": 0,
+     "uncovered": []
+    },
+    "installer": "bob2@x.com",
+    "suggested_scopes": ""
+   }
+  },
+  {
+   "header": null,
+   "installer": "ann@x.com",
+   "lines": [
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE CATALOG",
+     "reason": "the jobs' identity works in the control catalog",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "bootstrap",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "CREATE SCHEMA",
+     "reason": "setup creates the control schema as the jobs' identity",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "bootstrap",
+     "statement": "GRANT CREATE SCHEMA ON CATALOG `main` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE CATALOG",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "USE SCHEMA",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "SELECT",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT SELECT ON SCHEMA `main`.`migration` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.audit_log",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`audit_log` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.migration_scope",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`migration_scope` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "ann@x.com",
+     "grantee_kind": "user",
+     "privilege": "MODIFY",
+     "reason": "you write the install records (no installer_group is set)",
+     "scope": null,
+     "securable": "main.migration.ownership_ledger",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "records",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`ownership_ledger` TO `ann@x.com`",
+     "wave_id": null
+    },
+    {
+     "executor": "setup",
+     "grantee": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+     "grantee_kind": "service_principal",
+     "privilege": "USE CATALOG",
+     "reason": "the app reads the control plane (granted by setup)",
+     "scope": null,
+     "securable": "main",
+     "securable_type": "CATALOG",
+     "set": "Control",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `main` TO `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`",
+     "wave_id": null
+    },
+    {
+     "executor": "setup",
+     "grantee": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "the app reads the control plane (granted by setup)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `main`.`migration` TO `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`",
+     "wave_id": null
+    },
+    {
+     "executor": "setup",
+     "grantee": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "the app reads the control plane (granted by setup)",
+     "scope": null,
+     "securable": "main.migration",
+     "securable_type": "SCHEMA",
+     "set": "Control",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `main`.`migration` TO `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`",
+     "wave_id": null
+    },
+    {
+     "executor": "setup",
+     "grantee": "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee",
+     "grantee_kind": "service_principal",
+     "privilege": "MODIFY",
+     "reason": "the app reads the control plane (granted by setup)",
+     "scope": null,
+     "securable": "main.migration.migration_actions",
+     "securable_type": "TABLE",
+     "set": "Control",
+     "stage": "main",
+     "statement": "GRANT MODIFY ON TABLE `main`.`migration`.`migration_actions` TO `aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "BROWSE",
+     "reason": "find tables, owners and grants",
+     "scope": "sales.*",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT BROWSE ON CATALOG `sales` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "BROWSE",
+     "reason": "find tables, owners and grants",
+     "scope": "finance.*",
+     "securable": "finance",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT BROWSE ON CATALOG `finance` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE CATALOG",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system",
+     "securable_type": "CATALOG",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `system` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`access` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.access",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`access` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`compute` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.compute",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`compute` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `system`.`lakeflow` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "read lineage, compute and job history",
+     "scope": null,
+     "securable": "system.lakeflow",
+     "securable_type": "SCHEMA",
+     "set": "Look",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `system`.`lakeflow` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE CATALOG",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.orders",
+     "securable": "sales",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `sales` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.orders",
+     "securable": "sales.orders",
+     "securable_type": "SCHEMA",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON SCHEMA `sales`.`orders` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "profile and convert need SELECT",
+     "scope": "sales.orders",
+     "securable": "sales.orders",
+     "securable_type": "SCHEMA",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT SELECT ON SCHEMA `sales`.`orders` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE CATALOG",
+     "reason": "profile and convert need SELECT",
+     "scope": "finance.*",
+     "securable": "finance",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE CATALOG ON CATALOG `finance` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "USE SCHEMA",
+     "reason": "profile and convert need SELECT",
+     "scope": "finance.*",
+     "securable": "finance",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT USE SCHEMA ON CATALOG `finance` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "SELECT",
+     "reason": "profile and convert need SELECT",
+     "scope": "finance.*",
+     "securable": "finance",
+     "securable_type": "CATALOG",
+     "set": "Read",
+     "stage": "main",
+     "statement": "GRANT SELECT ON CATALOG `finance` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "MANAGE",
+     "reason": "convert rights, handed back at the end",
+     "scope": "sales.orders",
+     "securable": "sales.orders",
+     "securable_type": "SCHEMA",
+     "set": "Change",
+     "stage": "main",
+     "statement": "GRANT MANAGE ON SCHEMA `sales`.`orders` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    },
+    {
+     "executor": "installer",
+     "grantee": "11111111-2222-3333-4444-555555555555",
+     "grantee_kind": "service_principal",
+     "privilege": "MANAGE",
+     "reason": "convert rights, handed back at the end",
+     "scope": "finance.*",
+     "securable": "finance",
+     "securable_type": "CATALOG",
+     "set": "Change",
+     "stage": "main",
+     "statement": "GRANT MANAGE ON CATALOG `finance` TO `11111111-2222-3333-4444-555555555555`",
+     "wave_id": null
+    }
+   ],
+   "name": "sp",
+   "probes": null,
+   "report": null
   }
  ],
  "plans": [
@@ -2834,7 +4686,7 @@
     }
    ],
    "name": "all_at_once",
-   "plan_id": "d04c4bab08e2"
+   "plan_id": "10a8e8813388"
   },
   {
    "counts": {
@@ -3170,7 +5022,7 @@
     }
    ],
    "name": "per_wave_with_group",
-   "plan_id": "3ca85826c779"
+   "plan_id": "0f01466fe94e"
   },
   {
    "counts": {
@@ -3209,7 +5061,7 @@
     }
    ],
    "name": "grant_convert",
-   "plan_id": "46333932782e"
+   "plan_id": "75571e306ddb"
   },
   {
    "counts": {
@@ -3415,7 +5267,7 @@
     }
    ],
    "name": "app_add_scope",
-   "plan_id": "ff5e8039d018"
+   "plan_id": "7b9815392b0b"
   },
   {
    "counts": {
@@ -3670,7 +5522,109 @@
     }
    ],
    "name": "sp_reads_deploy_folder",
-   "plan_id": "5b34bead5f0d"
+   "plan_id": "e1d7d9d36a65"
+  }
+ ],
+ "resolve": [
+  {
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "blank_nothing_stored",
+   "note": "Catalog-level grants also cover schemas created later, and are handed back when every table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time.",
+   "scope_all": false,
+   "scope_list": [],
+   "scopes": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "scopes_from": "all",
+   "stored": []
+  },
+  {
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "blank_keeps_stored",
+   "note": null,
+   "scope_all": false,
+   "scope_list": [],
+   "scopes": [
+    "hr.pay"
+   ],
+   "scopes_from": "stored",
+   "stored": [
+    "hr.pay"
+   ]
+  },
+  {
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "named_wins",
+   "note": null,
+   "scope_all": false,
+   "scope_list": [
+    "sales.orders"
+   ],
+   "scopes": [
+    "sales.orders"
+   ],
+   "scopes_from": "option",
+   "stored": [
+    "hr.pay"
+   ]
+  },
+  {
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "all_adds_to_stored",
+   "note": "Catalog-level grants also cover schemas created later, and are handed back when every table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time.",
+   "scope_all": true,
+   "scope_list": [],
+   "scopes": [
+    "finance.billing",
+    "hr.pay",
+    "sales.*"
+   ],
+   "scopes_from": "all",
+   "stored": [
+    "finance.billing"
+   ]
+  },
+  {
+   "expansion": [
+    "hr.pay",
+    "sales.*"
+   ],
+   "name": "all_with_named",
+   "note": "Catalog-level grants also cover schemas created later, and are handed back when every table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time.",
+   "scope_all": true,
+   "scope_list": [
+    "ops.x"
+   ],
+   "scopes": [
+    "hr.pay",
+    "sales.*",
+    "ops.x"
+   ],
+   "scopes_from": "all",
+   "stored": []
+  },
+  {
+   "expansion": [],
+   "name": "nothing_anywhere",
+   "note": null,
+   "scope_all": false,
+   "scope_list": [],
+   "scopes": [],
+   "scopes_from": "none",
+   "stored": []
   }
  ],
  "revokes": [
@@ -4093,7 +6047,7 @@
    }
   }
  ],
- "rules_version": "1",
+ "rules_version": "2",
  "sql": {
   "audit_detail": "{\"added\": true, \"front_door\": \"app\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"grantor\": \"`hr-owners`\", \"plan_id\": \"d04c4bab08e2\", \"prior_held\": false, \"privilege\": \"MANAGE\", \"scope\": \"sales.orders\", \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Change\"}",
   "audit_insert": "INSERT INTO main.migration.audit_log (audit_id, full_name, action, phase, from_state, to_state, operator, runtime_version, sql_command, pre_convert_version, pre_convert_num_files, pre_convert_size_bytes, error_class, error_message, detail, start_time, end_time, created_at, plan_run_id, wave_id, actual_cores, recommended_cores, cluster_size_status, job_id, job_run_id) VALUES ('00000000-0000-0000-0000-000000000001', 'sales.orders', 'INSTALL_GRANT', 'FAILED', NULL, NULL, 'o\\'brien@x.com', NULL, 'GRANT MANAGE ON SCHEMA `sales`.`orders` TO `11111111-2222-3333-4444-555555555555`', NULL, NULL, NULL, 'INSTALL_GRANT_FAILED', 'PERMISSION_DENIED: no MANAGE on `sales`\\\\x', '{\"added\": false, \"front_door\": \"app\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"plan_id\": \"d04c4bab08e2\", \"prior_held\": null, \"privilege\": \"MANAGE\", \"scope\": \"sales.orders\", \"securable\": \"sales.orders\", \"securable_type\": \"SCHEMA\", \"set\": \"Change\"}', TIMESTAMP '2026-10-26 12:00:00', TIMESTAMP '2026-10-26 12:00:00', TIMESTAMP '2026-10-26 12:00:00', NULL, NULL, NULL, NULL, NULL, NULL, NULL)",
@@ -4126,6 +6080,7 @@
   },
   "group_member": "SELECT is_account_group_member('o''neil-installers') AS m",
   "handback_done": "UPDATE main.migration.migration_actions SET status = 'DONE', resolution = 'installer convert rights handed back', completed_by = 'ann@x.com', completed_at = TIMESTAMP '2026-10-26 12:00:00', updated_at = TIMESTAMP '2026-10-26 12:00:00' WHERE action_key IN ('RESTORE_OWNERSHIP|sales.orders|MANAGE:11111111-2222-3333-4444-555555555555', 'RESTORE_OWNERSHIP|finance.*|MANAGE:11111111-2222-3333-4444-555555555555') AND status NOT IN ('DONE', 'OBSOLETE')",
+  "install_audit": "SELECT action, phase, detail, created_at FROM main.migration.audit_log WHERE action IN ('INSTALL_GRANT', 'INSTALL_REVOKE')",
   "installer_ledger": "SELECT * FROM main.migration.ownership_ledger WHERE ledger_key LIKE 'INSTALL|%' AND dry_run = false",
   "job_run_commands": [
    "databricks permissions update jobs 7 --json '{\"access_control_list\": [{\"group_name\": \"mtm-jobs\", \"permission_level\": \"CAN_MANAGE_RUN\"}]}'",

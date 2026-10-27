@@ -148,7 +148,7 @@ and only bundle root; it `include`s both `backend/resources/*.yml` (one Workflow
 stage, plus the dashboard) and `app/resources/*.yml` (the app resource). It defines three
 targets: `dev` (default, development mode), `e2e` (a named development-mode target for the
 live e2e estate, with its workspace values supplied as `BUNDLE_VAR_*`), and `prod` (production mode). Every stage job runs as `var.jobs_run_as`
-(default: the deployer; `prod`: the service principal in `prod_run_as_sp`). The `backend/` and `app/` directories share the one bundle and one
+(default: the deployer, on every target; the installer's `jobs_identity=sp:<application-id>` moves it to a service principal). The `backend/` and `app/` directories share the one bundle and one
 `warehouse_id`.
 
 **Deploy with `databricks bundle deploy`, not `databricks apps deploy`.** One

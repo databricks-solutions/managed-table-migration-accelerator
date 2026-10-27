@@ -17,6 +17,7 @@ import {
   type PlanLine,
   type RevokeItem,
   type RightsReport,
+  type ScopesFrom,
   SET_CHANGE,
   STATUS_MISSING,
   STATUS_PRESENT,
@@ -48,7 +49,10 @@ export interface PermissionsView {
   };
   scopes: string[];
   stored_scopes: string[];
-  scopes_from: 'option' | 'stored' | 'none';
+  /** `all`: nothing stored and no scopes sent, so the plan covers every catalog you can grant on. */
+  scopes_from: ScopesFrom;
+  /** How to lower the grain, when a `catalog.*` scope is planned. */
+  scope_note: string | null;
   convert_rights: string;
   wave: { wave_id: string; schemas: string[]; plan_run_id: string | null; error: string | null } | null;
   plan_id: string;
@@ -63,6 +67,8 @@ export interface PermissionsView {
   handback: { revokes: RevokeItem[]; refused: RevokeItem[]; waiting?: string[]; plan_id: string };
   record_errors: string[];
   estate_error: string | null;
+  /** Why catalog types could not be read (only system, hive_metastore and samples were left out). */
+  catalog_types_error?: string | null;
   cli_command: string;
   /** A dry run of the same options (no confirm, no plan_id): it checks as the installer. */
   check_command: string;
@@ -224,13 +230,19 @@ export function planHeading(missing: number, unchecked: number): string {
   return parts.length ? `Plan · ${parts.join(' · ')}` : 'Plan · nothing missing';
 }
 
-/** Which convert-permission sentence to show: `profiled` 0 is an empty manifest, `total` 0 a finished one. */
-export type ConvertSummaryCase = 'unread' | 'unprofiled' | 'all_done' | 'counts';
+/**
+ * Which convert-permission sentence to show: `profiled` 0 is an empty manifest, `total` 0 a finished
+ * one, and `authorized` reaching `total` means nothing is left to grant.
+ */
+export type ConvertSummaryCase = 'unread' | 'unprofiled' | 'all_done' | 'all_authorized' | 'counts';
 
-export function convertSummaryCase(a: { total: number; profiled?: number } | null): ConvertSummaryCase {
+export function convertSummaryCase(
+  a: { total: number; profiled?: number; authorized?: number } | null
+): ConvertSummaryCase {
   if (!a) return 'unread';
   if (a.profiled === 0) return 'unprofiled';
-  return a.total === 0 ? 'all_done' : 'counts';
+  if (a.total === 0) return 'all_done';
+  return a.authorized !== undefined && a.authorized >= a.total ? 'all_authorized' : 'counts';
 }
 
 /**
@@ -280,8 +292,10 @@ export function grantSummary(r: GrantResponse): string {
   if (c.skipped) parts.push(`${c.skipped} already in place.`);
   if (failed) parts.push(`${failed} failed.`);
   if (c.cannot_grant) parts.push(`${c.cannot_grant} need someone else.`);
-  const missing = (r.summary[STATUS_MISSING] ?? 0) + (r.summary[STATUS_UNKNOWN] ?? 0);
-  parts.push(missing ? `Checked after: ${missing} still missing.` : 'Checked after: all in place.');
+  const missing = r.summary[STATUS_MISSING] ?? 0;
+  const unchecked = r.summary[STATUS_UNKNOWN] ?? 0;
+  const after = [missing ? `${missing} still missing` : '', unchecked ? `${unchecked} not checked` : ''].filter(Boolean);
+  parts.push(after.length ? `Checked after: ${after.join(', ')}.` : 'Checked after: all in place.');
   return parts.join(' ');
 }
 

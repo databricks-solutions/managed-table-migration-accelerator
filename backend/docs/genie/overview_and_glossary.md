@@ -144,7 +144,7 @@ Each entry is one line; the linked document explains it in full.
 - **Foreign table** — a table federated from another system; not converted by this tool. See [Platform reference](platform_reference.md).
 - **Name-based access** — reading or writing a table by its identifier (`catalog.schema.table`); the conversion-safe way.
 - **Path-based access** — reading or writing by the raw storage path; must be fixed (or covered by an opt-in) before converting. See [Planning and eligibility](planning_and_eligibility.md).
-- **Convert identity** — the identity `SET MANAGED` runs as: the convert job's `run_as`.
+- **Convert identity** — the identity `SET MANAGED` runs as: the convert job's `run_as`. By default every job runs as the person who deployed it, on every target; the installer's `jobs_identity` option can move them to a service principal.
 
 ### Platform features
 

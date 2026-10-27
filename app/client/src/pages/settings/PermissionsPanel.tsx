@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import {
   Alert,
   AlertDescription,
@@ -23,8 +23,11 @@ import {
   GO,
   GRANT_SETS,
   NO_GO,
+  SCOPES_ALL,
+  SCOPES_FROM_ALL,
   WARN,
   parseScopes,
+  personGranteeLine,
   uncoveredAsk,
 } from '../../lib/provision.pure';
 import {
@@ -84,6 +87,15 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
   const [failures, setFailures] = useState<string[]>([]);
   const [obo, setObo] = useState<OboDiscoveryLite | null>(null);
   const [oboScans, setOboScans] = useState(0);
+
+  /** With nothing stored, the first view plans `all`: its scopes become this visit's picks once,
+   *  so each row can be removed to narrow the plan. */
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (seeded.current || !view || view.scopes_from !== SCOPES_FROM_ALL) return;
+    seeded.current = true;
+    setPicks(view.scopes.map((s) => s.toLowerCase()));
+  }, [view]);
 
   const storedKey = (view?.stored_scopes ?? []).join(',');
   const scopesParam = useMemo(() => scopesWithPicks(storedKey ? storedKey.split(',') : [], picks), [storedKey, picks]);
@@ -334,11 +346,13 @@ function RightsPart({ view }: { view: PermissionsView }) {
       ) : null}
       <ul className="flex flex-col gap-1 text-sm">
         {view.rights.checks.map((c) => (
-          <li key={c.key} className="flex flex-wrap items-baseline gap-2">
-            <Badge variant={STATUS_TONE[c.status] ?? 'outline'} className="font-mono text-[10px]">{c.status}</Badge>
-            <span>{c.label}</span>
-            {c.detail ? <span className="text-muted-foreground">{c.detail}</span> : null}
-            {c.ask ? <span className="text-muted-foreground">· ask {c.ask}</span> : null}
+          <li key={c.key} className="flex items-baseline gap-2">
+            <Badge variant={STATUS_TONE[c.status] ?? 'outline'} className="shrink-0 font-mono text-[10px]">{c.status}</Badge>
+            <span className="min-w-0">
+              {c.label}
+              {c.detail ? <span className="text-muted-foreground"> {c.detail}</span> : null}
+              {c.ask ? <span className="text-muted-foreground"> · ask {c.ask}</span> : null}
+            </span>
           </li>
         ))}
       </ul>
@@ -380,12 +394,14 @@ function ScopePart({ view, busy, picker }: { view: PermissionsView; busy: boolea
   const [typedError, setTypedError] = useState<string | null>(null);
   const stored = useMemo(() => new Set(view.stored_scopes.map((s) => s.toLowerCase())), [view.stored_scopes]);
   const chips = useMemo(() => mergeScopes(obo?.visibility ?? [], picks, stored), [obo, picks, stored]);
+  const lastPick = !stored.size && picks.length <= 1;
   function add() {
-    const [scopes, errors] = parseScopes(typed);
+    const [parsed, errors] = parseScopes(typed);
     if (errors.length) {
       setTypedError(errors.join(' '));
       return;
     }
+    const scopes = parsed.flatMap((s) => (s === SCOPES_ALL ? view.rights.coverage.candidates : [s]));
     if (scopes.length) onPicks(selectAll(picks, scopes.filter((s) => !stored.has(s.toLowerCase()))));
     setTyped('');
     setTypedError(null);
@@ -412,7 +428,9 @@ function ScopePart({ view, busy, picker }: { view: PermissionsView; busy: boolea
                   <button
                     type="button"
                     aria-label={`Remove ${r.scope}`}
-                    className="text-muted-foreground hover:text-foreground"
+                    className="text-muted-foreground hover:text-foreground disabled:opacity-40"
+                    disabled={lastPick}
+                    title={lastPick ? 'The plan keeps at least one scope. Add another first.' : undefined}
                     onClick={() => onPicks(picks.filter((p) => p !== r.scope.toLowerCase()))}
                   >
                     <X className="size-3" aria-hidden />
@@ -428,8 +446,16 @@ function ScopePart({ view, busy, picker }: { view: PermissionsView; busy: boolea
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">No schemas yet. Tick the ones to migrate below, or type them.</p>
+        <p className="text-sm text-muted-foreground">
+          Nothing to add: you can grant on no catalog or schema with external tables. Ask an owner below, or type one.
+        </p>
       )}
+      {view.scope_note ? <p className="text-xs text-muted-foreground">{view.scope_note}</p> : null}
+      {view.catalog_types_error && view.scopes_from === SCOPES_FROM_ALL ? (
+        <p className="text-xs text-muted-foreground">
+          Could not read catalog types, so only system, hive_metastore and samples are left out.
+        </p>
+      ) : null}
       {open ? (
         <div className="flex flex-col gap-3 rounded-md border border-border p-3">
           <ScopePicker
@@ -538,6 +564,14 @@ function ConvertSummary({ summary: a, loaded }: { summary: AuthoritySummary | nu
   if (show === 'all_done') {
     return <p className="text-xs text-muted-foreground">No tables left to convert. Every profiled table is converted or dropped.</p>;
   }
+  if (show === 'all_authorized' && a) {
+    return (
+      <p className="text-xs text-muted-foreground">
+        All {a.total} table{a.total === 1 ? '' : 's'} still to convert are authorized for{' '}
+        {a.actor ? <span className="font-mono">{a.actor}</span> : 'the convert identity'}.
+      </p>
+    );
+  }
   const blocked = a ? a.total - a.authorized : 0;
   return (
     <div className="flex flex-col gap-2">
@@ -585,6 +619,7 @@ function PlanPart({ view, busy, onGrant }: { view: PermissionsView; busy: boolea
   const pending = view.lines.filter((l) => l.status !== 'present');
   const missing = pending.filter((l) => l.status !== 'unknown');
   const unchecked = pending.filter((l) => l.status === 'unknown');
+  const person = personGranteeLine(view.lines, view.who.user);
   return (
     <section className="flex flex-col gap-3">
       <SectionHeader
@@ -592,6 +627,7 @@ function PlanPart({ view, busy, onGrant }: { view: PermissionsView; busy: boolea
         variant="inline"
         title={planHeading(missing.length, unchecked.length)}
       />
+      {person ? <p className="text-sm text-muted-foreground">{person}</p> : null}
       {view.wave?.error ? (
         <Alert variant="destructive">
           <AlertDescription>{view.wave.error}</AlertDescription>

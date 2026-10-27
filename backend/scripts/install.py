@@ -99,7 +99,8 @@ class Out:
         if self.as_json:
             lines = [{**ln, "status": (prep or {}).get("statuses", {}).get(pv.line_key(ln))}
                      for ln in (prep or {}).get("lines", [])]
-            more = {"plan_id": (prep or {}).get("plan_id"), "scopes": (prep or {}).get("scopes")}
+            more = {"plan_id": (prep or {}).get("plan_id"), "scopes": (prep or {}).get("scopes"),
+                    "scopes_from": (prep or {}).get("scopes_from"), "scope_note": (prep or {}).get("scope_note")}
             more.update(extra or {})
             doc = pv.json_document(rights=(prep or {}).get("rights"), lines=lines, results=results,
                                    action=action, exit=code, messages=self.messages, extra=more)
@@ -181,8 +182,12 @@ def _pick(out: Out, prep: Mapping[str, Any], ask: Callable[[str], str]) -> Optio
     cands = prep["rights"]["coverage"]["candidates"]
     if not cands:
         return None
-    tables = {f"{r['catalog']}.{r['schema']}": r.get("tables") for r in prep["probes"].get("estate") or []}
-    out.say("No scopes stored yet. Schemas you can grant on:")
+    tables: Dict[str, int] = {}
+    for r in prep["probes"].get("estate") or []:
+        n = int(r.get("tables") or 0)
+        tables[f"{r['catalog']}.{r['schema']}"] = n
+        tables[f"{r['catalog']}.*"] = tables.get(f"{r['catalog']}.*", 0) + n
+    out.say("No scopes stored yet, so scopes=all: the catalogs and schemas you can grant on.")
     for i, s in enumerate(cands, 1):
         out.say(f"  {i:3d}  {s:40s} {tables.get(s) or 0:>6} tables")
     while True:
@@ -289,20 +294,22 @@ def main(argv: Optional[List[str]] = None, env: Optional[Mapping[str, str]] = No
             return out.finish(pv.EXIT_INVALID, action=action, prep=prep)
         out.say(f"Wave {wv['wave_id']} (plan {wv['plan_run_id']}): {', '.join(wv['schemas'])}")
 
-    if prep["scopes"]:
-        out.say(f"Scopes ({'from the options' if prep['scopes_from'] == 'option' else 'stored'}): "
-                + ", ".join(prep["scopes"]))
-    elif action == pv.ACTION_INSTALL:
-        picked = _pick(out, prep, ask) if interactive else None
-        if picked:
+    if (action == pv.ACTION_INSTALL and interactive and not opts["scope_all"]
+            and prep["scopes_from"] == pv.SCOPES_FROM_ALL):
+        picked = _pick(out, prep, ask)
+        if picked and picked != prep["scopes"]:
             prep = pio.replan(w, prep, {**opts, "scope_list": picked}, catalog=catalog, schema=schema)
-        elif not interactive and confirm:
-            out.note("scopes: none given and none stored. Pass --scopes (or MTM_SCOPES); you can grant on: "
-                     + (prep["rights"]["suggested_scopes"] or "no schema with external tables"))
-            return out.finish(pv.EXIT_INVALID, action=action, prep=prep)
-        else:
-            out.say("No scopes: the plan covers the control plane only. Suggested: "
-                    + (prep["rights"]["suggested_scopes"] or "—"))
+    if prep["scopes"]:
+        out.say(f"Scopes ({pv.SCOPES_FROM_LABEL.get(prep['scopes_from'], prep['scopes_from'])}): "
+                + ", ".join(prep["scopes"]))
+        if prep.get("scope_note"):
+            out.say(prep["scope_note"])
+    elif action in (pv.ACTION_INSTALL, pv.ACTION_CHECK):
+        out.say("No scopes: you can grant on no catalog or schema with external tables, so the plan covers "
+                "the control plane only.")
+    if ctx.get("catalog_types_error") and prep["scopes_from"] == pv.SCOPES_FROM_ALL:
+        out.say("Could not read catalog types, so only system, hive_metastore and samples are left out "
+                f"of scopes=all ({str(ctx['catalog_types_error'])[:140]}).")
 
     counts = pv.plan_counts(prep["lines"])
     summary = pv.verify_summary(prep["checked"])
@@ -311,7 +318,7 @@ def main(argv: Optional[List[str]] = None, env: Optional[Mapping[str, str]] = No
             f"{summary[pv.STATUS_PRESENT]} already held, {len(prep['grantors'])} need someone else.")
     if not interactive or _ask("Show it? [y/N] ", ask):
         for line in pv.plan_text(prep["lines"], statuses=prep["statuses"], grantors=prep["grantors"],
-                                 dry_run=not confirm):
+                                 dry_run=not confirm, installer=prep["probes"].get("installer")):
             out.say(line)
 
     if opts["plan_id"] and not pv.plan_matches(opts["plan_id"], prep["plan_id"]):

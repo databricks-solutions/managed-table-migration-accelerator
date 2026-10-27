@@ -22,6 +22,10 @@ export interface World {
   accountGroups: string[];
   /** Rows the jobs-line install audit read returns. */
   jobsAudit: Record<string, unknown>[];
+  /** Rows the install grant / revoke audit read returns. */
+  installAudit: Record<string, unknown>[];
+  /** Catalog name → catalog_type (`catalogTypes`); null makes the read fail. */
+  catalogTypes: Record<string, string | null> | null;
   log: string[];
 }
 
@@ -45,6 +49,8 @@ export function world(over: Partial<World> = {}): World {
     failAudit: false,
     accountGroups: [],
     jobsAudit: [],
+    installAudit: [],
+    catalogTypes: { ctl: 'MANAGED_CATALOG', sales: 'MANAGED_CATALOG', hr: 'MANAGED_CATALOG' },
     log: [],
     ...over,
   };
@@ -59,7 +65,9 @@ function sqlFor(w: World) {
     if (s.includes('information_schema.catalogs')) return ok(w.catalogs);
     if (s.includes('information_schema.schemata')) return ok(w.schemata);
     if (s.includes('catalog_privileges') || s.includes('schema_privileges')) return ok([]);
-    if (s.startsWith('SELECT action, phase, detail, created_at FROM')) return ok(w.jobsAudit);
+    if (s.startsWith('SELECT action, phase, detail, created_at FROM')) {
+      return ok(s.includes('get_json_object') ? w.jobsAudit : w.installAudit);
+    }
     const member = groupMemberSql('').replace("'') AS m", '');
     if (s.startsWith(member)) {
       return ok([{ m: w.accountGroups.includes(s.slice(member.length + 1, s.lastIndexOf("')")).replace(/''/g, "'")) }]);
@@ -108,6 +116,7 @@ export function deps(w: World, over: Partial<FlowDeps> = {}): FlowDeps {
       installNotebook: '/Workspace/x/.bundle/mtm/e2e/files/backend/notebooks/install',
     }),
     jobRunHeld: () => Promise.resolve(new Set<string>()),
+    catalogTypes: () => (w.catalogTypes ? Promise.resolve(w.catalogTypes) : Promise.reject(new Error('PERMISSION_DENIED'))),
     appSp: APP_SP,
     installerGroup: null,
     deployment: '[e2e] mtm',

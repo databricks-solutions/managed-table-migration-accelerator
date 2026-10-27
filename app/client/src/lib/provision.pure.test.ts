@@ -4,14 +4,24 @@ import { dirname, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import {
+  type AuditRecord,
   type EstateRow,
   type GrantPlanInput,
+  type Identity,
   type LedgerRow,
   type PlanLine,
   type Probes,
+  applyIdentityDrift,
   canGrantOn,
   coverage,
   estateRowsFrom,
+  excludedCatalogs,
+  expandAll,
+  identityDrift,
+  narrowingNote,
+  personGranteeLine,
+  recordedIdentities,
+  resolveScopes,
   grantPlan,
   handbackActionKey,
   handbackPlan,
@@ -51,6 +61,12 @@ const FIXTURE = JSON.parse(
   grantable: Record<string, unknown>[];
   handback: Record<string, unknown>[];
   sql: { job_run_commands: string[]; line: PlanLine; audit_detail: string; group_member: string };
+  expand: { name: string; estate?: EstateRow[]; expansion?: string[]; narrowing?: string | null }[];
+  resolve: { name: string; scope_list: string[]; scope_all: boolean; stored: string[]; expansion: string[];
+    scopes: string[]; scopes_from: string; note: string | null }[];
+  drift: { name: string; current: Identity; audit: AuditRecord[]; requested: Identity | null; recorded: string[];
+    drift: string | null; report: unknown }[];
+  person: { name: string; installer: string; lines: PlanLine[]; probes: Probes | null; header: string | null; report: unknown }[];
 };
 
 describe('provision mirror equals the engine (golden fixture)', () => {
@@ -140,6 +156,34 @@ describe('provision mirror equals the engine (golden fixture)', () => {
     }, { sortKeys: true });
     expect(detail).toBe(FIXTURE.sql.audit_detail);
     expect(groupMemberSql("o'neil-installers")).toBe(FIXTURE.sql.group_member);
+  });
+
+  it.each(FIXTURE.expand.filter((c) => 'estate' in c).map((c) => [c.name, c] as const))('expand_all %s', (_name, c) => {
+    expect(expandAll(c.estate as EstateRow[])).toEqual(c.expansion);
+    expect(narrowingNote(c.expansion as string[])).toEqual(c.narrowing);
+  });
+
+  it('excluded_catalogs', () => {
+    const c = FIXTURE.expand.find((e) => e.name === 'excluded_catalogs') as unknown as { types: Record<string, string | null>; excluded: string[] };
+    expect([...excludedCatalogs(c.types)].sort()).toEqual(c.excluded);
+  });
+
+  it.each(FIXTURE.resolve.map((c) => [c.name, c] as const))('resolve_scopes %s', (_name, c) => {
+    expect(resolveScopes(c.scope_list, c.scope_all, c.stored, c.expansion)).toEqual([c.scopes, c.scopes_from]);
+    expect(narrowingNote(c.scopes)).toEqual(c.note);
+  });
+
+  it.each(FIXTURE.drift.map((c) => [c.name, c] as const))('identity_drift %s', (_name, c) => {
+    const recorded = recordedIdentities(c.audit);
+    expect(recorded).toEqual(c.recorded);
+    const drift = identityDrift(c.current, recorded, c.requested);
+    expect(drift).toEqual(c.drift);
+    expect(applyIdentityDrift(rightsReport(FIXTURE.rights[0].probes, 'app'), drift)).toEqual(c.report);
+  });
+
+  it.each(FIXTURE.person.map((c) => [c.name, c] as const))('person identity %s', (_name, c) => {
+    expect(personGranteeLine(c.lines, c.installer)).toEqual(c.header);
+    if (c.probes) expect(rightsReport(c.probes, 'app')).toEqual(c.report);
   });
 });
 

@@ -82,8 +82,9 @@ profiler flags any that do not.
 
 Elevated rights are needed **once, by whoever installs**: a workspace admin who owns, or has
 `MANAGE` on, the catalog for the control tables. People who run the migration day to day need only
-`CAN_USE` on the app. The installer grants the migration jobs what they need in one plan you review
-first, and a person hands the convert rights back after cleanup. Ownership of your tables never
+`CAN_USE` on the app. The migration jobs run as you, the person who deploys them (switching them
+to a service principal is one installer option). The installer grants them what they need in one
+plan you review first, and a person hands the convert rights back after cleanup. Ownership of your tables never
 changes. Every identity, privilege and grant statement is in
 [Who needs which permissions](./docs/00-installation.md#who-needs-which-permissions).
 
@@ -109,8 +110,8 @@ flowchart LR
 - The ID of a SQL warehouse you can use: the last part of its URL, or of the HTTP path under the
   warehouse's **Connection details**.
 - Where the control tables should live. The default is `main.migration`.
-- The schemas to migrate, as `catalog.schema` or `catalog.*`. Not sure yet? The installer lists
-  the ones you can grant on.
+- Nothing about scopes. By default the installer plans every catalog with external tables that
+  you can grant on, as `catalog.*`, and prints how to narrow it to named schemas.
 
 ### Install from the workspace (no local tools)
 
@@ -123,15 +124,15 @@ flowchart LR
    and click **Deploy**. It takes a few minutes.
 4. **Preview.** Open `backend/notebooks/install.py` from the same Git folder and click
    **Run all**. Nothing is granted. The run prints one GO, WARN or NO-GO line per requirement,
-   then the schemas you can grant on. Paste the schemas to migrate into the `scopes` widget (the
-   run prints a line you can paste) and click **Run all** again to see the grant plan and its
-   `plan_id`.
+   the scopes it will grant on (every catalog you can grant on), and the grant plan with its
+   `plan_id`. To narrow, set the `scopes` widget to `catalog.schema` entries and click **Run all**
+   again.
 5. **Apply.** Set `confirm_grants` to `true` and `plan_id` to the printed value, then click
    **Run all**. The installer grants, reads every grant back, sets up the control tables,
    profiles your estate and ends with `VERIFY PASSED` and the app URL. Expect 30 to 45 minutes,
    even for a few schemas: most of it is the profiling job.
 
-![The installer's rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity and the install records, a warning for metastore admin, and the coverage headline](docs/images/install/notebook/rights.png)
+![The installer's rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity (you, with how to switch to a service principal) and the install records, a warning for metastore admin, and the coverage headline](docs/images/install/notebook/rights.png)
 
 A WARN line does not stop the install. Above, metastore admin is a WARN: without it, the jobs can
 read system tables only if a metastore admin has already granted them.
@@ -152,18 +153,20 @@ export BUNDLE_VAR_warehouse_id=<warehouse-id>
 # 1. Deploy.
 databricks bundle deploy -t dev --profile <profile>
 
-# 2. Preview: the rights check and the grant plan for the schemas to migrate. Grants nothing.
-MTM_SCOPES='sales.*' databricks bundle run install -t dev --profile <profile>
+# 2. Preview: the rights check and the grant plan for every catalog you can grant on.
+#    Grants nothing.
+databricks bundle run install -t dev --profile <profile>
 
 # 3. Apply exactly the plan you previewed.
-MTM_SCOPES='sales.*' MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
+MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
   databricks bundle run install -t dev --profile <profile>
 ```
 
-![The CLI check: the rights and coverage report, the stored scopes, and the grant plan with one Change line missing](docs/images/install/cli/check.png)
+![The CLI check: the rights and coverage report, the scopes it covers (every catalog you can grant on, as catalog.*) with how to narrow, and the grant plan, every line already held](docs/images/install/cli/check.png)
 
-Leave out `MTM_SCOPES` on a terminal and the installer lists the schemas you can grant on and asks.
-`MTM_ACTION=check` runs only the rights check. Deploy only with `databricks bundle deploy`, never
+On a terminal with no scopes stored yet, the installer lists what it will cover, with table counts,
+and asks which to keep (Enter keeps all). To narrow without the prompt, set `MTM_SCOPES='sales.orders,finance.*'` on both commands. Once scopes are
+stored, a later run keeps them. `MTM_ACTION=check` runs only the rights check. Deploy only with `databricks bundle deploy`, never
 `databricks apps deploy`.
 
 ### Open the app
@@ -179,7 +182,8 @@ has run, there are no control tables for it to read.
 
 To upgrade later, pull the new version and deploy again, then run `job_08_conductor` once so the
 app's views catch up ([Upgrade](./docs/00-installation.md#upgrade)). The full guide covers every
-option, production (`-t prod` with a service principal), Genie Code, handing convert rights back
+option, production (`-t prod`: the jobs run as you there too, unless you choose a service
+principal), Genie Code, handing convert rights back
 and uninstalling: [Installation](./docs/00-installation.md).
 
 ## Your first migration

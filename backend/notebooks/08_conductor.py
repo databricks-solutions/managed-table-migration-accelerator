@@ -36,8 +36,8 @@ MANIFEST_SCHEMA = dbutils.widgets.get("manifest_schema").strip()
 PARALLELISM = int(dbutils.widgets.get("parallelism"))
 INCLUDE_STREAMING = dbutils.widgets.get("include_streaming").strip().lower() == "true"
 # Optional override for the identity the CONVERT job will run as. Blank = assume the convert job
-# shares this conductor's run_as (true for this bundle: both inherit the target run_as — prod
-# var.prod_run_as_sp, dev/e2e the deployer). Used to make wave_status.open_lease run_as-aware.
+# shares this conductor's run_as (true for this bundle: every job runs as var.jobs_run_as, the
+# deployer unless overridden). Used to make wave_status.open_lease run_as-aware.
 CONVERT_RUN_AS = dbutils.widgets.get("convert_run_as").strip()
 
 # COMMAND ----------

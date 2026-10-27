@@ -41,14 +41,16 @@ service principal, exactly as when you click in the app. A tool that changes som
 a "needs confirmation" preview until it is called again with `confirm=true`, and the job it launches
 re-checks every gate. The permissions tools are the exception to the service-principal rule: they
 read and grant with **your** sign-in, as the app's Settings → Permissions page does, so Unity
-Catalog checks your rights, and a grant also needs the `plan_id` you previewed. And
+Catalog checks your rights, and a grant also needs the `plan_id` you previewed. With no scopes
+stored, `mtm_get_permissions` plans every catalog you can grant on (`scopes_from: "all"`) and its
+`scope_note` says how to narrow it, which the assistant passes on. And
 `mtm_convert` accepts only a selector: it rejects every gate-downgrade parameter, so the assistant
 can never weaken a safety gate. With `mcp_tier=v1` only the "No" rows are available.
 
 A permissions question, then a grant called without `confirm`, which returns a preview and runs
 nothing:
 
-![Genie Code calling mtm_get_permissions: the rights check, the plan counts and the lines not yet in place with who can grant them, then mtm_grant_permissions without confirm, which asks for confirmation](images/install/mcp/permissions.png)
+![Genie Code calling mtm_get_permissions: the rights check, the scopes and the plan counts, with every line in place, then mtm_grant_permissions without confirm, which asks for confirmation](images/install/mcp/permissions.png)
 
 ## What ships in the bundle
 
@@ -152,7 +154,7 @@ team.
 
 ## Safety
 
-The MCP surface adds no new authority. Conversions run as the App service principal, gated exactly as
+The MCP surface adds no new authority. Conversions run as the jobs' identity (the deployer by default), gated exactly as
 the app and notebooks are: the fail-closed managed-location gate, the freeze / stream-stop coverage
 gates, the convert permission, and dry-run status are all re-checked inside `04_convert`. The MCP layer
 only *steers* the agent — `mtm_conversion_preflight` refuses unreasonable requests (e.g. "convert

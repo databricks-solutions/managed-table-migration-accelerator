@@ -902,15 +902,16 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Field | Text |
 | --- | --- |
 | Title | Who runs the jobs |
-| Subtitle | Every grant goes to this identity. To change it, use the installer, then redeploy. |
-| Technical detail | Set with the jobs_run_as bundle variable or the installer jobs_identity option. |
+| Subtitle | Every grant goes to this identity. The jobs run as the person who deployed them unless you choose a service principal. |
+| Technical detail | Set with the jobs_run_as bundle variable or the installer jobs_identity option, then redeploy. |
 
 ### `permissionsScope`
 
 | Field | Text |
 | --- | --- |
 | Title | Migration scope |
-| Subtitle | The schemas the migration may read and convert. Tick more to add them to the plan. |
+| Subtitle | What the migration may read and convert. With nothing saved yet, it starts with everything you can grant on. |
+| Technical detail | Remove a row to narrow the plan, or tick more below to add them. |
 
 ### `permissionsPicker`
 

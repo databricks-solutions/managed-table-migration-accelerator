@@ -497,7 +497,183 @@ def _fixture() -> dict:
     return {"rules_version": pv.PLAN_RULES_VERSION, "options": pv.options_fixture(),
             "plans": cases, "rights": rights_cases, "revokes": revoke_cases,
             "parse": _parse_cases(), "verify": _verify_cases(), "grantable": _grantable_cases(),
-            "handback": _handback_cases(), "sql": _sql_cases()}
+            "handback": _handback_cases(), "sql": _sql_cases(), "expand": _expand_cases(),
+            "resolve": _resolve_cases(), "drift": _drift_cases(), "person": _person_cases()}
+
+
+_ESTATE = [
+    {"catalog": "sales", "schema": "orders", "tables": 212, "can_grant": True, "catalog_can_grant": True},
+    {"catalog": "sales", "schema": "returns", "tables": 48, "can_grant": True, "catalog_can_grant": True},
+    {"catalog": "hr", "schema": "pay", "tables": 5, "can_grant": True, "catalog_can_grant": False},
+    {"catalog": "hr", "schema": "leave", "tables": 3, "can_grant": False, "catalog_can_grant": False},
+    {"catalog": "ops", "schema": "x", "tables": 1, "can_grant": False, "catalog_can_grant": False},
+    {"catalog": "samples", "schema": "nyctaxi", "tables": 1, "can_grant": True, "catalog_can_grant": True},
+]
+
+
+def _expand_cases() -> list:
+    cases = {"mixed": _ESTATE, "empty": [], "schema_only": [_ESTATE[2], _ESTATE[3]]}
+    out = [{"name": n, "estate": e, "expansion": pv.expand_all(e), "narrowing": pv.narrowing_note(pv.expand_all(e))}
+           for n, e in cases.items()]
+    types = {"sales": "MANAGED_CATALOG", "shared_in": "DELTASHARING_CATALOG", "pg": "FOREIGN_CATALOG",
+             "odd": None, "Lake": "managed_catalog"}
+    out.append({"name": "excluded_catalogs", "types": types, "excluded": sorted(pv.excluded_catalogs(types))})
+    return out
+
+
+def _resolve_cases() -> list:
+    exp = pv.expand_all(_ESTATE)
+    raws = {
+        "blank_nothing_stored": ([], False, [], exp),
+        "blank_keeps_stored": ([], False, ["hr.pay"], exp),
+        "named_wins": (["sales.orders"], False, ["hr.pay"], exp),
+        "all_adds_to_stored": ([], True, ["finance.billing"], exp),
+        "all_with_named": (["ops.x"], True, [], exp),
+        "nothing_anywhere": ([], False, [], []),
+    }
+    out = []
+    for name, (lst, all_, stored, expansion) in raws.items():
+        scopes, src = pv.resolve_scopes(lst, all_, stored, expansion)
+        out.append({"name": name, "scope_list": lst, "scope_all": all_, "stored": stored,
+                    "expansion": expansion, "scopes": scopes, "scopes_from": src,
+                    "note": pv.narrowing_note(scopes)})
+    return out
+
+
+def _grant_audit(grantee: str, kind: str, set_: str = pv.SET_READ, securable: str = "sales.orders",
+                 action: str = pv.AUDIT_INSTALL_GRANT, ts: str = "2026-10-01 10:00:00") -> dict:
+    line = {"set": set_, "grantee": grantee, "grantee_kind": kind, "privilege": "SELECT",
+            "securable_type": "SCHEMA", "securable": securable}
+    return {"action": action, "phase": "SUCCESS", "created_at": ts,
+            "detail": pv.audit_detail(line, door="cli", pid="p", added=True)}
+
+
+def _drift_cases() -> list:
+    ann = {"kind": pv.KIND_USER, "name": "ann@x.com"}
+    sp = {"kind": pv.KIND_SERVICE_PRINCIPAL, "name": SP}
+    audit_sp = [_grant_audit(SP, pv.KIND_SERVICE_PRINCIPAL), _grant_audit("mtm-ops", pv.KIND_GROUP)]
+    audit_revoked = audit_sp + [_grant_audit(SP, pv.KIND_SERVICE_PRINCIPAL, action=pv.AUDIT_INSTALL_REVOKE,
+                                             ts="2026-10-02 10:00:00")]
+    raws = {
+        "moved_to_person": (ann, audit_sp, None),
+        "same_identity": (sp, audit_sp, None),
+        "explicit_identity_clears": (ann, audit_sp, ann),
+        "grants_revoked": (ann, audit_revoked, None),
+        "fresh_install": (ann, [], None),
+        "moved_to_sp": (sp, [_grant_audit("ann@x.com", pv.KIND_USER)], None),
+    }
+    out = []
+    for name, (current, audit, requested) in raws.items():
+        recorded = pv.recorded_identities(audit)
+        drift = pv.identity_drift(current, recorded, requested)
+        out.append({"name": name, "current": current, "audit": audit, "requested": requested,
+                    "recorded": recorded, "drift": drift,
+                    "report": pv.apply_identity_drift(pv.rights_report(_probes(app_can_grant=True), door="app"),
+                                                      drift)})
+    return out
+
+
+def _person_cases() -> list:
+    person = {"kind": pv.KIND_USER, "name": "ann@x.com"}
+    lines = pv.grant_plan(catalog="main", schema="migration", jobs_identity=person, scopes=["sales.*"],
+                          installer="ann@x.com", control_schema_exists=True)
+    other = pv.grant_plan(catalog="main", schema="migration", jobs_identity={**person, "name": "bob@x.com"},
+                          scopes=["sales.*"], installer="ann@x.com", control_schema_exists=True)
+    probes = {**_probes(app_can_grant=True), "jobs": {"identity": person, "agree": True, "count": 30, "active": None}}
+    other_probes = {**probes, "installer": "bob2@x.com"}
+    return [{"name": "you", "installer": "ann@x.com", "lines": lines, "probes": probes,
+             "header": pv.person_grantee_line(lines, "ann@x.com"),
+             "report": pv.rights_report(probes, door="app")},
+            {"name": "another_person", "installer": "ann@x.com", "lines": other, "probes": other_probes,
+             "header": pv.person_grantee_line(other, "ann@x.com"),
+             "report": pv.rights_report(other_probes, door="app")},
+            {"name": "sp", "installer": "ann@x.com", "lines": _plan(), "probes": None,
+             "header": pv.person_grantee_line(_plan(), "ann@x.com"), "report": None}]
+
+
+def test_catalog_level_handback_waits_for_every_schema_and_the_window():
+    base = dict(installer="ann@x.com", door="cli", pid="p", now=NOW)
+    cat = {"set": pv.SET_CHANGE, "grantee": SP, "privilege": "MANAGE", "securable_type": "CATALOG",
+           "securable": "sales", "wave_id": None}
+    row = pv.ledger_row(cat, added=True, prior_held=False, **base)
+    half = {"sales.orders": {"CLEANED": 3}, "sales.returns": {"VALIDATED": 1}}
+    assert pv.handback_ready_keys([row], half) == []
+    plan = pv.handback_plan([row], half, scopes=["sales.*"], window_ends={"sales.returns": "2026-11-09"})
+    assert not plan["revokes"] and "sales.returns" in plan["refused"][0]["reason"]
+    assert "2026-11-09" in plan["refused"][0]["reason"]
+    done = {"sales.orders": {"CLEANED": 3}, "sales.returns": {"ROLLED_BACK": 1}}
+    assert pv.handback_ready_keys([row], done) == [row["ledger_key"]]
+    plan = pv.handback_plan([row], done, scopes=["sales.*"])
+    assert [r["statement"] for r in plan["revokes"]] == [f"REVOKE MANAGE ON CATALOG `sales` FROM `{SP}`"]
+    assert pv.handback_plan([row], done, scopes=["sales.orders"])["revokes"] == []
+
+
+def test_expand_all_takes_whole_catalogs_then_grantable_schemas():
+    assert pv.expand_all(_ESTATE) == ["hr.pay", "sales.*"]
+    assert pv.suggested_scopes({"candidates": pv.expand_all(_ESTATE)}) == "hr.pay,sales.*"
+    assert pv.expand_all([]) == []
+
+
+def test_excluded_catalogs_by_name_and_type():
+    ex = pv.excluded_catalogs({"shared_in": "DELTASHARING_CATALOG", "pg": "FOREIGN_CATALOG", "odd": None,
+                               "sales": "MANAGED_CATALOG"})
+    assert {"system", "hive_metastore", "samples", "shared_in", "pg"} <= ex
+    assert "odd" not in ex and "sales" not in ex
+
+
+def test_resolve_scopes_never_widens_a_stored_narrowing():
+    exp = ["hr.pay", "sales.*"]
+    assert pv.resolve_scopes([], False, [], exp) == (exp, pv.SCOPES_FROM_ALL)
+    assert pv.resolve_scopes([], False, ["hr.pay"], exp) == (["hr.pay"], pv.SCOPES_FROM_STORED)
+    assert pv.resolve_scopes(["ops.x"], False, ["hr.pay"], exp) == (["ops.x"], pv.SCOPES_FROM_OPTION)
+    assert pv.resolve_scopes([], True, ["fin.b"], exp) == (["fin.b", "hr.pay", "sales.*"], pv.SCOPES_FROM_ALL)
+    assert pv.resolve_scopes([], False, [], []) == ([], pv.SCOPES_FROM_NONE)
+
+
+def test_narrowing_note_only_for_catalog_scopes():
+    assert pv.narrowing_note(["sales.orders"]) is None
+    note = pv.narrowing_note(["sales.*"])
+    assert "scopes=<catalog.schema,...>" in note and "convert_rights=per_wave" in note
+    assert "CLEANED or ROLLED_BACK" in note
+
+
+def test_parse_options_scopes_all():
+    opts, errors = pv.parse_options({"scopes": "all, sales.orders"}, door=pv.DOOR_APP)
+    assert not errors and opts["scope_all"] and opts["scope_list"] == ["sales.orders"]
+    opts, errors = pv.parse_options({"scopes": ""}, door=pv.DOOR_APP)
+    assert not errors and not opts["scope_all"] and opts["scope_list"] == []
+    for action in ("uninstall", "revoke_convert"):
+        _, errors = pv.parse_options({"action": action, "scopes": "all"}, door=pv.DOOR_APP)
+        assert any("all applies to install and check only" in e for e in errors)
+    assert pv.pick_scopes("all", ["a.*", "b.x"]) == (["a.*", "b.x"], [])
+
+
+def test_identity_drift_stops_an_upgrade_that_moved_the_jobs():
+    ann = {"kind": pv.KIND_USER, "name": "ann@x.com"}
+    recorded = pv.recorded_identities([_grant_audit(SP, pv.KIND_SERVICE_PRINCIPAL),
+                                       _grant_audit("mtm-ops", pv.KIND_GROUP)])
+    assert recorded == [SP]
+    drift = pv.identity_drift(ann, recorded)
+    assert f"jobs_identity=sp:{SP}, then redeploy" in drift and "jobs_identity=user:ann@x.com" in drift
+    report = pv.apply_identity_drift(pv.rights_report(_probes(app_can_grant=True), door="app"), drift)
+    assert not report["can_install"]
+    assert next(c for c in report["checks"] if c["key"] == "jobs_identity")["status"] == pv.NO_GO
+    assert pv.identity_drift(ann, recorded, ann) is None
+    assert pv.identity_drift({"kind": pv.KIND_SERVICE_PRINCIPAL, "name": SP.upper()}, recorded) is None
+    assert pv.identity_drift(ann, []) is None
+
+
+def test_person_identity_is_stated_not_warned():
+    person = {"kind": pv.KIND_USER, "name": "ann@x.com"}
+    probes = {**_probes(app_can_grant=True), "jobs": {"identity": person, "agree": True, "count": 30}}
+    check = next(c for c in pv.rights_report(probes, door="app")["checks"] if c["key"] == "jobs_identity")
+    assert check["status"] == pv.GO and check["detail"].startswith("you (ann@x.com), all 30 jobs agree")
+    assert "runs them with your access" in check["detail"] and "jobs_identity=sp:<application-id>" in check["detail"]
+    lines = pv.grant_plan(catalog="main", schema="migration", jobs_identity=person, scopes=["sales.*"],
+                          installer="ann@x.com", control_schema_exists=True)
+    text = pv.plan_text(lines, installer="ann@x.com")
+    assert text[1] == "  The jobs run as you, so Look, Read and Change go to you."
+    assert pv.person_grantee_line(_plan(), "ann@x.com") is None
 
 
 def _parse_cases() -> list:
@@ -509,6 +685,8 @@ def _parse_cases() -> list:
         "bad_values": {"action": "nuke", "convert_rights": "sometimes", "scopes": "a.b; DROP",
                        "wave_id": "w 1", "plan_run_id": "-x", "plan_id": "xyz", "grantee_group": "a'b"},
         "identity": {"jobs_identity": "group:mtm-jobs", "confirm_grants": True},
+        "scopes_all": {"scopes": "ALL, sales.orders"},
+        "scopes_all_on_revoke": {"action": "revoke_convert", "scopes": "all"},
     }
     out = []
     for name, raw in raws.items():
@@ -630,6 +808,7 @@ def _sql_cases() -> dict:
                                               [pv.handback_action_key(r) for r in ledger], now=ts, by="ann@x.com"),
         "installer_ledger": pv.installer_ledger_sql("main", "migration"),
         "manifest_states": pv.manifest_states_sql("main", "migration"),
+        "install_audit": pv.install_audit_sql("main", "migration"),
         "window_ends": pv.window_ends_sql("main", "migration"),
         "job_run_commands": pv.job_run_commands({**line, "grantee_kind": pv.KIND_GROUP, "grantee": "mtm-jobs",
                                                  "job_ids": ["7", "8"]}),

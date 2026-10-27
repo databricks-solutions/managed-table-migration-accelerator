@@ -58,7 +58,17 @@ export const WARN = 'WARN';
 export const UNKNOWN = 'UNKNOWN';
 export type CheckStatus = typeof GO | typeof NO_GO | typeof WARN | typeof UNKNOWN;
 
-export const PLAN_RULES_VERSION = '1';
+export const PLAN_RULES_VERSION = '2';
+
+export const SCOPES_ALL = 'all';
+export const SCOPES_FROM_OPTION = 'option';
+export const SCOPES_FROM_STORED = 'stored';
+export const SCOPES_FROM_ALL = 'all';
+export const SCOPES_FROM_NONE = 'none';
+export type ScopesFrom = typeof SCOPES_FROM_OPTION | typeof SCOPES_FROM_STORED | typeof SCOPES_FROM_ALL | typeof SCOPES_FROM_NONE;
+export const NON_MIGRATABLE_CATALOGS = new Set(['system', 'hive_metastore', 'samples', '__databricks_internal']);
+export const EXCLUDED_CATALOG_TYPES = new Set(['DELTASHARING_CATALOG', 'FOREIGN_CATALOG', 'INTERNAL_CATALOG',
+  'SYSTEM_CATALOG', 'MANAGED_ONLINE_CATALOG']);
 
 export const AUDIT_TABLE = 'audit_log';
 export const SCOPE_TABLE = 'migration_scope';
@@ -146,8 +156,8 @@ export const OPTIONS: OptionDef[] = [
     ['false', 'true'], 'dropdown', CLI_FLAG, true),
   opt('jobs_identity', 'keep', 'Who the jobs run as: keep, sp:<application-id>, ' +
     'group:<name>, user:<email>. A change needs a redeploy.', null, 'text', CLI_FLAG, true),
-  opt('scopes', '', 'Schemas to migrate: catalog.schema or catalog.*, comma-separated. ' +
-    'Blank uses the stored scopes, or lists the candidates.', null, 'text', CLI_FLAG, true),
+  opt('scopes', '', 'What to migrate: catalog.schema, catalog.* or all, comma-separated. ' +
+    'Blank uses the stored scopes, or all when none are stored.', null, 'text', CLI_FLAG, true),
   opt('convert_rights', CONVERT_ALL_AT_ONCE, 'all_at_once grants convert rights on the scopes ' +
     'now (handed back at the end); per_wave leaves them to grant_convert.', CONVERT_RIGHTS,
   'dropdown', CLI_FLAG, true),
@@ -228,15 +238,16 @@ const UUID_RE = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0
 const PLAN_ID_RE = /^[0-9a-f]{12}$/;
 const GROUP_RE = /^[^`;'"]+$/;
 
-/** `"a.b, c.*"` → [["a.b", "c.*"], errors]. Lower-cased, de-duplicated, order kept. */
+/** `"a.b, c.*"` → [["a.b", "c.*"], errors]. Lower-cased, de-duplicated, order kept.
+ *  The token `all` is kept as is (`parseOptions` turns it into `scope_all`). */
 export function parseScopes(raw: string | null | undefined): [string[], string[]] {
   const out: string[] = [];
   const errors: string[] = [];
   for (const part of (raw ?? '').split(',')) {
     const s = part.trim().replace(/`/g, '').toLowerCase();
     if (!s) continue;
-    if (!SCOPE_RE.test(s)) {
-      errors.push(`scopes: '${part.trim()}' is not catalog.schema or catalog.*.`);
+    if (s !== SCOPES_ALL && !SCOPE_RE.test(s)) {
+      errors.push(`scopes: '${part.trim()}' is not catalog.schema, catalog.* or all.`);
       continue;
     }
     if (!out.includes(s)) out.push(s);
@@ -280,6 +291,7 @@ export interface ParsedOptions extends Record<string, unknown> {
   yes: boolean;
   scopes: string;
   scope_list: string[];
+  scope_all: boolean;
   identity: Identity | null;
   convert_rights: string;
   wave_id: string;
@@ -312,7 +324,11 @@ export function parseOptions(raw: RawOptions | null | undefined, door: string = 
   }
   const [scopeList, scopeErrors] = parseScopes(opts.scopes);
   errors.push(...scopeErrors);
-  opts.scope_list = scopeList;
+  opts.scope_all = scopeList.includes(SCOPES_ALL);
+  opts.scope_list = scopeList.filter((s) => s !== SCOPES_ALL);
+  if (opts.scope_all && ![ACTION_INSTALL, ACTION_CHECK].includes(opts.action)) {
+    errors.push(`scopes: all applies to install and check only, not ${opts.action}.`);
+  }
   const [identity, identityError] = parseJobsIdentity(String(o.jobs_identity));
   if (identityError) errors.push(identityError);
   opts.identity = identity;
@@ -782,6 +798,7 @@ export interface EstateRow {
   schema: string;
   tables: number;
   can_grant: boolean;
+  catalog_can_grant?: boolean;
   grantor?: string | null;
 }
 
@@ -839,11 +856,65 @@ export function coverage(estate: EstateRow[] | null | undefined): Coverage {
     grantable_schemas: gotS,
     grantable_tables: gotT,
     uncovered: [...byCat.values()].sort((a, b) => byString(a.catalog, b.catalog)),
-    candidates: granted.map((r) => `${r.catalog}.${r.schema}`).sort(byString),
+    candidates: expandAll(rows),
     headline,
     band: coverageBand(gotS, totalS),
   };
 }
+
+/** Catalog names never migrated: the fixed names, plus every catalog whose Unity Catalog type holds
+ *  nothing to convert (`catalogTypes`: name → `catalog_type`; unknown types stay in). */
+export function excludedCatalogs(catalogTypes: Record<string, string | null | undefined> = {}): Set<string> {
+  const out = new Set(NON_MIGRATABLE_CATALOGS);
+  for (const [name, type] of Object.entries(catalogTypes)) {
+    if (EXCLUDED_CATALOG_TYPES.has(String(type ?? '').toUpperCase())) out.add(name.toLowerCase());
+  }
+  return out;
+}
+
+/** `scopes=all` (mirror of `provision.expand_all`): per catalog with external tables, `catalog.*`
+ *  when the installer can grant on the whole catalog, else each schema they can grant on. */
+export function expandAll(estate: EstateRow[] | null | undefined): string[] {
+  const byCat = new Map<string, EstateRow[]>();
+  for (const r of estate ?? []) {
+    const c = String(r.catalog || '').toLowerCase();
+    if (!c || NON_MIGRATABLE_CATALOGS.has(c)) continue;
+    const list = byCat.get(c) ?? [];
+    list.push(r);
+    byCat.set(c, list);
+  }
+  const out: string[] = [];
+  for (const c of [...byCat.keys()].sort(byString)) {
+    const rows = byCat.get(c) ?? [];
+    if (rows.some((r) => r.catalog_can_grant)) out.push(`${c}.*`);
+    else out.push(...rows.filter((r) => r.can_grant).map((r) => `${c}.${String(r.schema).toLowerCase()}`).sort(byString));
+  }
+  return out;
+}
+
+/** `[scopes, scopes_from]` for a run (mirror of `provision.resolve_scopes`). Named scopes win; blank
+ *  keeps the stored scopes; blank with nothing stored is `all`; `all` named adds the expansion. */
+export function resolveScopes(scopeList: string[], scopeAll: boolean, stored: string[],
+  expansion: string[]): [string[], ScopesFrom] {
+  if (scopeAll) {
+    const out: string[] = [];
+    for (const s of [...stored, ...expansion, ...scopeList]) if (!out.includes(s)) out.push(s);
+    return [out, SCOPES_FROM_ALL];
+  }
+  if (scopeList.length) return [[...scopeList], SCOPES_FROM_OPTION];
+  if (stored.length) return [[...stored], SCOPES_FROM_STORED];
+  if (expansion.length) return [[...expansion], SCOPES_FROM_ALL];
+  return [[], SCOPES_FROM_NONE];
+}
+
+export const NARROWING_NOTE =
+  'Catalog-level grants also cover schemas created later, and are handed back when every ' +
+  'table in the catalog is CLEANED or ROLLED_BACK. To narrow: scopes=<catalog.schema,...> ' +
+  'for named schemas, or convert_rights=per_wave to grant MANAGE one wave at a time.';
+
+/** How to lower the grain, only when a `catalog.*` scope is in the plan. */
+export const narrowingNote = (scopes: string[]): string | null =>
+  (scopes.some((s) => s.endsWith('.*')) ? NARROWING_NOTE : null);
 
 /** One line per catalog the installer cannot grant on: how much it holds and who to ask. */
 export const uncoveredAsk = (c: UncoveredCatalog): string =>
@@ -922,9 +993,11 @@ export function rightsReport(probes: Probes, door: string = DOOR_NOTEBOOK): Righ
   let jdetail: string;
   if (ident && jobs.agree) {
     const active = jobs.active;
-    const label = `${KIND_LABEL[ident.kind] ?? ident.kind} ${ident.name}`;
+    const you = ident.kind === KIND_USER && samePrincipal(ident.name, probes.installer);
+    const label = you ? `you (${ident.name})` : `${KIND_LABEL[ident.kind] ?? ident.kind} ${ident.name}`;
     jstatus = active !== false ? GO : NO_GO;
     jdetail = `${label}${active === false ? ' (inactive)' : ''}, all ${jobs.count ?? 0} jobs agree`;
+    if (ident.kind === KIND_USER) jdetail += '. ' + personIdentityNote(you);
   } else if (jobs.distinct && jobs.distinct.length) {
     jstatus = NO_GO;
     jdetail = `the deployed jobs run as ${jobs.distinct.length} different identities; redeploy so every job uses jobs_run_as`;
@@ -969,6 +1042,88 @@ export function rightsReport(probes: Probes, door: string = DOOR_NOTEBOOK): Righ
     can_install: ctlOk && jstatus === GO,
     suggested_scopes: suggestedScopes(cov),
   };
+}
+
+export const SP_SWITCH = 'jobs_identity=sp:<application-id>';
+
+/** What running the jobs as a person means (stated on the GO line, never a warning). */
+export function personIdentityNote(you: boolean): string {
+  const whose = you ? 'your' : "that person's";
+  return `Anyone who can start these jobs runs them with ${whose} access. To use a service principal: ${SP_SWITCH}`;
+}
+
+const detailText = (v: unknown): string => (typeof v === 'string' ? v : '');
+
+export interface AuditRecord {
+  action?: unknown;
+  phase?: unknown;
+  detail?: unknown;
+  created_at?: unknown;
+}
+
+/** Grants the installer ran and has not revoked since (mirror of `provision.granted_by_tool`). */
+export function grantedByTool(auditRows: AuditRecord[] | null | undefined): Record<string, unknown>[] {
+  const latest = new Map<string, [string, string, Record<string, unknown>]>();
+  for (const r of auditRows ?? []) {
+    if (![AUDIT_INSTALL_GRANT, AUDIT_INSTALL_REVOKE].includes(String(r.action)) || r.phase !== 'SUCCESS') continue;
+    let d: Record<string, unknown>;
+    try {
+      d = JSON.parse(typeof r.detail === 'string' && r.detail ? r.detail : '{}') as Record<string, unknown>;
+    } catch {
+      continue;
+    }
+    if (!d || typeof d !== 'object' || !d.privilege) continue;
+    const k = lineKeyString({ grantee: detailText(d.grantee), privilege: detailText(d.privilege),
+      securable_type: detailText(d.securable_type), securable: detailText(d.securable) });
+    const ts = r.created_at === null || r.created_at === undefined ? '' : String(r.created_at as string);
+    const prev = latest.get(k);
+    if (!prev || ts >= prev[0]) latest.set(k, [ts, String(r.action), d]);
+  }
+  return [...latest.values()].filter(([, act, d]) => act === AUDIT_INSTALL_GRANT && d.added).map(([, , d]) => d);
+}
+
+/** The people and service principals the tool granted Look, Read or Change to and has not revoked
+ *  (groups are skipped: they are a deliberate `grantee_group`). Mirror of `provision.recorded_identities`. */
+export function recordedIdentities(auditRows: AuditRecord[] | null | undefined): string[] {
+  const out: string[] = [];
+  for (const d of grantedByTool(auditRows)) {
+    if (![SET_LOOK, SET_READ, SET_CHANGE].includes(String(d.set)) || d.grantee_kind === KIND_GROUP) continue;
+    const g = detailText(d.grantee).trim();
+    if (g && !out.some((o) => samePrincipal(g, o))) out.push(g);
+  }
+  return out.sort((a, b) => byString(casefold(a), casefold(b)));
+}
+
+/** The stop when the deployed jobs moved to a new identity while this install's grants still sit on
+ *  the old one; an explicit `jobs_identity` clears it. Mirror of `provision.identity_drift`. */
+export function identityDrift(current: Identity | null | undefined, recorded: string[],
+  requested: Identity | null | undefined = null): string | null {
+  if (requested || !current || !recorded.length) return null;
+  if (recorded.some((r) => samePrincipal(current.name, r))) return null;
+  const old = recorded[0];
+  const keep = UUID_RE.test(old) ? `sp:${old}` : `user:${old}`;
+  const move = `${current.kind === KIND_SERVICE_PRINCIPAL ? 'sp' : current.kind}:${current.name}`;
+  return `the jobs now run as ${current.name}, but this install's grants went to ${recorded.join(', ')}. ` +
+    `To keep ${old}: jobs_identity=${keep}, then redeploy. To move to ${current.name}: jobs_identity=${move}`;
+}
+
+/** `rightsReport` with the jobs' identity line turned NO-GO by `drift`. */
+export function applyIdentityDrift(report: RightsReport, drift: string | null): RightsReport {
+  if (!drift) return { ...report, checks: report.checks.map((c) => ({ ...c })) };
+  return {
+    ...report,
+    checks: report.checks.map((c) => (c.key === 'jobs_identity' ? { ...c, status: NO_GO, detail: drift } : { ...c })),
+    can_install: false,
+  };
+}
+
+/** When Look, Read and Change go to a person, the line said before the grants (SR17 condition 3). */
+export function personGranteeLine(lines: Pick<PlanLine, 'set' | 'grantee' | 'grantee_kind'>[],
+  installer: string | null | undefined = null): string | null {
+  const who = lines.find((ln) => [SET_LOOK, SET_READ, SET_CHANGE].includes(ln.set) && ln.grantee_kind === KIND_USER)?.grantee;
+  if (!who) return null;
+  if (samePrincipal(who, installer)) return 'The jobs run as you, so Look, Read and Change go to you.';
+  return `The jobs run as ${who}, a person, so Look, Read and Change go to ${who}.`;
 }
 
 // --------------------------------------------------------------------------- //
@@ -1218,18 +1373,24 @@ export function canGrantCatalog(owners: Owners, principals: string[], cat: strin
   }) || false;
 }
 
-/** ESTATE_SQL rows → coverage rows with who can grant each schema. */
-export function estateRowsFrom(rows: Record<string, unknown>[], owners: Owners, principals: string[], ma: boolean | null): EstateRow[] {
+/** ESTATE_SQL rows → coverage rows with who can grant each schema and its catalog; `excluded`
+ *  catalogs (see `excludedCatalogs`) are left out. */
+export function estateRowsFrom(rows: Record<string, unknown>[], owners: Owners, principals: string[], ma: boolean | null,
+  excluded: Iterable<string> = []): EstateRow[] {
+  const skip = new Set([...[...excluded].map((c) => c.toLowerCase()), ...NON_MIGRATABLE_CATALOGS]);
   return rows
+    .filter((r) => !skip.has(cellText(r.table_catalog).toLowerCase()))
     .map((r) => {
+      const cat = cellText(r.table_catalog).toLowerCase();
       const fqn = `${cellText(r.table_catalog)}.${cellText(r.table_schema)}`.toLowerCase();
       const can = canGrantSchema(owners, principals, fqn, ma);
       return {
-        catalog: cellText(r.table_catalog).toLowerCase(),
+        catalog: cat,
         schema: cellText(r.table_schema).toLowerCase(),
         tables: Number(r.tables || 0),
         can_grant: Boolean(can),
-        grantor: can ? null : schemaGrantor(owners.schema_owner[fqn] ?? null, owners.catalog_owner[fqn.split('.')[0]] ?? null),
+        catalog_can_grant: Boolean(canGrantCatalog(owners, principals, cat, ma)),
+        grantor: can ? null : schemaGrantor(owners.schema_owner[fqn] ?? null, owners.catalog_owner[cat] ?? null),
       };
     })
     .sort((a, b) => byString(a.catalog, b.catalog) || byString(a.schema, b.schema));

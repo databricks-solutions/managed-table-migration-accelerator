@@ -177,9 +177,32 @@ def test_confirmed_install_grants_then_setup_then_data_in_order(cli):
     assert "Read-back:" in out
 
 
-def test_noninteractive_confirm_without_scopes_is_invalid(cli):
-    code, _, _ = _run(cli, ["--confirm-grants"])
-    assert code == pv.EXIT_INVALID
+def test_noninteractive_confirm_without_scopes_uses_all(cli):
+    sql = FakeSql()
+    code, _, _ = _run(cli, ["--confirm-grants"], sql=sql)
+    assert code == pv.EXIT_GAPS, "the fake read-back sees nothing held"
+    assert "GRANT MANAGE ON CATALOG `sales` TO `11111111-2222-3333-4444-555555555555`" in sql.grants()
+    assert any(c.startswith("MERGE INTO main.migration.migration_scope") and "'sales.*'" in c for c in sql.calls)
+
+
+def test_check_json_reports_where_the_scopes_came_from(cli):
+    code, out, _ = _run(cli, ["--check-only", "--output", "json"])
+    doc = json.loads(out)
+    assert code == pv.EXIT_OK and doc["scopes"] == ["sales.*"] and doc["scopes_from"] == pv.SCOPES_FROM_ALL
+    assert "convert_rights=per_wave" in doc["scope_note"]
+    code, out, _ = _run(cli, ["--check-only", "--output", "json", "--scopes", "sales.orders"])
+    doc = json.loads(out)
+    assert doc["scopes_from"] == pv.SCOPES_FROM_OPTION and doc["scope_note"] is None
+
+
+def test_scopes_all_leaves_out_shared_catalogs(cli):
+    out, err = io.StringIO(), io.StringIO()
+    w = _fake_w([])
+    w.catalogs.list = lambda: [NS(name="sales", catalog_type=NS(value="DELTASHARING_CATALOG"))]
+    code = cli.main(["--check-only", "--output", "json"], dict(ENV), w=w, run_sql=FakeSql(), interactive=False,
+                    stream=out, err=err)
+    doc = json.loads(out.getvalue())
+    assert code == pv.EXIT_OK and doc["scopes"] == [] and doc["scopes_from"] == pv.SCOPES_FROM_NONE
 
 
 def test_identity_change_writes_overrides_and_exits_5(cli, tmp_path, monkeypatch):
@@ -198,7 +221,7 @@ def test_interactive_picker_replans_with_the_picked_scopes(cli):
                     ask=lambda _p: next(answers), stream=out, err=err)
     text = out.getvalue()
     assert code == pv.EXIT_OK and "Pick scopes" not in text  # the prompt goes through ask()
-    assert "sales.orders" in text and "Dry run: nothing ran" in text
+    assert "Scopes (all you can grant on): sales.*" in text and "Dry run: nothing ran" in text
 
 
 def test_identity_change_with_yes_redeploys_then_grants_the_new_identity(cli, tmp_path, monkeypatch):

@@ -32,7 +32,7 @@ validate: ## Validate the bundle config (TARGET=dev|prod)
 deploy: ## Deploy all jobs to dev
 	databricks bundle deploy -t dev
 
-deploy-prod: ## Deploy all jobs to prod (requires prod_host + prod_run_as_sp)
+deploy-prod: ## Deploy all jobs to prod (requires prod_host; the jobs run as the deployer)
 	databricks bundle deploy -t prod
 
 test: ## Run the pure-logic unit tests (no cluster)

@@ -27,6 +27,13 @@ describe('mtm_get_permissions', () => {
     expect(w.log.some((s) => s.startsWith('GRANT') || s.startsWith('INSERT'))).toBe(false);
   });
 
+  it('with no scopes and none stored, plans all and returns where the scopes came from and how to narrow', async () => {
+    const v = await getPermissions(() => deps(world()), {}, req);
+    if (!('plan_id' in v)) throw new Error('expected a view');
+    expect([v.scopes_from, v.scopes]).toEqual(['all', ['sales.*']]);
+    expect(v.scope_note).toContain('scopes=<catalog.schema,...>');
+  });
+
   it('answers with the CLI command when no sign-in reached the app (no app-identity fallback)', async () => {
     const noToken = () => {
       throw new HttpError(401, 'The app did not receive your sign-in.');

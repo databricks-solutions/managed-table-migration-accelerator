@@ -89,6 +89,22 @@ describe('mergeScopes', () => {
     ]);
     expect(selectableKeys(merged)).toEqual(['m.new']);
   });
+
+  it('a stored catalog.* covers every schema of that catalog, and no other', () => {
+    const merged = mergeScopes(
+      [
+        { catalog: 'main', schema: 'sales', externalTableCount: 2 },
+        { catalog: 'hr', schema: 'pay', externalTableCount: 1 },
+      ],
+      [],
+      new Set(['main.*']),
+    );
+    expect(merged.map((s) => [s.catalog, s.covered])).toEqual([
+      ['hr', false],
+      ['main', true],
+    ]);
+    expect(selectableKeys(merged)).toEqual(['hr.pay']);
+  });
 });
 
 describe('selection helpers', () => {

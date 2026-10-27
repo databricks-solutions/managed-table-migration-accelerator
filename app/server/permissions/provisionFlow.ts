@@ -15,7 +15,9 @@
  *    because the token cannot call the effective-permissions API.
  */
 import {
+  ACTION_CHECK,
   ACTION_GRANT_CONVERT,
+  ACTION_INSTALL,
   ACTION_REVOKE_CONVERT,
   AUDIT_INSTALL_GRANT,
   AUDIT_INSTALL_GRANT_SKIPPED,
@@ -42,6 +44,10 @@ import {
   type Probes,
   type RevokeItem,
   type RightsReport,
+  SCOPES_FROM_NONE,
+  SCOPES_FROM_OPTION,
+  SCOPES_FROM_STORED,
+  type ScopesFrom,
   SET_CHANGE,
   SET_READ,
   STAGE_BOOTSTRAP,
@@ -49,23 +55,29 @@ import {
   STAGE_RECORDS,
   STATUS_PRESENT,
   type SchemaStates,
+  applyIdentityDrift,
   canGrantCatalog,
   canGrantSchema,
   estateRowsFrom,
+  excludedCatalogs,
   grantPlan,
   handbackActionKey,
   handbackPlan,
   handbackPlanId,
   heldCovers,
+  identityDrift,
   installerLines,
   jobsIdentitySummary,
   lineGrantable,
   lineKeyString,
+  narrowingNote,
   ownersFrom,
   planCounts,
   planId,
   principalsOf,
   quoteSecurable,
+  recordedIdentities,
+  resolveScopes,
   rightsReport,
   samePrincipal,
   schemaGrantor,
@@ -80,6 +92,7 @@ import {
   auditInsertSql,
   handbackDoneSql,
   installAuditRow,
+  installAuditSql,
   installerLedgerSql,
   ledgerMergeSql,
   ledgerRow,
@@ -118,6 +131,8 @@ export interface FlowDeps {
   jobs: () => Promise<DeployedJobs>;
   /** Permission levels `principals` hold on every job (`{CAN_MANAGE_RUN}` when all cover it), null if unreadable. */
   jobRunHeld: (jobIds: string[], principals: string[]) => Promise<Set<string> | null>;
+  /** Catalog name → Unity Catalog `catalog_type` the user can see (forwarded token); throws when unreadable. */
+  catalogTypes: () => Promise<Record<string, string | null>>;
   appSp: string | null;
   installerGroup: string | null;
   deployment: string | null;
@@ -156,6 +171,8 @@ export interface Context {
   grantable_schemas: string[];
   grantable_catalogs: string[];
   estate_error: string | null;
+  /** Why catalog types could not be read (only the fixed names are left out of `scopes=all`). */
+  catalog_types_error: string | null;
   deployment: string | null;
   install_notebook: string | null;
   /** Job id → its creator, for the jobs line's deployer evidence. */
@@ -204,7 +221,14 @@ export async function probe(deps: FlowDeps): Promise<[Probes, Context]> {
   else records.can_self_grant = exists ? canGrantSchema(owners, principals, ctlFqn, ma) : ctlCan;
   const [estateRaw, estateErr] = await attempt(deps.sql, ESTATE_SQL);
   const [jobsAudit] = exists ? await attempt(deps.sql, jobsAuditSql(deps.catalog, deps.schema)) : [null];
-  const estate: EstateRow[] = estateRaw ? estateRowsFrom(estateRaw, owners, principals, ma) : [];
+  let types: Record<string, string | null> = {};
+  let typesErr: string | null = null;
+  try {
+    types = await deps.catalogTypes();
+  } catch (err) {
+    typesErr = (err instanceof Error ? err.message : String(err)).slice(0, 300);
+  }
+  const estate: EstateRow[] = estateRaw ? estateRowsFrom(estateRaw, owners, principals, ma, excludedCatalogs(types)) : [];
   const appCanGrant = wh !== null ? true : deps.tokenScopes && !deps.tokenScopes.includes('sql') ? false : null;
 
   const probes: Probes = {
@@ -217,7 +241,8 @@ export async function probe(deps: FlowDeps): Promise<[Probes, Context]> {
     control_exists: Boolean(exists), control_readable: owners.readable,
     grantable_schemas: estate.filter((r) => r.can_grant).map((r) => `${r.catalog}.${r.schema}`),
     grantable_catalogs: Object.keys(owners.catalog_owner).filter((c) => canGrantCatalog(owners, principals, c, ma)).sort(),
-    estate_error: estateErr, deployment: deps.deployment, install_notebook: deployed.installNotebook,
+    estate_error: estateErr, catalog_types_error: typesErr, deployment: deps.deployment,
+    install_notebook: deployed.installNotebook,
     job_creators: deployed.creatorByJob, jobs_audit: jobsAudit ?? [],
   };
   return [probes, context];
@@ -226,6 +251,8 @@ export async function probe(deps: FlowDeps): Promise<[Probes, Context]> {
 export interface Records {
   scopes: Rows;
   ledger: LedgerRow[];
+  /** Install grant / revoke audit rows (empty when unreadable). */
+  audit: Rows;
   states: SchemaStates;
   window_ends: Record<string, string>;
   errors: string[];
@@ -237,6 +264,7 @@ export async function readRecords(deps: FlowDeps): Promise<Records> {
   const [ledger, e2] = await attempt(deps.sql, installerLedgerSql(c, s));
   const [states, e3] = await attempt(deps.sql, manifestStatesSql(c, s));
   const [ends] = await attempt(deps.sql, windowEndsSql(c, s));
+  const [audit] = await attempt(deps.sql, installAuditSql(c, s));
   const coerced = (ledger ?? []).map((r) => {
     const row: Record<string, unknown> = { ...r };
     for (const col of LEDGER_BOOLEAN_COLUMNS) if (col in row && row[col] !== null) row[col] = truthy(row[col]);
@@ -245,6 +273,7 @@ export async function readRecords(deps: FlowDeps): Promise<Records> {
   return {
     scopes: scopes ?? [],
     ledger: coerced,
+    audit: audit ?? [],
     states: schemaStates(states ?? []),
     window_ends: Object.fromEntries((ends ?? []).map((r) => [text(r.scope), text(r.ends)])),
     errors: [e1, e2, e3].filter((e): e is string => !!e),
@@ -274,7 +303,9 @@ export interface Prep {
   stored_scopes: string[];
   wave: Wave | null;
   scopes: string[];
-  scopes_from: 'option' | 'stored' | 'none';
+  scopes_from: ScopesFrom;
+  /** How to lower the grain when a `catalog.*` scope is planned (`provision.narrowing_note`). */
+  scope_note: string | null;
   convert_rights: string;
   lines: PlanLine[];
   plan_id: string;
@@ -359,11 +390,15 @@ export async function waveSchemas(deps: FlowDeps, waveId: string, pinned: string
 /** Everything the panel shows before anything changes (`provision_io.prepare` + `replan`). */
 export async function prepare(deps: FlowDeps, opts: ParsedOptions): Promise<Prep> {
   const [probes, context] = await probe(deps);
-  const rights = rightsReport(probes, DOOR_APP);
   const records = await readRecords(deps);
+  const drift = identityDrift(context.jobs_identity, recordedIdentities(records.audit), opts.identity);
+  const rights = applyIdentityDrift(rightsReport(probes, DOOR_APP), drift);
   const stored = records.scopes.map((r) => text(r.scope)).filter(Boolean);
   const wave = opts.action === ACTION_GRANT_CONVERT ? await waveSchemas(deps, opts.wave_id, opts.plan_run_id || null) : null;
-  const scopes = opts.scope_list.length ? [...opts.scope_list] : [...stored];
+  const [scopes, scopesFrom]: [string[], ScopesFrom] = [ACTION_INSTALL, ACTION_CHECK].includes(opts.action)
+    ? resolveScopes(opts.scope_list, Boolean(opts.scope_all), stored, rights.coverage.candidates)
+    : opts.scope_list.length ? [[...opts.scope_list], SCOPES_FROM_OPTION]
+      : stored.length ? [[...stored], SCOPES_FROM_STORED] : [[], SCOPES_FROM_NONE];
   const lines = grantPlan({
     catalog: deps.catalog, schema: deps.schema, jobs_identity: opts.identity ?? context.jobs_identity,
     app_sp: context.app_sp, scopes, convert_rights: opts.convert_rights || CONVERT_ALL_AT_ONCE, action: opts.action,
@@ -375,7 +410,7 @@ export async function prepare(deps: FlowDeps, opts: ParsedOptions): Promise<Prep
   const { held, evidence } = await readHeld(deps, inst, context);
   return {
     probes, context, rights, records, stored_scopes: stored, wave, scopes,
-    scopes_from: opts.scope_list.length ? 'option' : stored.length ? 'stored' : 'none',
+    scopes_from: scopesFrom, scope_note: narrowingNote(scopes),
     convert_rights: opts.convert_rights || CONVERT_ALL_AT_ONCE,
     lines, plan_id: planId(lines), held, evidence, checked: check(inst, { held, evidence }, context),
   };

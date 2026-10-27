@@ -71,8 +71,9 @@ Who the jobs run as:
 
 - Every operator-facing job and `job_99_setup` (24 jobs) carries `run_as: ${var.jobs_run_as}`,
   a complex bundle variable (`service_principal_name`, `group_name` or `user_name`; default
-  `{user_name: <the deployer>}`; `prod`: `{service_principal_name: ${var.prod_run_as_sp}}`). The
-  two E2E seeder jobs have no `run_as` and run as the deployer. No target sets `run_as`: on a
+  `{user_name: <the deployer>}` on every target, `prod` included; no target overrides it). The
+  installer's `jobs_identity=sp:<application-id>` switches it to a service principal through
+  `variable-overrides.json` and a redeploy. The two E2E seeder jobs have no `run_as` and run as the deployer. No target sets `run_as`: on a
   target it also applies to the app, which the Apps platform refuses. Pinned by
   `test_jobs_run_as.py`.
 - The jobs' identity needs `CAN_MANAGE_RUN` on every job of the deployment (the `09` / `11e`
@@ -1603,8 +1604,8 @@ Deploy-fixed:
   waves into next-step selection.
 - `convert_run_as`: string; optional; default blank. The identity the CONVERT job will run as,
   whose convert permission sets `wave_status.open_lease` (see **side_effects**). Blank = assume the
-  convert job shares this conductor's `run_as` (true for this bundle: both inherit the target
-  `run_as`: prod `var.prod_run_as_sp`, dev/e2e the deployer). Set only when a workspace runs
+  convert job shares this conductor's `run_as` (true for this bundle: every job runs as
+  `var.jobs_run_as`, the deployer unless overridden). Set only when a workspace runs
   the convert job under a different principal than the conductor; the stored
   `convert_authority` verdicts for that identity are then used (this job cannot re-read them).
 
@@ -2948,10 +2949,10 @@ variable. A guard test pins every widget and flag to the list.
 | `action` | `install` | `install` / `check` / `grant_convert` / `revoke_convert` / `uninstall` (`uninstall` is notebook and CLI only) |
 | `confirm_grants` | `false` | `false` prints the plan and runs nothing |
 | `plan_id` | blank | Apply only when the plan's fingerprint still matches; a hand-back or uninstall plan has its own fingerprint |
-| `scopes` | the stored scopes | `catalog.schema` / `catalog.*`, comma-separated |
+| `scopes` | the stored scopes, else `all` | `catalog.schema` / `catalog.*` / `all`, comma-separated. `all` (`install` / `check` only) = every catalog with external tables the installer can grant on as `catalog.*`, else the grantable schemas of that catalog (`system`, `hive_metastore`, `samples` and non-standard catalog types are left out). Blank with nothing stored is `all`; stored scopes are never widened by a blank value. When a `catalog.*` scope is planned, every door prints the narrowing note (`provision.narrowing_note`) |
 | `convert_rights` | `all_at_once` | `all_at_once` grants `MANAGE` on every scope; `per_wave` leaves it to `grant_convert` |
 | `wave_id`, `plan_run_id` | blank | `grant_convert`: the wave, pinned to the current `wave_plan` |
-| `jobs_identity` | `keep` | `sp:<application-id>` / `group:<name>` / `user:<email>`: writes `jobs_run_as` to `.databricks/bundle/<target>/variable-overrides.json`; needs a redeploy |
+| `jobs_identity` | `keep` | `sp:<application-id>` / `group:<name>` / `user:<email>`: writes `jobs_run_as` to `.databricks/bundle/<target>/variable-overrides.json`; needs a redeploy. `keep` uses the deployed `run_as` (the deployer by default). When the deployed identity is not the one this install's Look / Read / Change grants went to (`provision.identity_drift`), the jobs' identity check is NO-GO and the install stops, naming both fixes; an explicit `jobs_identity` clears it |
 | `grantee_group` | blank | Grant to a group that contains the jobs' identity |
 | `data_mode` | `real` | `real` (`09 get started`), `fixture` (dev allowlist only), `none` |
 | `fixture_control_plane` | blank | Extra fixture allowlist entry, dev only |
@@ -2990,7 +2991,9 @@ run as the caller: the notebook session, the CLI profile, or the signed-in admin
 **failure_mode:** Every step is idempotent. A line the caller cannot grant is listed with who can,
 never retried. CLI exit codes: `0` done, `1` no-go, `2` invalid options, `3` applied with gaps,
 `4` `plan_id` mismatch (nothing ran), `5` waiting on a redeploy. The notebook stops with the same
-sentence, after the cell that printed the reason.
+sentence, after the cell that printed the reason. `MTM_OUTPUT=json` adds `scopes`, `scopes_from`
+(`option` / `stored` / `all` / `none`) and `scope_note` to the document. `PLAN_RULES_VERSION` `2`:
+a `plan_id` reviewed under rules `1` no longer matches.
 
 **typical_duration:** `check` well under a minute; `install` with `data_mode=real` waits for
 `99 setup` and the profiling job (about 30 minutes on a fresh serverless estate).

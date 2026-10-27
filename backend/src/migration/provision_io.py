@@ -316,19 +316,36 @@ ESTATE_SQL = ("SELECT table_catalog, table_schema, count(*) AS tables FROM syste
               "AND table_catalog <> 'system' AND table_schema <> 'information_schema' GROUP BY 1, 2")
 
 
+def catalog_types(w) -> Tuple[Dict[str, Optional[str]], Optional[str]]:
+    """``{catalog: catalog_type}`` for the catalogs the installer can see, or ``({}, error)``."""
+    try:
+        out = {}
+        for c in w.catalogs.list():
+            t = getattr(c, "catalog_type", None)
+            out[str(c.name).lower()] = getattr(t, "value", t)
+        return out, None
+    except Exception as ex:  # noqa: BLE001
+        return {}, _err(ex)
+
+
 def estate_rows(run_sql: RunSql, owners: Mapping[str, Any], principals: Sequence[str],
-                ma: Optional[bool]) -> Tuple[Optional[List[dict]], Optional[str]]:
+                ma: Optional[bool], excluded: Iterable[str] = ()) -> Tuple[Optional[List[dict]], Optional[str]]:
     rows, err = _try(run_sql, ESTATE_SQL)
     if rows is None:
         return None, err
+    skip = {str(c).lower() for c in excluded} | set(pv.NON_MIGRATABLE_CATALOGS)
     out = []
     for r in rows:
+        cat = str(r["table_catalog"]).lower()
+        if cat in skip:
+            continue
         fqn = f"{r['table_catalog']}.{r['table_schema']}".lower()
         can = can_grant_schema(owners, principals, fqn, ma)
-        out.append({"catalog": str(r["table_catalog"]).lower(), "schema": str(r["table_schema"]).lower(),
+        out.append({"catalog": cat, "schema": str(r["table_schema"]).lower(),
                     "tables": int(r.get("tables") or 0), "can_grant": bool(can),
+                    "catalog_can_grant": bool(can_grant_catalog(owners, principals, cat, ma)),
                     "grantor": None if can else pv.schema_grantor(owners["schema_owner"].get(fqn),
-                                                                  owners["catalog_owner"].get(fqn.split(".")[0]))})
+                                                                  owners["catalog_owner"].get(cat))})
     return sorted(out, key=lambda x: (x["catalog"], x["schema"])), None
 
 
@@ -366,7 +383,8 @@ def probe(w, run_sql: RunSql, *, catalog: str, schema: str, deployment: Optional
     else:
         records["can_self_grant"] = (can_grant_schema(owners, principals, ctl_fqn, ma)
                                      if exists else ctl_can)
-    estate, estate_err = estate_rows(run_sql, owners, principals, ma)
+    types, types_err = catalog_types(w)
+    estate, estate_err = estate_rows(run_sql, owners, principals, ma, pv.excluded_catalogs(types))
 
     probes = {"installer": user, "workspace_admin": "admins" in groups, "metastore_admin": ma,
               "control": control, "jobs": jobs_summary, "records": records,
@@ -383,6 +401,7 @@ def probe(w, run_sql: RunSql, *, catalog: str, schema: str, deployment: Optional
                "installer_group": installer_group, "app_name": app, "app_sp": app_sp,
                "control_exists": bool(exists), "grantable_schemas": grantable_schemas,
                "grantable_catalogs": grantable_catalogs, "estate_error": estate_err,
+               "catalog_types_error": types_err,
                "door": door, "deployment": deployment}
     return probes, context
 
@@ -803,8 +822,10 @@ def prepare(w, run_sql: RunSql, *, opts: Mapping[str, Any], catalog: str, schema
     with its ``plan_id``, per-line read-back status and who can grant what the person cannot."""
     probes, ctx = probe(w, run_sql, catalog=catalog, schema=schema, deployment=deployment,
                         app_name=app_name, door=door, warehouse_usable=warehouse_usable)
-    rights = pv.rights_report(probes, door=door)
     records = read_records(run_sql, catalog, schema)
+    drift = pv.identity_drift(ctx.get("jobs_identity"), pv.recorded_identities(records["audit"]),
+                              opts.get("identity"))
+    rights = pv.apply_identity_drift(pv.rights_report(probes, door=door), drift)
     stored = [r["scope"] for r in records["scopes"]]
     wave = None
     if opts.get("action") == pv.ACTION_GRANT_CONVERT:
@@ -823,15 +844,20 @@ def prepare(w, run_sql: RunSql, *, opts: Mapping[str, Any], catalog: str, schema
 def replan(w, prep: Mapping[str, Any], opts: Mapping[str, Any], *, catalog: str, schema: str) -> dict:
     """The plan half of ``prepare`` again, for new options (the CLI's scope picker), reusing the probe."""
     stored = prep["stored_scopes"]
-    scopes = list(opts.get("scope_list") or []) or list(stored)
+    if opts.get("action") in (pv.ACTION_INSTALL, pv.ACTION_CHECK):
+        scopes, scopes_from = pv.resolve_scopes(opts.get("scope_list") or [], bool(opts.get("scope_all")), stored,
+                                                prep["rights"]["coverage"]["candidates"])
+    else:
+        scopes = list(opts.get("scope_list") or []) or list(stored)
+        scopes_from = (pv.SCOPES_FROM_OPTION if opts.get("scope_list") else
+                       pv.SCOPES_FROM_STORED if stored else pv.SCOPES_FROM_NONE)
     wave_list = (prep.get("wave") or {}).get("schemas") or []
     ctx = prep["context"]
     lines = plan_for(ctx, {**opts, "scope_list": scopes}, catalog=catalog, schema=schema, wave_schemas=wave_list)
     inst = pv.installer_lines(lines)
     held = read_held(w, inst, groups_resolver(w, ctx))
     checked = pv.verify(inst, held)
-    return {**prep, "scopes": scopes,
-            "scopes_from": "option" if opts.get("scope_list") else ("stored" if stored else "none"),
+    return {**prep, "scopes": scopes, "scopes_from": scopes_from, "scope_note": pv.narrowing_note(scopes),
             "lines": lines, "plan_id": pv.plan_id(lines), "held": held, "checked": checked,
             "statuses": {pv.line_key(r): r["status"] for r in checked},
             "grantors": grantors_for([r for r in checked if r["status"] != pv.STATUS_PRESENT], ctx)}

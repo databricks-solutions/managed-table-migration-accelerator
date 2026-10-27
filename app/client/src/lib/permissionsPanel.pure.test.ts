@@ -37,7 +37,7 @@ function view(lines: ViewLine[], over: Partial<PermissionsView> = {}): Permissio
     state: 'ready', reason: null,
     rights: { installer: 'ana', checks: [], coverage: { schemas: 0, tables: 0, grantable_schemas: 0, grantable_tables: 0, uncovered: [], candidates: [], headline: '', band: 'none' }, caveat: null, can_install: true, suggested_scopes: '' },
     who: { user: 'ana@example.com', metastore_admin: false, jobs_identity: { kind: 'service_principal', name: SP }, job_count: 20, installer_group: null, deployment: '[e2e] mtm', install_notebook: null },
-    scopes: ['sales.orders', 'hr.pay'], stored_scopes: ['sales.orders'], scopes_from: 'stored', convert_rights: 'all_at_once', wave: null,
+    scopes: ['sales.orders', 'hr.pay'], stored_scopes: ['sales.orders'], scopes_from: 'stored', scope_note: null, convert_rights: 'all_at_once', wave: null,
     plan_id: 'abcdefabcdef', counts: {}, summary: {}, lines, pending: 0, missing: 0, unchecked: 0, need_someone_else: 0,
     handback: { revokes: [], refused: [], plan_id: 'x' }, record_errors: [], estate_error: null, cli_command: '',
     check_command: 'databricks bundle run install -t e2e --profile <your-profile>',
@@ -150,6 +150,15 @@ describe('results and requests', () => {
     expect(s).toBe('Granted 1. 1 failed. 1 need someone else. Checked after: 1 still missing.');
   });
 
+  it('counts lines the app cannot read as not checked, never as missing', () => {
+    const base = { plan_id: 'p', results: [{ ...line({}), outcome: 'granted' as const }], audit_errors: [], record_errors: [],
+      stopped: null, lines: [] };
+    expect(grantSummary({ ...base, summary: { present: 5, missing: 0, unknown: 2 } })).toBe('Granted 1. Checked after: 2 not checked.');
+    expect(grantSummary({ ...base, summary: { present: 4, missing: 1, unknown: 2 } })).toBe(
+      'Granted 1. Checked after: 1 still missing, 2 not checked.');
+    expect(grantSummary({ ...base, summary: { present: 7, missing: 0, unknown: 0 } })).toBe('Granted 1. Checked after: all in place.');
+  });
+
   it('builds the preview url and error text', () => {
     expect(viewUrl({})).toBe('/api/permissions');
     expect(viewUrl({ scopes: 'a.b,c.*', convert_rights: '' })).toBe('/api/permissions?scopes=a.b%2Cc.*');
@@ -202,6 +211,10 @@ describe('convertSummaryCase', () => {
   it('counts when tables are still to convert, and when an older server sends no profiled count', () => {
     expect(convertSummaryCase({ total: 3, profiled: 5 })).toBe('counts');
     expect(convertSummaryCase({ total: 3 })).toBe('counts');
+    expect(convertSummaryCase({ total: 3, profiled: 5, authorized: 1 })).toBe('counts');
+  });
+  it('reads every table still to convert as authorized when none is blocked', () => {
+    expect(convertSummaryCase({ total: 3, profiled: 5, authorized: 3 })).toBe('all_authorized');
   });
   it('is unread without a summary', () => {
     expect(convertSummaryCase(null)).toBe('unread');

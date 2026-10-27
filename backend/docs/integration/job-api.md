@@ -121,7 +121,7 @@ authoritative.
 | Variable | Default | Meaning |
 |---|---|---|
 | `prod_host` | `https://CHANGE-ME-prod.cloud.databricks.com` | Workspace host for the `prod` target. |
-| `prod_run_as_sp` | `""` | Service principal application id to run prod jobs as. |
+| `jobs_run_as` | `{user_name: <the deployer>}` | Who every stage job runs as, on every target (`prod` included). Complex, so not settable from `BUNDLE_VAR_*`: the installer's `jobs_identity=sp:<application-id>` writes it to `variable-overrides.json`, then redeploy. |
 | `e2e_external_base` | `""` | **E2E only.** Writable external-location base for the streaming/DLT integration seeds. Never part of a normal migration. |
 
 ---

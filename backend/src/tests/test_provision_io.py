@@ -263,6 +263,55 @@ def test_prepare_builds_the_plan_with_status_and_grantors():
     assert blocked, "sales.returns is owned by someone else, so its lines name who to ask"
 
 
+def test_blank_scopes_with_none_stored_plan_all():
+    prep = pio.prepare(_full_w(), FakeSql(), opts=_opts(), catalog="main", schema="migration",
+                       deployment=DEPLOY, door=pv.DOOR_CLI)
+    assert prep["scopes"] == ["sales.orders"] and prep["scopes_from"] == pv.SCOPES_FROM_ALL
+    assert prep["scope_note"] is None
+
+
+def test_scopes_all_takes_the_whole_catalog_when_you_can_grant_on_it():
+    probes, ctx = pio.probe(_w(owner="ann@x.com"), FakeSql(), catalog="main", schema="migration",
+                            deployment=DEPLOY)
+    assert all(r["catalog_can_grant"] for r in probes["estate"])
+    assert pv.rights_report(probes)["coverage"]["candidates"] == ["sales.*"]
+    assert ctx["catalog_types_error"], "the fake client has no catalogs.list, so the read degrades"
+
+
+def test_scopes_all_leaves_out_shared_and_foreign_catalogs():
+    w = _w(owner="ann@x.com")
+    w.catalogs = NS(list=lambda: [NS(name="Sales", catalog_type=NS(value="FOREIGN_CATALOG"))])
+    probes, ctx = pio.probe(w, FakeSql(), catalog="main", schema="migration", deployment=DEPLOY)
+    assert probes["estate"] == [] and ctx["catalog_types_error"] is None
+
+
+class AuditSql(FakeSql):
+    def __init__(self, audit):
+        super().__init__()
+        self.audit = audit
+
+    def __call__(self, s):
+        if s == pv.install_audit_sql("main", "migration"):
+            self.calls.append(s)
+            return self.audit
+        return super().__call__(s)
+
+
+def test_prepare_stops_when_the_jobs_moved_off_the_identity_that_holds_the_grants():
+    line = {"set": pv.SET_READ, "grantee": "old@x.com", "grantee_kind": pv.KIND_USER, "privilege": "SELECT",
+            "securable_type": "SCHEMA", "securable": "sales.orders"}
+    audit = [{"action": pv.AUDIT_INSTALL_GRANT, "phase": "SUCCESS", "created_at": "2026-10-01 10:00:00",
+              "detail": pv.audit_detail(line, door="cli", pid="p", added=True)}]
+    prep = pio.prepare(_full_w(), AuditSql(audit), opts=_opts(), catalog="main", schema="migration",
+                       deployment=DEPLOY, door=pv.DOOR_CLI)
+    check = next(c for c in prep["rights"]["checks"] if c["key"] == "jobs_identity")
+    assert check["status"] == pv.NO_GO and not prep["rights"]["can_install"]
+    assert "jobs_identity=user:old@x.com, then redeploy" in check["detail"]
+    prep = pio.prepare(_full_w(), AuditSql(audit), opts=_opts(jobs_identity=f"sp:{SP}"), catalog="main",
+                       schema="migration", deployment=DEPLOY, door=pv.DOOR_CLI)
+    assert prep["rights"]["can_install"]
+
+
 def test_apply_stage_never_tries_a_line_the_person_cannot_grant():
     prep = pio.prepare(_full_w(eff_privs=()), FakeSql(), opts=_opts(scopes="sales.orders,sales.returns"),
                        catalog="main", schema="migration", deployment=DEPLOY, door=pv.DOOR_CLI)

@@ -1523,3 +1523,27 @@ never recorded as if it had been read.
 owner, because the app had no way to see it. Granting the app `CAN_MANAGE` on the jobs would let it
 read the lists, but that is new authority for a display fix, so the app infers from evidence it
 can see and says so.
+
+## T62 · Migration scope starts with everything you can grant on; the jobs run as you (not in the v4 mockup)
+
+**What.** With no scopes saved, Settings → Permissions → Migration scope opens with every catalog
+with external tables you can grant on as `catalog.*` rows (the schemas you can grant on where you
+cannot grant on the whole catalog), already in the plan, sourced "all you can grant on"
+(`scopes_from: "all"`). Each row can be removed to narrow, except the last one while nothing is
+saved, because removing it would silently fall back to the same expansion. A `catalog.*` row adds
+the narrowing note (`scope_note`). `system`, `hive_metastore`, `samples` and shared or foreign
+catalogs are never offered; when the catalog types cannot be read, a note says only the name rule
+applied. Typing `all` adds the expansion. When the jobs run as a person, Who the jobs run as says
+"Anyone who can start these jobs runs them with your access" with the `jobs_identity=sp:` switch,
+and the Plan opens with "The jobs run as you, so Look, Read and Change go to you." When the
+deployed identity is not the one this install's grants went to, that row is NO-GO with both fixes.
+In **Add schemas**, a saved `catalog.*` covers every schema of that catalog, so they read as
+already in scope and are never ticked twice. Convert rights reads "All N tables still to convert
+are authorized for …" when none is blocked, instead of zero counts and an empty grant script, and
+the toast after **Grant** counts not-checked lines apart from missing ones ("Checked after: 2 not
+checked").
+
+**Why.** The tool migrates an estate, and the installer is usually a workspace and metastore admin
+who will run it themselves. Asking them to list schemas before the first profile, and to set up a
+service principal for prod, was friction with no safety gain: the grants still go only where they
+can grant, the plan still shows every line before **Grant**, and stored scopes are never widened.

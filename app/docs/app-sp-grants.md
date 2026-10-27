@@ -13,9 +13,10 @@ CLI, Settings → Permissions, MCP) is designed and recorded as built in
 1. **The jobs' identity is one bundle variable.** Every stage job carries
    `run_as: ${var.jobs_run_as}` (a complex variable: `service_principal_name`, `group_name` or
    `user_name`). It is the identity that executes `SET MANAGED` / `UNSET MANAGED` / `VACUUM`.
-   The default is whoever deploys. `prod` keeps its earlier behavior: `jobs_run_as` is set from
-   `var.prod_run_as_sp`, normally the app SP, so one SP both serves the app and runs the jobs.
-   The installer's `jobs_identity` option writes a different choice to
+   The default is whoever deploys, on every target, `prod` included: the migration is usually run
+   by the person who installs it, and a mandatory service principal was friction with no safety
+   gain. A person-run install says so on the jobs' identity line and in the plan header. The
+   installer's `jobs_identity` option writes a different choice to
    `.databricks/bundle/<target>/variable-overrides.json` and redeploys. The app SP always stays
    the app-execution identity (control-plane reads, the single `migration_actions` write,
    `jobs.runNow`). The `run_as` sits on each job, not on the target, because a target-level
@@ -76,7 +77,7 @@ Because `run_as` is static:
 | Target | `mode` | `run_as` resolves to (`var.jobs_run_as`) | Convert authority satisfied by |
 |---|---|---|---|
 | `dev` / `e2e` | `development` | the **deploying user** (the default) | the deployer's own ownership or `MANAGE` |
-| `prod` | `production` | `${var.prod_run_as_sp}` (normally the app SP) | the **SP** — needs `MANAGE` (Tier 2) plus `SELECT` + `MODIFY` |
+| `prod` | `production` | the **deploying user** (the default) | the deployer's own ownership or `MANAGE` |
 | any | any | the installer's `jobs_identity` choice, after the redeploy | that identity |
 
 The jobs' identity also needs `CAN_MANAGE_RUN` on every job of the deployment, so the `09` /

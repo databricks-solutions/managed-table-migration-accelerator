@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { HttpError, depsFor, errorKindOf, grantPermissions, handBack, installerGroupFromEnv, jobsRunHeld, permissionsView } from './permissions.js';
+import { HttpError, catalogTypesOf, depsFor, errorKindOf, grantPermissions, handBack, installerGroupFromEnv, jobsRunHeld, permissionsView } from './permissions.js';
 import { APP_SP, SP, deps, world } from './permissions.testutil.js';
 
 async function rejects(p: Promise<unknown>): Promise<HttpError> {
@@ -28,6 +28,35 @@ describe('GET /api/permissions (view)', () => {
     expect(v.cli_command).toContain('MTM_SCOPES=sales.orders,hr.pay');
     expect(v.cli_command).toContain('--profile <your-profile>');
     expect(w.log.some((s) => s.startsWith('GRANT') || s.startsWith('INSERT'))).toBe(false);
+  });
+
+  it('plans scopes=all when nothing is stored: whole catalogs you can grant on, with the narrowing note', async () => {
+    const v = await permissionsView(deps(world()), {});
+    expect(v.scopes_from).toBe('all');
+    expect(v.scopes).toEqual(['sales.*']);
+    expect(v.scope_note).toContain('convert_rights=per_wave');
+    expect(v.cli_command).toContain('MTM_SCOPES=sales.*');
+    const stored = await permissionsView(deps(world({ scopes: [{ scope: 'sales.orders' }] })), {});
+    expect([stored.scopes_from, stored.scopes, stored.scope_note]).toEqual(['stored', ['sales.orders'], null]);
+  });
+
+  it('leaves shared and foreign catalogs out of scopes=all, and says so when it cannot read the types', async () => {
+    const shared = await permissionsView(deps(world({ catalogTypes: { sales: 'DELTASHARING_CATALOG' } })), {});
+    expect([shared.scopes_from, shared.scopes]).toEqual(['none', []]);
+    const unread = await permissionsView(deps(world({ catalogTypes: null })), {});
+    expect(unread.scopes).toEqual(['sales.*']);
+    expect(unread.catalog_types_error).toContain('PERMISSION_DENIED');
+  });
+
+  it('stops when the jobs now run as someone other than the identity holding the grants', async () => {
+    const detail = JSON.stringify({ set: 'Read', grantee: 'old@example.com', grantee_kind: 'user', privilege: 'SELECT',
+      securable_type: 'SCHEMA', securable: 'sales.orders', added: true });
+    const w = world({ installAudit: [{ action: 'INSTALL_GRANT', phase: 'SUCCESS', detail, created_at: '2026-10-01 10:00:00' }] });
+    const v = await permissionsView(deps(w), { scopes: 'sales.orders' });
+    const jobs = v.rights.checks.find((c) => c.key === 'jobs_identity');
+    expect(jobs?.status).toBe('NO-GO');
+    expect(jobs?.detail).toContain('jobs_identity=user:old@example.com, then redeploy');
+    expect(v.rights.can_install).toBe(false);
   });
 
   it('reads not_installed when the control schema is missing, and cannot_act when the app cannot run SQL', async () => {
@@ -246,5 +275,26 @@ describe('installerGroupFromEnv', () => {
     expect(installerGroupFromEnv('group:')).toBeNull();
     expect(installerGroupFromEnv(undefined)).toBeNull();
     expect(installerGroupFromEnv('legacy-group')).toBe('legacy-group');
+  });
+});
+
+describe('catalogTypesOf', () => {
+  it('pages the Unity Catalog catalog list and keys each type by lower-case name', async () => {
+    const pages: Record<string, Record<string, unknown>> = {
+      '': { catalogs: [{ name: 'Main', catalog_type: 'MANAGED_CATALOG' }, { name: 'shared' }], next_page_token: 'p2' },
+      p2: { catalogs: [{ name: 'fed', catalog_type: 'FOREIGN_CATALOG' }] },
+    };
+    const seen: Record<string, string>[] = [];
+    const types = await catalogTypesOf((path, query) => {
+      expect(path).toBe('/api/2.1/unity-catalog/catalogs');
+      seen.push(query);
+      return Promise.resolve(pages[query.page_token ?? '']);
+    });
+    expect(types).toEqual({ main: 'MANAGED_CATALOG', shared: null, fed: 'FOREIGN_CATALOG' });
+    expect(seen).toEqual([{ max_results: '0' }, { max_results: '0', page_token: 'p2' }]);
+  });
+
+  it('throws when the list is unreadable, so the view can name the error', async () => {
+    await expect(catalogTypesOf(() => Promise.reject(new Error('PERMISSION_DENIED')))).rejects.toThrow('PERMISSION_DENIED');
   });
 });

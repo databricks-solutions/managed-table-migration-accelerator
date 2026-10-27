@@ -1,7 +1,8 @@
 # 07b - Convert permissions and Authorize
 
-`ALTER TABLE ... SET MANAGED` runs as the convert job's identity: its `run_as`, which in
-production is the App service principal (SP). On each table that identity needs:
+`ALTER TABLE ... SET MANAGED` runs as the convert job's identity: its `run_as`, which by default
+is the person who deployed the jobs, on every target, or a service principal chosen with the
+installer's `jobs_identity`. On each table that identity needs:
 
 - `USE CATALOG` on the catalog and `USE SCHEMA` on the schema;
 - **ownership or `MANAGE`** on the table, its schema, or its catalog, held directly, inherited,

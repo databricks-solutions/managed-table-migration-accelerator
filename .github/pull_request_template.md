@@ -8,7 +8,7 @@
 
 ## Checklist
 
-- [ ] `make ci` passes locally (backend tests + app typecheck, tests and lint — this repo has no GitHub Actions).
+- [ ] `make ci` passes locally (backend tests, docs site build, app typecheck, tests and lint — the CI workflow runs the same checks).
 - [ ] `databricks bundle validate -t dev --profile <profile>` passes if bundle, job or dashboard config changed.
 - [ ] A changed control-table column or job parameter is reflected in `backend/docs/contracts/control-tables.md` / `jobs.md`.
 - [ ] New manifest columns are in both `MANIFEST_COLUMNS` and `_DEFERRED_DEFAULTS`; new pure logic has a `backend/src/tests/test_*.py`.

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Cut a GitHub release from a local checkout (the repository has no GitHub Actions).
+"""Cut a GitHub release from a local checkout (releases are published from here, not from CI).
 
     python scripts/release.py check   v0.1.0   # tag == version in every versioned file + changelog
     python scripts/release.py notes   0.1.0    # print that version's CHANGELOG.md section

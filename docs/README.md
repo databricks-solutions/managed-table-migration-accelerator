@@ -4,6 +4,8 @@ This is the canonical, narrative documentation for the repository. It explains w
 tool does, how it is built, and how to run a migration safely at scale. It links down into
 the authoritative contract docs rather than restating them.
 
+Read it as a site: <https://databricks-solutions.github.io/managed-table-migration-accelerator/>.
+
 The tool converts Unity Catalog **EXTERNAL** tables to **MANAGED** tables with
 `ALTER TABLE ... SET MANAGED`, packaged as a single **Databricks Asset Bundle**. It
 discovers, assesses, plans, dry-runs, freezes, authorizes the convert, converts, validates,

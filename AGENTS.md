@@ -113,8 +113,9 @@ This repo is a monorepo with a **single Databricks Asset Bundle**. The root
 databricks.yml            # THE bundle root: variables, targets (dev/e2e/prod),
                           #   include (backend + app resources); no artifacts block
 Makefile                  # repo-level convenience wrapper (bundle + pytest)
+.github/workflows/        # ci.yml (= make ci) + deploy-docs.yml (docs site -> GitHub Pages); no release workflow
 CHANGELOG.md              # release notes, one section per version (see "Cutting a release")
-scripts/release.py        # local release gate + publisher (no GitHub Actions; `make release`)
+scripts/release.py        # local release gate + publisher (`make release`; Actions only runs CI + docs)
 backend/                  # migration TOOLING
   resources/*.yml         #   one Workflow job per stage (file number == execution order)
     job_00_profiler.yml ... job_10_campaign.yml
@@ -841,10 +842,17 @@ any of them):
 - `app/package-lock.json` — the two root `"version"` entries (top level and `packages[""]`)
 - `app/server/telemetry/product.ts` — `VERSION`
 
-**This repository has no GitHub Actions** (disabled by the organization, permanently), so every
-check runs locally: `make ci` is the pre-merge gate (backend tests, the docs site build, app
-typecheck, tests and lint) and releases are published from a checkout. Do not add
-`.github/workflows/` files — they never run.
+**GitHub Actions builds and deploys the docs site and runs CI. Releases are still cut locally.**
+`.github/workflows/ci.yml` runs the same checks as `make ci` (backend tests, the docs site build,
+app typecheck, tests and lint) on every pull request and push to `main`; `deploy-docs.yml`
+publishes `docs/site/` to GitHub Pages on a push to `main` that touches `docs/` or `backend/docs/`.
+Both are secretless and `contents: read` (only the Pages deploy job gets `pages: write` +
+`id-token: write`), run on GitHub-hosted runners, install from lockfiles without install scripts (`npm ci --ignore-scripts`; pip
+`--require-hashes --only-binary :all:` from `backend/requirements-ci.txt`), and pin every action to a full commit SHA with its version in a
+comment. `make ci` is still the pre-merge gate, and there is no release workflow: releases are
+published from a checkout. Do not add a workflow that publishes, holds secrets, or runs on
+`pull_request_target`; a new workflow or permission goes back through the organization's Actions
+review (#unblock-releases-non-eng).
 
 To cut `vX.Y.Z`:
 
@@ -858,7 +866,8 @@ To cut `vX.Y.Z`:
    are that version's `CHANGELOG.md` section. A pre-release tag (`vX.Y.Z-rc.N`, with the same
    `X.Y.Z-rc.N` in the four files and a matching changelog heading) is published as a pre-release.
 
-Never move or delete a published tag; fix forward with a new patch release.
+Never move or delete a published tag (the `release tags` ruleset on `v*` refuses both); fix
+forward with a new patch release.
 
 ## Before you commit
 

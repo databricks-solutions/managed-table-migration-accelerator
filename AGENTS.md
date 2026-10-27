@@ -131,6 +131,8 @@ app/                      # admin CONTROL-PLANE UI (Databricks App: AppKit/React
   resources/app.yml       #   the app resource (source_code_path: .. -> app/)
   app.yaml                #   app runtime manifest (command + env valueFrom)
   client/ server/ shared/ config/   #   AppKit source (server/mcp/ = the Genie Code MCP server, POST /mcp)
+docs/                     # operator docs (markdown, the single source of truth)
+  site/                   #   Docusaurus site built from docs/ + six backend/docs reference pages
 ```
 
 **Roles.** `backend/` is the migration tooling a human runs from Workflow jobs; `app/`
@@ -750,6 +752,30 @@ and the source-scan notebook output — where it is threaded from `var.workspace
 (`DATABRICKS_WORKSPACE_ID` → `/api/config` for the app; the notebook runtime context for the
 scan). Set `var.workspace_id` per target (see `databricks.yml`); unset = links omit `?o=`.
 
+### Docs site (`docs/site/`)
+
+A Docusaurus site built from the markdown in `docs/` (route `/docs/<file-name>`) plus six
+`backend/docs` pages under `/reference` (`REFERENCE_PAGES` in `docs/site/docusaurus.config.ts`).
+The markdown stays the single source of truth and must keep reading correctly on github.com, so
+**never edit a page for the site**:
+
+- `make docs-dev` runs it locally with live reload; `make docs-build` runs the link tests, the
+  typecheck and the production build. `make ci` includes `docs-build`.
+- `.md` files are parsed as CommonMark (`format: 'detect'`), not MDX, so `<`, `{` and raw HTML are
+  fine. Inside a Mermaid **sequence diagram** a `;` ends the statement; write a comma instead.
+- Relative links that leave a docs instance are rewritten at build time by
+  `src/remark/repoLinks.ts` (pure mapping in `src/remark/linkMap.mjs`, tested by `npm test`): to
+  the other instance's route when it publishes the target, else to the file (`blob`) or folder
+  (`tree`) on GitHub. To publish another backend page, add it to `REFERENCE_PAGES` and
+  `sidebarsReference.ts`.
+- A broken link or markdown link **fails the build** (`onBrokenLinks` and
+  `onBrokenMarkdownLinks` are `throw`). New sidebar pages go in `sidebars.ts` explicitly; labels
+  come from each page's H1 unless the sidebar entry sets one.
+- `docs/site/.npmrc` keeps registry hosts out of `package-lock.json`
+  (`omit-lockfile-registry-resolved`), so the lockfile resolves against whatever registry the
+  machine uses. Build output, `.docusaurus/` and `node_modules/` are git-ignored, which also keeps
+  them out of `bundle deploy`.
+
 ## Live e2e estate (`backend/.e2e/seed_real_estate.py`) — operational patterns
 
 Learned the hard way while seeding the e2e demo estate. The `.e2e/README.md` is the full
@@ -816,8 +842,9 @@ any of them):
 - `app/server/telemetry/product.ts` — `VERSION`
 
 **This repository has no GitHub Actions** (disabled by the organization, permanently), so every
-check runs locally: `make ci` is the pre-merge gate (backend tests + app typecheck, tests and lint)
-and releases are published from a checkout. Do not add `.github/workflows/` files — they never run.
+check runs locally: `make ci` is the pre-merge gate (backend tests, the docs site build, app
+typecheck, tests and lint) and releases are published from a checkout. Do not add
+`.github/workflows/` files — they never run.
 
 To cut `vX.Y.Z`:
 
@@ -835,7 +862,7 @@ Never move or delete a published tag; fix forward with a new patch release.
 
 ## Before you commit
 
-- [ ] `python -m pytest backend/src/tests/ -q` passes (`make ci` before a PR: it adds the app checks).
+- [ ] `python -m pytest backend/src/tests/ -q` passes (`make ci` before a PR: it adds the docs site build and the app checks).
 - [ ] `databricks bundle validate -t dev` passes if you touched bundle/job/dashboard config.
 - [ ] User-visible changes have a line under `## [Unreleased]` in `CHANGELOG.md`.
 - [ ] New manifest columns are added to both `MANIFEST_COLUMNS` and `_DEFERRED_DEFAULTS`.

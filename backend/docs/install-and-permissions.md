@@ -1107,7 +1107,7 @@ sequenceDiagram
   Job->>UC: Re-check gates and convert authority (as itself)
   UC-->>Job: Allowed or refused
   Job->>UC: SET MANAGED (only if every gate passed)
-  Job-->>App: Writes control tables; app reads them back
+  Job-->>App: Writes control tables, app reads them back
 ```
 
 And one grant from the app:

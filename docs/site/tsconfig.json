@@ -1,0 +1,10 @@
+// Not used by "docusaurus start/build"; it powers the IDE and `npm run typecheck`.
+{
+  "extends": "@docusaurus/tsconfig",
+  "compilerOptions": {
+    // @docusaurus/tsconfig sets baseUrl, which TypeScript 6 deprecates.
+    "ignoreDeprecations": "6.0",
+    "strict": true
+  },
+  "exclude": [".docusaurus", "build", "node_modules"]
+}

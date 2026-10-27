@@ -1,0 +1,37 @@
+/* Site-wide theme. Infima variables: https://infima.dev */
+:root {
+  --ifm-color-primary: #d9412b;
+  --ifm-color-primary-dark: #c43a27;
+  --ifm-color-primary-darker: #b93725;
+  --ifm-color-primary-darkest: #982d1e;
+  --ifm-color-primary-light: #dd5440;
+  --ifm-color-primary-lighter: #df5e4b;
+  --ifm-color-primary-lightest: #e57b6b;
+  --ifm-code-font-size: 92%;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.1);
+  --mtm-hero-from: #fff1ee;
+}
+
+[data-theme='dark'] {
+  --ifm-color-primary: #ff7a63;
+  --ifm-color-primary-dark: #ff5f43;
+  --ifm-color-primary-darker: #ff5233;
+  --ifm-color-primary-darkest: #ff2a04;
+  --ifm-color-primary-light: #ff9583;
+  --ifm-color-primary-lighter: #ffa293;
+  --ifm-color-primary-lightest: #ffcac1;
+  --docusaurus-highlighted-code-line-bg: rgba(0, 0, 0, 0.3);
+  --mtm-hero-from: #2a1f1d;
+}
+
+/* Wide tables in the contracts scroll instead of squeezing. */
+.markdown table {
+  display: block;
+  overflow-x: auto;
+}
+
+/* Mermaid diagrams: centre them and let wide ones scroll. */
+.docusaurus-mermaid-container {
+  overflow-x: auto;
+  text-align: center;
+}

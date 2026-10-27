@@ -23,6 +23,8 @@ SWEPT = sorted(
         ROOT / "README.md",
     )
     if not set(p.relative_to(ROOT).parts) & set(_HISTORICAL) and p.name != "design-deltas.md"
+    # The docs site project (build output, node_modules) holds no source pages.
+    and not p.is_relative_to(ROOT / "docs" / "site")
 )
 
 FORBIDDEN = [

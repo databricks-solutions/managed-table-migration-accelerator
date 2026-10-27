@@ -39,7 +39,7 @@ deploy-prod: ## Deploy all jobs to prod (PROFILE=<prod workspace profile>; the j
 test: ## Run the pure-logic unit tests (no cluster)
 	python -m pytest backend/src/tests/ -q
 
-ci: test docs-build ## Every pre-merge check (no GitHub Actions here): backend tests, docs site build, app typecheck/tests/lint
+ci: test docs-build ## Every pre-merge check (CI runs the same on GitHub): backend tests, docs site build, app typecheck/tests/lint
 	cd app && npm ci --no-audit --no-fund && npm run typecheck && npx vitest run && npx eslint client/src server
 
 docs-dev: ## Run the docs site locally with live reload (docs/site, http://localhost:3000)

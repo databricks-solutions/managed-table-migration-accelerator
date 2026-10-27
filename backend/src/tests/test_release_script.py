@@ -1,4 +1,4 @@
-"""scripts/release.py: the local release gate (the repository has no GitHub Actions)."""
+"""scripts/release.py: the local release gate (releases are published from a checkout, not from CI)."""
 
 import importlib.util
 import json

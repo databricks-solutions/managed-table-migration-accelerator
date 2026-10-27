@@ -95,6 +95,11 @@ release may change job parameters or control-table columns; every such change is
   unchanged: links that leave a page's folder are rewritten at build time to a site page or to the
   file on GitHub, and a broken link fails the build. Run it with `make docs-dev`; `make ci` now
   builds it too.
+- **CI and the docs site deploy run on GitHub Actions.** `ci.yml` runs the `make ci` checks on
+  every pull request and push to `main` (secretless, read-only, every action pinned to a commit
+  SHA, Python dependencies hash-locked in `backend/requirements-ci.txt`); `deploy-docs.yml`
+  publishes the docs site to GitHub Pages. Dependabot watches the actions, npm and pip
+  dependencies. Releases are still cut locally with `make release`.
 
 ### Fixed
 

@@ -126,6 +126,8 @@ export interface GrantsPlanDeps {
   distinctTargets: () => Promise<{ catalog: string; schema: string }[]>;
   /** Scopes the admin selected in the panel, already validated by parseScopeParam. */
   requestedScopes?: Scope[];
+  /** false = skip Tier 2 (no per-schema SHOW GRANTS): the app's own-access panel shows Tier 1 only. */
+  includeTier2?: boolean;
   /** Run a SHOW GRANTS statement and return its rows. Throws → the caller maps to 'unknown'. */
   showGrants: (stmt: string) => Promise<Record<string, unknown>[]>;
   /** authoritySummarySql rows; null when convert_authority is absent (not bootstrapped yet). */
@@ -172,7 +174,7 @@ export async function buildGrantsPlan(deps: GrantsPlanDeps): Promise<GrantsPlanR
   ];
 
   const tier1 = await Promise.all(tier1Specs(deps.catalog, deps.schema).map((s) => statusFor(s, sp, showGrants)));
-  const tier2 = await Promise.all(
+  const tier2 = deps.includeTier2 === false ? [] : await Promise.all(
     tier2Targets.map(async (t) => ({
       catalog: t.catalog,
       schema: t.schema,
@@ -250,6 +252,7 @@ export function registerGrantsPlanRoute(app: Application): void {
         catalog,
         schema,
         requestedScopes: parseScopeParam(req.query.scopes),
+        includeTier2: req.query.tier2 !== '0',
         currentUser: async () => {
           try {
             const rows = await spQuery('SELECT current_user() AS u');

@@ -138,6 +138,21 @@ describe('buildGrantsPlan', () => {
     expect(plan.authority_summary).toBeNull();
   });
 
+  it('includeTier2 false reads Tier 1 and the summary only, no per-schema SHOW GRANTS', async () => {
+    const seen: string[] = [];
+    const plan = await buildGrantsPlan(deps({
+      includeTier2: false,
+      showGrants: (stmt: string) => {
+        seen.push(stmt);
+        return Promise.resolve([]);
+      },
+    }));
+    expect(plan.tier1).toHaveLength(4);
+    expect(plan.tier2).toEqual([]);
+    expect(plan.authority_summary).not.toBeNull();
+    expect(seen.some((s) => s.includes('sales'))).toBe(false);
+  });
+
   it('reads each securable once: N schemas over C catalogs cost N + C tier-2 statements', async () => {
     const seen: string[] = [];
     const targets = [

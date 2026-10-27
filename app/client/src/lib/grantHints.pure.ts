@@ -1,5 +1,5 @@
 /**
- * Tooltip copy for the "Grants the App SP needs" panel — one line per (tier, privilege)
+ * Tooltip copy for the app's grant panels — one line per (tier, privilege)
  * explaining WHY the access exists and WHAT it unblocks. Grounded in
  * app/docs/app-sp-grants.md (the two grant tiers) and the convert doc; not invented.
  * Pure, no I/O — unit-tested in grantHints.pure.test.ts.

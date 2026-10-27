@@ -112,29 +112,25 @@ the setup identity's authority on a shared catalog; when it is missing, a catalo
 admin runs the printed statement once. The grantee is the service principal's client ID (a UUID in
 backticks; a display name grants nothing), shown on the app's page in the workspace.
 
-### The Settings page generates the rest
+### The Settings page checks the rest
 
-The app's **Settings** page (**Connection & policy**) has two panels. **Permissions** checks, grants
-and hands back as the signed-in admin ([Carry on in the app](#carry-on-in-the-app)). Below it,
-**Permissions the app needs** generates copy-paste SQL and checks with `SHOW GRANTS` which grants
-have landed:
+The app's **Settings** page (**Connection & policy**) has two panels, one per identity:
 
-- **Tier 1**, control-plane access: the four grants above (also automated by `job_99_setup`).
-- **Tier 2**, per target schema: `USE CATALOG`, `USE SCHEMA`, `SELECT` and `MANAGE` at schema grain,
-  which covers every table in the schema, including ones nobody has listed yet.
-- **Convert permission**: a downloadable `convert-permissions.sql` with the grants the convert
-  identity still needs per table, grouped by who must run them.
-- **What you can see**: the schemas with external tables the signed-in admin can see, next to a
-  manual "add catalog/schema" input. Tick a schema (or type one) and its Tier 2 grants appear
-  straight away, so you can grant the app access before the first profiler run. Nothing is
-  ticked for you. The list is the admin's visibility, not the whole estate: the profiler finds
-  the authoritative set once the grants land. On a large metastore the scan stops after about
-  20 seconds and says how many catalogs it covered.
+- **Permissions** is for the migration jobs. It checks, grants and hands back as the signed-in admin
+  ([Carry on in the app](#carry-on-in-the-app)). Its **Migration scope** part lists the schemas with
+  external tables you can see: tick a schema (or type one) and its grants join the plan straight
+  away, so you can grant access before the first profiler run. Nothing is ticked for you. The list
+  is your visibility, not the whole estate: the profiler finds the authoritative set once the grants
+  land. On a large metastore the scan stops after about 20 seconds and says how many catalogs it
+  covered. Its **Convert rights** part also counts the tables still to convert that are not yet
+  authorized, and downloads `convert-permissions.sql`: the grants the convert identity still needs
+  per table, grouped by who must run them.
+- **The app's own access** is for the app's service principal: the four control-table grants above
+  (granted by `job_99_setup`), each checked with `SHOW GRANTS`, with **Copy** for the SQL.
 
-This panel generates and verifies SQL; it never runs a `GRANT` or changes an owner. Grants that run
-go through the Permissions panel, as you, after a confirm. The full grant
-contract, including the `run_as` model and the reasoning behind each tier, is in
-[App service principal grants](../app/docs/app-sp-grants.md).
+The app never runs a `GRANT` as its own identity or changes an owner. Grants that run go through the
+Permissions panel, as you, after a confirm. The full grant contract, including the `run_as` model
+and the reasoning behind each tier, is in [App service principal grants](../app/docs/app-sp-grants.md).
 
 ## Configure the bundle
 
@@ -328,8 +324,10 @@ runs as you and reads the grant back. The convert itself is a separate confirm:
 The gate's permission check updates on the next dry run or Authorize, which write the verdict the
 gate reads.
 
-If the workspace does not let the app run SQL for you, Permissions says so and shows the notebook
-and CLI commands instead.
+If your sign-in to the app has no SQL access (a session from before the app asked for it),
+Permissions says so, lists the grants the plan expects as **not checked**, and gives a CLI dry run
+and the notebook path instead. To grant from the app, open it in a new private window, approve the
+sign-in prompt, then press **Check again**.
 
 ### From Genie Code
 

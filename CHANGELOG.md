@@ -95,6 +95,12 @@ release may change job parameters or control-table columns; every such change is
 - **The e2e control-plane wipe empties every control table.** `--wipe-control-plane` now also
   empties `convert_authority` and `migration_scope`, so a fresh install no longer shows old convert
   rights or the old migration scope.
+- **Settings → Permissions explains a sign-in with no SQL access.** When your sign-in to the app
+  has no `sql` scope (it predates the app asking for it), the panel now says so and how to fix it
+  (open the app in a new private window and approve the prompt). It no longer shows `can't read` on
+  grants you already hold or names guessed grantors: every line reads "not checked". Its CLI
+  command is a dry run without a `plan_id`, because a plan built from failed reads is not the plan
+  the CLI computes and the CLI would refuse it.
 
 - **The `prod` target validates.** A target-level `run_as` also applied to the app, which the
   Apps platform refuses ("apps do not support a setting a run_as user that is different from the
@@ -114,6 +120,13 @@ release may change job parameters or control-table columns; every such change is
 - **Your own bundle targets stay local.** The bundle includes an optional, git-ignored
   `databricks.local.yml` for targets such as a long-lived demo deployment, and `.gitignore` now
   ignores every `.env.<name>` file except the tracked `*.example` templates.
+- **Settings has one grant panel per identity.** "Permissions the app needs" is now **The app's
+  own access**: the app service principal's control-table grants, checked and copyable. Its
+  copy-paste grants for the jobs identity duplicated the Permissions plan and are gone; its schema
+  picker moved into Permissions → Migration scope, where a ticked schema joins the plan directly,
+  and the per-table convert permission summary and script moved into Convert rights. Picks are no
+  longer saved in the browser. `GET /api/grants/plan` takes `tier2=0` to skip the per-schema reads;
+  without it the response is unchanged (the MCP tool `mtm_get_grants_plan` still gets Tier 2).
 - **The profiler preflight no longer offers `READ METADATA` for enrichment.** A live test showed
   `DESCRIBE DETAIL` and `DESCRIBE HISTORY` still need `SELECT` with `READ METADATA` held on the
   metastore or catalog. An enrichment gap with no known catalogs now prints `USE CATALOG`,

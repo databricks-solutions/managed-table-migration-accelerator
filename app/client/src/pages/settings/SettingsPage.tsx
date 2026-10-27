@@ -27,6 +27,7 @@ import { SectionHeader } from '../../components/SectionHeader';
 import { ACTION_COPY, SECTION_COPY } from '../../lib/sectionCopy';
 import { GrantsPanel } from './GrantsPanel';
 import { PermissionsPanel } from './PermissionsPanel';
+import { useAppGrantsPlan } from './useAppGrantsPlan';
 
 /**
  * Connection & policy — the smallest route, and the app's live diagnostic.
@@ -96,11 +97,12 @@ const FIRST_RUN_FAIL_CLOSED: Partial<Record<QueryKey, { label: string; note: str
 };
 
 export function SettingsPage() {
+  const appPlan = useAppGrantsPlan();
   return (
     <div className="mx-auto flex max-w-4xl flex-col gap-6">
       <ConnectionCard />
-      <PermissionsPanel />
-      <GrantsPanel />
+      <PermissionsPanel appPlan={appPlan} />
+      <GrantsPanel state={appPlan} />
       <QueryHealthCard />
     </div>
   );

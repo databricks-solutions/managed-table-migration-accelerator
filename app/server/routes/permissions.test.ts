@@ -37,6 +37,15 @@ describe('GET /api/permissions (view)', () => {
     expect((await permissionsView(deps(noSql, { tokenScopes: ['iam.current-user:read'] }), {})).state).toBe('cannot_act');
   });
 
+  it('without SQL, blames the sign-in and hands out a dry run, never a plan built from failed reads', async () => {
+    const v = await permissionsView(deps(world({ warehouse: false }), { tokenScopes: ['iam.current-user:read'] }), {});
+    expect(v.state).toBe('cannot_act');
+    expect(v.reason).toContain('sign-in to this app does not include SQL access');
+    expect(v.cli_command).not.toContain('MTM_PLAN_ID');
+    expect(v.cli_command).not.toContain('MTM_CONFIRM_GRANTS');
+    expect(v.cli_command).toContain('databricks bundle run install');
+  });
+
   it('refuses uninstall and bad options with 400', async () => {
     expect((await rejects(permissionsView(deps(world()), { action: 'uninstall' }))).status).toBe(400);
     expect((await rejects(permissionsView(deps(world()), { scopes: 'not a scope' }))).status).toBe(400);

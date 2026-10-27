@@ -10,7 +10,8 @@ import {
   Input,
   Spinner,
 } from '@databricks/appkit-ui/react';
-import { CircleCheck, CircleX, Copy, Download, RefreshCw } from 'lucide-react';
+import { CircleCheck, CircleX, Copy, Download, RefreshCw, X } from 'lucide-react';
+import { Link } from 'react-router';
 import { SectionHeader } from '../../components/SectionHeader';
 import { PlanConfirmDialog } from '../../components/PlanConfirmDialog';
 import { useCatalog } from '../../context/CatalogProvider';
@@ -42,20 +43,34 @@ import {
   requestText,
   runnableLines,
   scopeRows,
+  scopesWithPicks,
+  statusLabel,
   viewUrl,
 } from '../../lib/permissionsPanel.pure';
+import type { AppGrantsPlan, AuthoritySummary } from './useAppGrantsPlan';
+import { ScopePicker } from './ScopePicker';
+import {
+  type OboDiscoveryLite,
+  clearSelection,
+  mergeScopes,
+  selectAll,
+  toggleCatalog,
+  toggleScope,
+} from './grantsPanel.pure';
 
 /**
  * Settings → Permissions: the install engine's app door. The server runs every statement as the
  * signed-in user (never the app's identity), pinned to the plan_id previewed here, audit row first
  * and read back after. Nothing on this panel decides who can grant: that comes from the server.
+ * `appPlan` (read as the app) only feeds the convert summary.
  */
-export function PermissionsPanel() {
+export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
   useEffect(() => {
     if (window.location.hash === '#permissions') document.getElementById('permissions')?.scrollIntoView();
   }, []);
   const { bumpRefresh } = useCatalog();
-  const [added, setAdded] = useState<string[]>([]);
+  /** Schemas picked this visit, on top of the stored migration scope (lower case). */
+  const [picks, setPicks] = useState<string[]>([]);
   const [convertRights, setConvertRights] = useState<string>('');
   const [view, setView] = useState<PermissionsView | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -63,13 +78,35 @@ export function PermissionsPanel() {
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<string | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
+  const [obo, setObo] = useState<OboDiscoveryLite | null>(null);
+  const [oboScans, setOboScans] = useState(0);
 
+  const storedKey = (view?.stored_scopes ?? []).join(',');
+  const scopesParam = useMemo(() => scopesWithPicks(storedKey ? storedKey.split(',') : [], picks), [storedKey, picks]);
   const options = useMemo(() => {
     const o: Record<string, string> = {};
-    if (added.length) o.scopes = added.join(',');
+    if (scopesParam) o.scopes = scopesParam;
     if (convertRights) o.convert_rights = convertRights;
     return o;
-  }, [added, convertRights]);
+  }, [scopesParam, convertRights]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setObo(null);
+    const path = oboScans > 0 ? '/api/estate/obo-discovery?refresh=1' : '/api/estate/obo-discovery';
+    void (async () => {
+      try {
+        const r = await fetch(path, { headers: { accept: 'application/json' } });
+        const data = (await r.json()) as OboDiscoveryLite;
+        if (!cancelled) setObo(data);
+      } catch {
+        if (!cancelled) setObo({ available: false, reason: 'discovery request failed', visibility: [] });
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [oboScans]);
 
   useEffect(() => {
     let cancelled = false;
@@ -178,7 +215,13 @@ export function PermissionsPanel() {
             busy={busy}
             convertRights={convertRights || view.convert_rights}
             onConvertRights={setConvertRights}
-            onAdd={(scopes) => setAdded((prev) => [...new Set([...(prev.length ? prev : view.scopes), ...scopes])])}
+            picker={{
+              obo,
+              picks,
+              onPicks: setPicks,
+              onRescan: () => setOboScans((n) => n + 1),
+            }}
+            authority={appPlan}
             onGrant={grant}
             onHandBack={handBack}
           />
@@ -188,12 +231,20 @@ export function PermissionsPanel() {
   );
 }
 
+interface PickerState {
+  obo: OboDiscoveryLite | null;
+  picks: string[];
+  onPicks: (next: string[]) => void;
+  onRescan: () => void;
+}
+
 function PanelBody({
   view,
   busy,
   convertRights,
   onConvertRights,
-  onAdd,
+  picker,
+  authority,
   onGrant,
   onHandBack,
 }: {
@@ -201,7 +252,8 @@ function PanelBody({
   busy: boolean;
   convertRights: string;
   onConvertRights: (v: string) => void;
-  onAdd: (scopes: string[]) => void;
+  picker: PickerState;
+  authority: AppGrantsPlan;
   onGrant: () => Promise<string | null>;
   onHandBack: () => Promise<string | null>;
 }) {
@@ -222,6 +274,10 @@ function PanelBody({
         <SectionHeader copy={SECTION_COPY.settings.permissionsCannotAct} variant="inline" />
         {view.reason ? <p className="text-sm text-muted-foreground">{view.reason}</p> : null}
         <CommandBlock label="CLI" text={view.cli_command} />
+        {view.who.install_notebook ? <CommandBlock label="Notebook" text={view.who.install_notebook} /> : null}
+        <p className="text-xs text-muted-foreground">
+          The grants the plan expects. None of them could be checked, so some may already be in place.
+        </p>
         <PlanLines lines={view.lines.filter((l) => l.status !== 'present')} known={false} />
       </div>
     );
@@ -230,8 +286,14 @@ function PanelBody({
     <div className="flex flex-col gap-6">
       <RightsPart view={view} />
       <JobsPart view={view} />
-      <ScopePart view={view} busy={busy} onAdd={onAdd} />
-      <ConvertPart view={view} convertRights={convertRights} onConvertRights={onConvertRights} onHandBack={onHandBack} />
+      <ScopePart view={view} busy={busy} picker={picker} />
+      <ConvertPart
+        view={view}
+        convertRights={convertRights}
+        onConvertRights={onConvertRights}
+        onHandBack={onHandBack}
+        authority={authority}
+      />
       <PlanPart view={view} busy={busy} onGrant={onGrant} />
     </div>
   );
@@ -302,21 +364,23 @@ function JobsPart({ view }: { view: PermissionsView }) {
   );
 }
 
-const SET_MARK: Record<string, string> = { present: '✓', missing: 'missing', unknown: 'can’t read', none: '—' };
+const SET_MARK: Record<string, string> = { present: '✓', missing: 'missing', unknown: 'not checked', none: '—' };
 
-function ScopePart({ view, busy, onAdd }: { view: PermissionsView; busy: boolean; onAdd: (s: string[]) => void }) {
+function ScopePart({ view, busy, picker }: { view: PermissionsView; busy: boolean; picker: PickerState }) {
+  const { obo, picks, onPicks, onRescan } = picker;
+  const rows: ScopeRow[] = scopeRows(view);
+  const [open, setOpen] = useState(() => rows.length === 0);
   const [typed, setTyped] = useState('');
   const [typedError, setTypedError] = useState<string | null>(null);
-  const [open, setOpen] = useState(false);
-  const rows: ScopeRow[] = scopeRows(view);
-  const suggestions = view.rights.coverage.candidates.filter((c) => !view.scopes.includes(c)).slice(0, 12);
+  const stored = useMemo(() => new Set(view.stored_scopes.map((s) => s.toLowerCase())), [view.stored_scopes]);
+  const chips = useMemo(() => mergeScopes(obo?.visibility ?? [], picks, stored), [obo, picks, stored]);
   function add() {
     const [scopes, errors] = parseScopes(typed);
     if (errors.length) {
       setTypedError(errors.join(' '));
       return;
     }
-    if (scopes.length) onAdd(scopes);
+    if (scopes.length) onPicks(selectAll(picks, scopes.filter((s) => !stored.has(s.toLowerCase()))));
     setTyped('');
     setTypedError(null);
   }
@@ -336,7 +400,19 @@ function ScopePart({ view, busy, onAdd }: { view: PermissionsView; busy: boolean
           {rows.map((r) => (
             <li key={r.scope} className="flex flex-wrap items-baseline gap-x-3 gap-y-1">
               <span className="min-w-40 font-mono">{r.scope}</span>
-              {!r.stored ? <Badge variant="outline" className="text-[10px]">new</Badge> : null}
+              {!r.stored ? (
+                <span className="inline-flex items-center gap-1">
+                  <Badge variant="outline" className="text-[10px]">new</Badge>
+                  <button
+                    type="button"
+                    aria-label={`Remove ${r.scope}`}
+                    className="text-muted-foreground hover:text-foreground"
+                    onClick={() => onPicks(picks.filter((p) => p !== r.scope.toLowerCase()))}
+                  >
+                    <X className="size-3" aria-hidden />
+                  </button>
+                </span>
+              ) : null}
               {GRANT_SETS.filter((s) => s !== 'Control').map((s) => (
                 <span key={s} className={r.sets[s] === 'missing' ? 'text-destructive' : 'text-muted-foreground'}>
                   {s} {SET_MARK[r.sets[s]]}
@@ -346,14 +422,25 @@ function ScopePart({ view, busy, onAdd }: { view: PermissionsView; busy: boolean
           ))}
         </ul>
       ) : (
-        <p className="text-sm text-muted-foreground">No schemas yet. Add the ones to migrate.</p>
+        <p className="text-sm text-muted-foreground">No schemas yet. Tick the ones to migrate below, or type them.</p>
       )}
       {open ? (
-        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+        <div className="flex flex-col gap-3 rounded-md border border-border p-3">
+          <ScopePicker
+            obo={obo}
+            scopes={chips}
+            selected={picks}
+            onToggle={(key) => onPicks(toggleScope(picks, key))}
+            onToggleCatalog={(group) => onPicks(toggleCatalog(picks, group))}
+            onSelectAll={(keys) => onPicks(selectAll(picks, keys))}
+            onClear={() => onPicks(clearSelection(picks))}
+            onRefresh={onRescan}
+          />
           <div className="flex gap-2">
             <Input
               value={typed}
               placeholder="catalog.schema or catalog.*"
+              aria-label="Type a schema"
               onChange={(e) => setTyped(e.target.value)}
               onKeyDown={(e) => {
                 if (e.key === 'Enter') add();
@@ -364,16 +451,6 @@ function ScopePart({ view, busy, onAdd }: { view: PermissionsView; busy: boolean
             </Button>
           </div>
           {typedError ? <p className="text-xs text-destructive">{typedError}</p> : null}
-          {suggestions.length ? (
-            <div className="flex flex-wrap gap-1.5">
-              {suggestions.map((s) => (
-                <Button key={s} variant="outline" size="sm" className="h-7 font-mono text-xs" onClick={() => onAdd([s])}>
-                  {s}
-                </Button>
-              ))}
-            </div>
-          ) : null}
-          <p className="text-xs text-muted-foreground">Suggestions are schemas you can grant on. Added schemas join the plan below.</p>
         </div>
       ) : null}
     </section>
@@ -385,11 +462,13 @@ function ConvertPart({
   convertRights,
   onConvertRights,
   onHandBack,
+  authority,
 }: {
   view: PermissionsView;
   convertRights: string;
   onConvertRights: (v: string) => void;
   onHandBack: () => Promise<string | null>;
+  authority: AppGrantsPlan;
 }) {
   const holders = convertHolders(view);
   const allAtOnce = convertRights === CONVERT_ALL_AT_ONCE;
@@ -431,7 +510,51 @@ function ConvertPart({
           {refused.map((r) => <li key={r.ledger_key}>{r.securable} stays. {r.reason}</li>)}
         </ul>
       ) : null}
+      <ConvertSummary summary={authority.plan?.authority_summary ?? null} loaded={authority.plan !== null} />
     </section>
+  );
+}
+
+/** Per-table convert permission, from `convert_authority` (read as the app; the jobs write it). */
+function ConvertSummary({ summary: a, loaded }: { summary: AuthoritySummary | null; loaded: boolean }) {
+  if (!loaded) return null;
+  const blocked = a ? a.total - a.authorized : 0;
+  return (
+    <div className="flex flex-col gap-2">
+      {a === null ? (
+        <p className="text-xs text-muted-foreground">
+          Per-table convert permission can’t be read yet. The profiler and the dry run check and store it. It’s handled in the{' '}
+          <Link to="/workstreams/ownership" className="underline">
+            Convert permission workstream
+          </Link>
+          .
+        </p>
+      ) : (
+        <p className="text-xs text-muted-foreground">
+          <strong>
+            {blocked} of {a.total} table{a.total === 1 ? '' : 's'} still to convert
+          </strong>{' '}
+          {a.actor ? (
+            <>
+              are not yet authorized for <span className="font-mono">{a.actor}</span>
+            </>
+          ) : (
+            'are not yet authorized for the convert identity'
+          )}
+          : Authorize can grant {a.self_authorizable}, {a.needs_grant} need a grant from someone else,{' '}
+          {a.unknown + a.not_checked} are not checked yet. See the{' '}
+          <Link to="/workstreams/ownership" className="underline">
+            Convert permission workstream
+          </Link>
+          .
+        </p>
+      )}
+      <a href="/api/grants/convert-permissions.sql" download className="w-fit">
+        <Button variant="outline" size="sm">
+          <Download className="size-3.5" aria-hidden /> Download the per-table grant script
+        </Button>
+      </a>
+    </div>
   );
 }
 
@@ -502,12 +625,12 @@ function PlanLines({ lines, known = true }: { lines: ViewLine[]; known?: boolean
         <li key={`${l.statement}`} className="flex flex-col gap-0.5">
           <div className="flex flex-wrap items-baseline gap-2">
             <Badge variant={l.status === 'missing' ? 'destructive' : 'outline'} className="text-[10px]">
-              {l.status === 'unknown' ? 'can’t read' : l.status}
+              {statusLabel(l.status)}
             </Badge>
             <span className="text-muted-foreground">{l.set}</span>
             <code className="font-mono text-xs [overflow-wrap:anywhere]">{l.commands?.length ? l.statement.replace(/^-- /, '') : l.statement}</code>
           </div>
-          {l.grantor ? <span className="pl-1 text-xs text-muted-foreground">{grantorSentence(l.grantor, known)}</span> : null}
+          {known && l.grantor ? <span className="pl-1 text-xs text-muted-foreground">{grantorSentence(l.grantor)}</span> : null}
         </li>
       ))}
     </ul>

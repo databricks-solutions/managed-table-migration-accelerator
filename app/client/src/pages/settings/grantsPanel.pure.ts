@@ -1,4 +1,7 @@
-/** Pure client helpers for the "Grants the App SP needs" panel. No React, no fetch. */
+/**
+ * Pure client helpers for Settings: the schema picker on the Permissions panel and the app's
+ * own-access panel. No React, no fetch.
+ */
 
 export interface Scope {
   catalog: string;
@@ -11,31 +14,23 @@ export interface SchemaVisibilityLite extends Scope {
 
 export interface MergedScope extends Scope {
   source: 'obo' | 'manual';
-  /** External tables the admin can see in it; null for a typed scope the scan did not list. */
+  /** External tables the admin can see in it; null for a picked scope the scan did not list. */
   externalTableCount: number | null;
   selected: boolean;
-  /** The profiler already lists this schema, so its Step 2 grants are shown regardless of ticks. */
+  /** Already in the stored migration scope, so the plan includes it whatever is ticked. */
   covered: boolean;
 }
-
-/** What the admin picked: typed scopes plus the keys (`catalog.schema`) that are ticked. Persisted. */
-export interface ScopeSelection {
-  typed: Scope[];
-  selected: string[];
-}
-
-export const EMPTY_SELECTION: ScopeSelection = { typed: [], selected: [] };
 
 /**
  * Mirror of the server's SCOPE_PATTERN (app/server/routes/grants.pure.ts). The server drops
  * anything else, so the client says so up front. Both are pinned by fixtures/scope_cases.json.
  */
 export const SCOPE_PATTERN = /^([A-Za-z0-9_]+)\.([A-Za-z0-9_]+)$/;
-/** The server builds grants for at most this many selected scopes. */
+/** The picker ticks at most this many schemas at a time. */
 export const MAX_SELECTED_SCOPES = 50;
-export const SELECTION_STORAGE_KEY = 'mtm.grants.scopeSelection.v1';
 
-export const scopeKey = (s: Scope): string => `${s.catalog}.${s.schema}`;
+/** Lower case, like Unity Catalog names and the install engine's scopes. */
+export const scopeKey = (s: Scope): string => `${s.catalog}.${s.schema}`.toLowerCase();
 
 export type ParsedScope = { ok: true; scope: Scope } | { ok: false; reason: string };
 
@@ -61,133 +56,54 @@ function scopeFromKey(key: string): Scope | null {
 const byName = (a: Scope, b: Scope) => a.catalog.localeCompare(b.catalog) || a.schema.localeCompare(b.schema);
 
 /**
- * Every chip the panel shows: discovered scopes, typed scopes, and any saved selection the scan
- * did not list this time (kept, so a truncated scan never silently drops a pick). Deduped by
- * key, manual wins the source label, sorted. `covered` marks schemas the profiler already lists.
+ * Every chip the picker shows: discovered scopes, plus any picked `catalog.schema` the scan did
+ * not list (kept, so a truncated scan never silently drops a pick). Keyed in lower case, sorted.
+ * `selected` and `covered` hold lower-case keys; anything that is not `catalog.schema` (a
+ * `catalog.*` scope) is not a chip.
  */
 export function mergeScopes(
   obo: SchemaVisibilityLite[],
-  selection: ScopeSelection,
+  selected: readonly string[],
   covered: ReadonlySet<string> = new Set(),
 ): MergedScope[] {
-  const selected = new Set(selection.selected);
-  const counts = new Map((obo ?? []).map((o) => [scopeKey(o), o.externalTableCount ?? null]));
+  const picked = new Set(selected.map((k) => k.toLowerCase()));
   const map = new Map<string, MergedScope>();
-  const put = (s: Scope, source: MergedScope['source']) => {
+  const put = (s: Scope, source: MergedScope['source'], count: number | null) => {
     const key = scopeKey(s);
-    map.set(key, {
-      catalog: s.catalog,
-      schema: s.schema,
-      source,
-      externalTableCount: counts.get(key) ?? null,
-      selected: selected.has(key),
-      covered: covered.has(key),
-    });
+    const [catalog, schema] = key.split('.');
+    map.set(key, { catalog, schema, source, externalTableCount: count, selected: picked.has(key), covered: covered.has(key) });
   };
-  for (const o of obo ?? []) put(o, 'obo');
-  for (const t of selection.typed ?? []) put(t, 'manual');
-  for (const key of selected) {
+  for (const o of obo ?? []) put(o, 'obo', o.externalTableCount ?? null);
+  for (const key of picked) {
     if (map.has(key)) continue;
     const s = scopeFromKey(key);
-    if (s) put(s, 'manual');
+    if (s) put(s, 'manual', null);
   }
   return [...map.values()].sort(byName);
 }
 
-/** Add a typed scope (deduped) and tick it: typing a schema is an explicit pick. */
-export function addTyped(sel: ScopeSelection, scope: Scope): ScopeSelection {
-  const key = scopeKey(scope);
-  const typed = sel.typed.some((t) => scopeKey(t) === key) ? sel.typed : [...sel.typed, scope];
-  const selected = sel.selected.includes(key) ? sel.selected : [...sel.selected, key];
-  return { typed, selected };
+export function toggleScope(selected: readonly string[], key: string): string[] {
+  const k = key.toLowerCase();
+  return selected.includes(k) ? selected.filter((x) => x !== k) : [...selected, k];
 }
 
-export function toggleScope(sel: ScopeSelection, key: string): ScopeSelection {
-  const selected = sel.selected.includes(key) ? sel.selected.filter((k) => k !== key) : [...sel.selected, key];
-  return { ...sel, selected };
+export function selectAll(selected: readonly string[], keys: string[]): string[] {
+  return [...new Set([...selected, ...keys.map((k) => k.toLowerCase())])];
 }
 
-export function selectAll(sel: ScopeSelection, keys: string[]): ScopeSelection {
-  const selected = [...new Set([...sel.selected, ...keys])];
-  return { ...sel, selected };
+/** Untick every picker chip; picks that are not chips (`catalog.*`) stay. */
+export function clearSelection(selected: readonly string[]): string[] {
+  return selected.filter((k) => scopeFromKey(k) === null);
 }
 
-export function clearSelection(sel: ScopeSelection): ScopeSelection {
-  return { ...sel, selected: [] };
-}
-
-/** Remove a typed scope and untick it. */
-export function removeTyped(sel: ScopeSelection, key: string): ScopeSelection {
-  return { typed: sel.typed.filter((t) => scopeKey(t) !== key), selected: sel.selected.filter((k) => k !== key) };
-}
-
-/** The `scopes` query value: valid ticked keys, sorted, comma-joined; '' when none. */
-export function scopesQuery(sel: ScopeSelection): string {
-  return sel.selected
-    .map(scopeFromKey)
-    .filter((s): s is Scope => s !== null)
-    .sort(byName)
-    .map(scopeKey)
-    .join(',');
-}
-
-/** Keys of the Tier 2 groups the profiler already lists (`source: 'scan'`). */
-export function scanCoveredKeys(groups: (Scope & { source: 'scan' | 'selected' })[]): Set<string> {
-  return new Set(groups.filter((g) => g.source === 'scan').map(scopeKey));
-}
-
-/** The keys "Select all" may tick: covered schemas already get their grants, so they are skipped. */
-export function selectableKeys(scopes: MergedScope[]): string[] {
-  return scopes.filter((s) => !s.covered).map(scopeKey);
-}
-
-/**
- * Tier 2 groups to render now: profiled (`scan`) groups always, picked (`selected`) groups only
- * while still ticked, so an unticked or removed scope's grants vanish before the refetch lands.
- */
-export function visibleTier2<T extends Scope & { source: 'scan' | 'selected' }>(groups: T[], sel: ScopeSelection): T[] {
-  const ticked = new Set(sel.selected);
-  return groups.filter((g) => g.source === 'scan' || ticked.has(scopeKey(g)));
-}
-
-export function planUrl(sel: ScopeSelection): string {
-  const q = scopesQuery(sel);
-  return q ? `/api/grants/plan?scopes=${encodeURIComponent(q)}` : '/api/grants/plan';
-}
-
-/** The plan URL that skips the server's short SHOW GRANTS cache (the Refresh button). */
+/** The URL that skips the server's short SHOW GRANTS cache (the Refresh button). */
 export function withRefresh(url: string): string {
   return `${url}${url.includes('?') ? '&' : '?'}refresh=1`;
 }
 
-/** Read the saved selection, exception-safe: missing, corrupt or wrong-shaped data reads empty. */
-export function loadSelection(storage: Pick<Storage, 'getItem'> | null | undefined): ScopeSelection {
-  try {
-    const raw = storage?.getItem(SELECTION_STORAGE_KEY);
-    if (!raw) return EMPTY_SELECTION;
-    const data = JSON.parse(raw) as { typed?: unknown; selected?: unknown };
-    const typed = (Array.isArray(data.typed) ? data.typed : [])
-      .map((t: unknown) => {
-        const { catalog, schema } = (t ?? {}) as Partial<Record<keyof Scope, unknown>>;
-        return typeof catalog === 'string' && typeof schema === 'string' ? scopeFromKey(`${catalog}.${schema}`) : null;
-      })
-      .filter((s): s is Scope => s !== null);
-    const selected = (Array.isArray(data.selected) ? data.selected : []).filter(
-      (k): k is string => typeof k === 'string' && scopeFromKey(k) !== null,
-    );
-    return { typed, selected: [...new Set(selected)] };
-  } catch {
-    return EMPTY_SELECTION;
-  }
-}
-
-/** Persist the selection, exception-safe (a null store or thrown error is a silent no-op). */
-export function saveSelection(storage: Pick<Storage, 'setItem'> | null | undefined, sel: ScopeSelection): void {
-  try {
-    storage?.setItem(SELECTION_STORAGE_KEY, JSON.stringify(sel));
-  } catch {
-    /* storage unavailable: the selection lasts for this visit only */
-  }
+/** The keys "Select all" may tick: covered schemas are already in the scope, so they are skipped. */
+export function selectableKeys(scopes: MergedScope[]): string[] {
+  return scopes.filter((s) => !s.covered).map(scopeKey);
 }
 
 export interface DiscoveryCoverageLite {
@@ -234,102 +150,7 @@ export function copyBlock(grants: { stmt: string }[]): string {
   return (grants ?? []).map((g) => `${g.stmt};`).join('\n');
 }
 
-export type Present = 'yes' | 'no' | 'unknown';
-
-export interface GrantLite {
-  privilege: string;
-  securableType: string;
-  securableFqn: string;
-  stmt: string;
-  present: Present;
-}
-
-export interface Tier2GroupLite extends Scope {
-  source: 'scan' | 'selected';
-  grants: GrantLite[];
-}
-
-/** `missing` hides landed grants (unknown still shows: it is not proof); `all` shows every grant. */
-export type Tier2View = 'missing' | 'all';
-
-export interface Tier2Summary {
-  schemas: number;
-  landed: number;
-  missing: number;
-  unknown: number;
-  /** Schemas whose own schema grants have all landed (the catalog grant is counted on its catalog). */
-  fullyGranted: number;
-}
-
-const isCatalogGrant = (g: GrantLite) => g.securableType === 'CATALOG';
-const schemaGrants = (g: Tier2GroupLite) => (g.grants ?? []).filter((x) => !isCatalogGrant(x));
-
-/** Counts for the Step 2 summary. A catalog grant shared by many schemas is counted once. */
-export function tier2Summary(groups: Tier2GroupLite[]): Tier2Summary {
-  const byStmt = new Map<string, Present>();
-  for (const g of groups ?? []) for (const x of g.grants ?? []) byStmt.set(x.stmt, x.present);
-  const statuses = [...byStmt.values()];
-  return {
-    schemas: (groups ?? []).length,
-    landed: statuses.filter((p) => p === 'yes').length,
-    missing: statuses.filter((p) => p === 'no').length,
-    unknown: statuses.filter((p) => p === 'unknown').length,
-    fullyGranted: (groups ?? []).filter((g) => schemaGrants(g).every((x) => x.present === 'yes')).length,
-  };
-}
-
-export interface CatalogGrants {
-  catalog: string;
-  /** The catalog's USE CATALOG grant, once; null when the view hides it (landed, `missing` view). */
-  useCatalog: GrantLite | null;
-  schemas: Tier2GroupLite[];
-  /** Every schema in the catalog, before the view filter. */
-  schemaCount: number;
-  /** Grants in this catalog that have not been proven landed (missing or unknown). */
-  open: number;
-}
-
-/**
- * Step 2 grouped by catalog, sorted by name. USE CATALOG is pulled out once per catalog. In the
- * `missing` view a schema whose schema grants have all landed is dropped, and so is a catalog
- * with nothing left to show.
- */
-export function groupTier2ByCatalog(groups: Tier2GroupLite[], view: Tier2View): CatalogGrants[] {
-  const keep = (x: GrantLite) => view === 'all' || x.present !== 'yes';
-  const byCatalog = new Map<string, Tier2GroupLite[]>();
-  for (const g of [...(groups ?? [])].sort(byName)) {
-    const list = byCatalog.get(g.catalog) ?? [];
-    list.push(g);
-    byCatalog.set(g.catalog, list);
-  }
-  const out: CatalogGrants[] = [];
-  for (const [catalog, list] of byCatalog) {
-    const catalogGrant = list.flatMap((g) => g.grants ?? []).find(isCatalogGrant) ?? null;
-    const schemas = list
-      .map((g) => ({ ...g, grants: schemaGrants(g).filter(keep) }))
-      .filter((g) => g.grants.length > 0);
-    const useCatalog = catalogGrant && keep(catalogGrant) ? catalogGrant : null;
-    if (!useCatalog && schemas.length === 0) continue;
-    const open =
-      (catalogGrant && catalogGrant.present !== 'yes' ? 1 : 0) +
-      list.reduce((n, g) => n + schemaGrants(g).filter((x) => x.present !== 'yes').length, 0);
-    out.push({ catalog, useCatalog, schemas, schemaCount: list.length, open });
-  }
-  return out;
-}
-
-/** One catalog's SQL: its USE CATALOG once, then each schema's grants. */
-export function catalogSql(entry: CatalogGrants): string {
-  const grants = [...(entry.useCatalog ? [entry.useCatalog] : []), ...entry.schemas.flatMap((s) => s.grants)];
-  return copyBlock(grants);
-}
-
-/** Every Step 2 statement for the view, USE CATALOG once per catalog. What Copy and Download use. */
-export function tier2Sql(groups: Tier2GroupLite[], view: Tier2View): string {
-  return groupTier2ByCatalog(groups, view).map(catalogSql).join('\n');
-}
-
-/** `open` hides schemas the scan already covers; `ticked` shows only picks. */
+/** `open` hides schemas already in the scope; `ticked` shows only picks. */
 export type ScopeView = 'open' | 'ticked' | 'all';
 
 /** The picker list after the filter box (case-insensitive substring on `catalog.schema`) and the view. */
@@ -338,14 +159,14 @@ export function filterScopes(scopes: MergedScope[], query: string, view: ScopeVi
   return (scopes ?? []).filter((s) => {
     if (view === 'open' && s.covered) return false;
     if (view === 'ticked' && !s.selected) return false;
-    return !q || scopeKey(s).toLowerCase().includes(q);
+    return !q || scopeKey(s).includes(q);
   });
 }
 
 export interface ScopeCatalogGroup {
   catalog: string;
   scopes: MergedScope[];
-  /** Ticked schemas that are not covered (covered ones get their grants anyway). */
+  /** Ticked schemas that are not covered (covered ones are in the scope anyway). */
   ticked: number;
   covered: number;
   /** Keys a catalog-wide tick may change: the uncovered ones. */
@@ -375,22 +196,22 @@ export function catalogTickState(group: ScopeCatalogGroup): 'all' | 'some' | 'no
   return group.ticked === group.selectable.length ? 'all' : 'some';
 }
 
-/** Ticks left before the server's per-plan limit. */
-export function capacityLeft(sel: ScopeSelection): number {
-  return Math.max(0, MAX_SELECTED_SCOPES - sel.selected.length);
+/** Ticks left before the picker's limit. */
+export function capacityLeft(selected: readonly string[]): number {
+  return Math.max(0, MAX_SELECTED_SCOPES - selected.length);
 }
 
 /** True when ticking every key would pass the limit (keys already ticked cost nothing). */
-export function wouldPassLimit(sel: ScopeSelection, keys: string[]): boolean {
-  const ticked = new Set(sel.selected);
-  return keys.filter((k) => !ticked.has(k)).length > capacityLeft(sel);
+export function wouldPassLimit(selected: readonly string[], keys: string[]): boolean {
+  const ticked = new Set(selected);
+  return keys.filter((k) => !ticked.has(k)).length > capacityLeft(selected);
 }
 
 /** The catalog checkbox: untick the catalog when it is fully ticked, otherwise tick all of it. */
-export function toggleCatalog(sel: ScopeSelection, group: ScopeCatalogGroup): ScopeSelection {
+export function toggleCatalog(selected: readonly string[], group: ScopeCatalogGroup): string[] {
   if (catalogTickState(group) === 'all') {
     const drop = new Set(group.selectable);
-    return { ...sel, selected: sel.selected.filter((k) => !drop.has(k)) };
+    return selected.filter((k) => !drop.has(k));
   }
-  return selectAll(sel, group.selectable);
+  return selectAll(selected, group.selectable);
 }

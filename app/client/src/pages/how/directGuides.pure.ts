@@ -48,7 +48,7 @@ const COCKPIT: Guide = {
     },
     {
       title: 'Install-time setup (first run only)',
-      body: 'Creates the control plane (manifest, actions, ledger, views), the Genie space, and the App service-principal grants. The exact grant statements the App SP needs are also generated in the app (Connection & policy → Permissions the app needs), including the copy-paste to make the SP part of the migration owner group. Not part of the conversion path — you run it once.',
+      body: 'Creates the control plane (manifest, actions, ledger, views), the Genie space, and the App service-principal grants. The app checks those grants on Settings → The app’s own access, and Settings → Permissions plans and grants what the migration jobs need. Not part of the conversion path — you run it once.',
       notebook: '99_setup.py',
     },
     {

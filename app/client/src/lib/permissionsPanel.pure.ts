@@ -162,13 +162,21 @@ export function planSql(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who'>): 
   return [...head, '', ...body, ''].join('\n');
 }
 
+/** "You can’t grant this. X can." The engine's grantor phrases are lower-case for mid-sentence use. */
+export function grantorSentence(grantor: string): string {
+  return `You can’t grant this. ${grantor.charAt(0).toUpperCase()}${grantor.slice(1)} can.`;
+}
+
+/** A plan line's status as the panel labels it; `unknown` is a read that did not happen, never "missing". */
+export const statusLabel = (status: string): string => (status === STATUS_UNKNOWN ? 'not checked' : status);
+
 /**
- * "You can’t grant this. X can." The engine's grantor phrases are lower-case for mid-sentence use.
- * `known = false` when the app could read nothing for the user: it then names only who can grant.
+ * The `scopes` option for the panel's picks: the stored migration scope plus the new picks,
+ * de-duplicated in order. '' (no option, so the server uses the stored scope) when nothing is picked.
  */
-export function grantorSentence(grantor: string, known = true): string {
-  const who = `${grantor.charAt(0).toUpperCase()}${grantor.slice(1)}`;
-  return known ? `You can’t grant this. ${who} can.` : `${who} can grant this.`;
+export function scopesWithPicks(stored: readonly string[], picks: readonly string[]): string {
+  if (!picks.length) return '';
+  return [...new Set([...stored, ...picks].map((s) => s.toLowerCase()))].join(',');
 }
 
 /** One line per result outcome, for the toast after Grant. */

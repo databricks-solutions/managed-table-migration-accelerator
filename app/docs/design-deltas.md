@@ -1472,3 +1472,26 @@ statement with the admin's forwarded token, never the app SP (SR15, SR17).
 **Why.** "Ease of permission" was a copy-and-paste chore across two tools. The person with the
 authority still runs every statement, under their own identity, from a plan they previewed; the
 app removes the copy and paste, not the check.
+
+## T60 · Settings has one grant panel per identity; no SQL access says so (not in the v4 mockup)
+
+**What.** The copy-only grants panel below Permissions becomes **The app's own access**: the app
+service principal's Tier 1 control-table grants with their `SHOW GRANTS` status and **Copy**, and
+nothing else. Its Tier 2 block (the jobs identity's grants as copy-paste SQL) and its schema
+picker left: Tier 2 repeated the Permissions plan for the same identity, and two pickers fed two
+different lists. The picker now lives in Permissions → **Migration scope** ("Schemas you can see",
+`ScopePicker.tsx`), where a ticked schema joins the plan as a `new` row, and the per-table convert
+permission summary and `convert-permissions.sql` download moved into **Convert rights**. Both
+panels share one `GET /api/grants/plan?tier2=0` read (`useAppGrantsPlan.ts`); without `tier2=0`
+the endpoint still returns Tier 2, which the MCP tool `mtm_get_grants_plan` uses. Picks are no
+longer saved in the browser: a schema is stored only when its grants run.
+
+When the signed-in user's token has no `sql` scope (they consented before the app asked for it, or
+the workspace blocks it), Permissions now says that sign-in is the cause and how to fix it (a new
+private window, then approve the prompt). Every plan line reads **not checked** with no grantor,
+since the owner reads failed too, and the CLI command is a dry run with no `plan_id`.
+
+**Why.** Two panels both titled as permissions, both listing grants to the jobs, read as one job
+done twice. Before the fix, the no-SQL state also showed `can't read` on grants the admin already
+held, named grantors it had guessed, and handed out a `plan_id` from a plan built without a single
+successful read, which the CLI would refuse.

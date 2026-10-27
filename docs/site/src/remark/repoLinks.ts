@@ -21,9 +21,12 @@ function walk(node: Node, visit: (n: Node) => void): void {
   for (const child of node.children ?? []) walk(child, visit);
 }
 
+// Returns a remark plugin closed over the options. Docusaurus serializes plugin
+// options into the client bundle, so the absolute paths must not be passed as
+// `[plugin, options]`.
 export default function repoLinks(options: MapOptions) {
   const opts: MapOptions = {isDirectory, ...options};
-  return (tree: Node, file: VFile) => {
+  return () => (tree: Node, file: VFile) => {
     const from = file.path ?? file.history?.[0];
     if (!from) return;
     walk(tree, (node) => {

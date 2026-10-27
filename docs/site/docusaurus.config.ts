@@ -48,6 +48,8 @@ const linkOptions = {
   ],
 };
 
+const remarkRepoLinks = repoLinks(linkOptions);
+
 const config: Config = {
   title: TITLE,
   tagline: 'Convert Unity Catalog external tables to managed tables, safely and at estate scale.',
@@ -87,7 +89,7 @@ const config: Config = {
           // URLs = file names (00-installation, 07b-convert-permissions).
           numberPrefixParser: false,
           sidebarPath: './sidebars.ts',
-          beforeDefaultRemarkPlugins: [[repoLinks, linkOptions]],
+          beforeDefaultRemarkPlugins: [remarkRepoLinks],
         },
         blog: false,
         theme: {
@@ -108,11 +110,11 @@ const config: Config = {
         exclude: ['superpowers/**', 'genie/**', 'app/**', '**/node_modules/**'],
         numberPrefixParser: false,
         sidebarPath: './sidebarsReference.ts',
-        beforeDefaultRemarkPlugins: [[repoLinks, linkOptions]],
+        beforeDefaultRemarkPlugins: [remarkRepoLinks],
       },
     ],
     // Full-text search (no external service).
-    require.resolve('docusaurus-lunr-search'),
+    'docusaurus-lunr-search',
     // Click-to-zoom on doc images (options are read from themeConfig.zoom).
     'docusaurus-plugin-image-zoom',
     // llms.txt (+ per-page markdown) for LLM consumption.

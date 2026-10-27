@@ -19,6 +19,8 @@ export interface AuthoritySummary {
   needs_grant: number;
   unknown: number;
   not_checked: number;
+  /** Every table the profiler has listed, converted or not: 0 means nothing is profiled yet. */
+  profiled: number;
 }
 
 export interface GrantsPlan {

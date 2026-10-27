@@ -935,6 +935,13 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Title | Plan |
 | Subtitle | The grants still missing. Grant the ones you can, and send the rest. |
 
+### `permissionsUnchecked`
+
+| Field | Text |
+| --- | --- |
+| Title | Not checked from the app |
+| Subtitle | The app can’t read these, so they may already be in place. The CLI check reads them as you. |
+
 ### `permissionsFinish`
 
 | Field | Text |

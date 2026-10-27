@@ -89,6 +89,19 @@ plan and `GET /api/grants/plan` address Tier 2 to the identity read from the dep
 `run_as`; the plan endpoint shows a `<jobs-run-as>` placeholder when the jobs disagree or cannot be
 read.
 
+**Reading the `JOBS` line back.** The notebook and the CLI read the jobs' access lists as the
+installer. The app cannot: it reads them as its own service principal, which holds only
+`CAN_MANAGE_RUN`, and the Permissions API answers only `CAN_MANAGE` holders (the error kind is
+logged once per read). So Settings decides that line from evidence it can see, strongest first:
+a notebook or CLI install row in `audit_log` for the same grantee whose `detail.job_ids` cover the
+current jobs, with no later revoke; else every job created by the jobs' identity (it deployed them,
+so it owns them); else **not checked**, with a dry-run CLI check. The app writes no audit row for a
+line held only on that evidence (`server/permissions/jobsEvidence.pure.ts`, design delta T61).
+
+**Why the app's service principal stays at `CAN_MANAGE_RUN`.** `CAN_MANAGE` on the jobs would let
+the app read the lists, but it would also let it edit and delete every job and change who the jobs
+run as. That is new authority for a display fix, so the binding stays at run permission.
+
 **This is why converts "just worked" in dev/e2e:** the job ran as *you* (the deployer) and
 you own the seeded estate — the SP was never the executor. The prod/SP authority path is a
 *different* code path that dev testing never exercises; validate it explicitly before ship.

@@ -72,7 +72,7 @@ control tables.
 | Serverless compute, or Databricks Runtime 17.3 LTS+ | `SET MANAGED` and `UNSET MANAGED` require it. The jobs run on serverless. |
 | A SQL warehouse | The app, the AI/BI dashboard and the Genie space query through it. |
 | A managed storage location on each target schema, its catalog, or the metastore | Converted data needs somewhere to go. Tables without one are blocked, not guessed. |
-| Workspace admin, for the one-time install | Creating the app needs it. Day-to-day users do not. |
+| Workspace admin, for the one-time install, ideally also metastore admin | The install binds the jobs and warehouse to the app and grants across the estate; with both roles nobody else has to act ([recommended installer](./docs/00-installation.md#recommended-installer)). Day-to-day users need neither. |
 | The Databricks CLI, 1.3.0 or later (CLI install only; not needed from the workspace) | The bundle uses the direct deployment engine. |
 
 Readers and writers of the converted tables should run Databricks Runtime 15.4 LTS or later; the

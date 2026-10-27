@@ -389,6 +389,15 @@ def test_sql_lit_escapes():
     assert pv.sql_lit(None) == "NULL" and pv.sql_lit(True) == "true"
 
 
+def test_jobs_audit_detail_records_the_job_ids():
+    jobs = next(ln for ln in pv.grant_plan(catalog="main", schema="migration", jobs_identity=_jobs(),
+                                           scopes=["sales.orders"], control_schema_exists=True,
+                                           deployment="[e2e] mtm", job_ids=[11, 12])
+                if ln["securable_type"] == pv.JOBS_SECURABLE)
+    assert json.loads(pv.audit_detail(jobs, door="cli", pid="p"))["job_ids"] == ["11", "12"]
+    assert "job_ids" not in json.loads(pv.audit_detail(_plan()[0], door="cli", pid="p"))
+
+
 def test_audit_insert_has_every_column():
     ln = _plan()[0]
     row = pv.install_audit_row(ln, action=pv.AUDIT_INSTALL_GRANT, phase="STARTED", door="notebook",
@@ -598,8 +607,14 @@ def _sql_cases() -> dict:
                                sets=["Change", "Read"], convert_rights="all_at_once", now=ts)
     ledger = _ledger_rows()[:2]
     keys = [r["ledger_key"] for r in ledger]
+    jobs_line = next(ln for ln in pv.grant_plan(catalog="main", schema="migration", jobs_identity=_jobs(),
+                                                scopes=["sales.orders"], control_schema_exists=True,
+                                                deployment="[e2e] mtm", job_ids=[11, 12])
+                     if ln["securable_type"] == pv.JOBS_SECURABLE)
     return {
         "line": line, "audit_row": audit,
+        "jobs_line": jobs_line,
+        "jobs_audit_detail": pv.audit_detail(jobs_line, door="cli", pid="d04c4bab08e2", added=False, prior_held=True),
         "audit_detail": pv.audit_detail(line, door="app", pid="d04c4bab08e2", added=True, prior_held=False,
                                         grantor="`hr-owners`"),
         "audit_insert": pv.audit_insert_sql("main", "migration", [audit]),

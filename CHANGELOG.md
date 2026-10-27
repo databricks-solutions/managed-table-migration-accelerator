@@ -92,6 +92,16 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **Settings no longer reports "0 of 0" or asks for permissions it can't see.** Convert rights
+  says **No tables profiled yet** (with **Run the profiler**) on an empty manifest and **No tables
+  left to convert** once everything is converted. The Plan counts `missing` and `not checked`
+  apart; not-checked lines get their own box and a dry-run CLI check, and **Copy request** and the
+  downloaded plan ask only for missing lines. The jobs-permission line is one shell loop plus the
+  Jobs UI path, labelled "Not SQL". Because the app can't read the jobs' access lists, it now
+  treats that line as held when a notebook or CLI install recorded it for the current jobs, or
+  when the jobs' identity created every job, and says which. `audit_log.detail` gains `job_ids`
+  on a jobs-permission line, and `GET /api/grants/plan` `authority_summary` gains `profiled`
+  (additive; see `backend/docs/contracts/control-tables.md`).
 - **The install commands work as written.** The README passed `--var warehouse_id` only to
   `bundle deploy`, so every `bundle run install` after it failed with `dashboard warehouse_id is
   required`: `bundle run` resolves the variables again. The instructions now set them once for
@@ -125,6 +135,11 @@ release may change job parameters or control-table columns; every such change is
 
 ### Changed
 
+- **Recommended installer.** [Installation](docs/00-installation.md#recommended-installer) and
+  the README now recommend installing as a workspace admin who is also a metastore admin, say what
+  each role covers and that account admin is not needed, and correct "creating the app needs
+  workspace admin": any user can create an app, but binding the jobs and the warehouse to it needs
+  Can Manage on each.
 - **Clearer install instructions.** The README and [Installation](docs/00-installation.md) now
   separate the deploy from the installer, give the workspace path first and the CLI second, and
   say what you see at each step (the GO / WARN / NO-GO lines, the app's sign-in prompt, how long

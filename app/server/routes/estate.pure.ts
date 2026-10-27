@@ -57,7 +57,12 @@ export interface AuthoritySummary {
   unknown: number;
   /** No stored verdict yet. */
   not_checked: number;
+  /** Every table the profiler has listed, converted or not: 0 means nothing is profiled yet. */
+  profiled: number;
 }
+
+/** The status authoritySummarySql gives a table with nothing left to convert. */
+export const DONE_STATUS = 'DONE';
 
 const toCount = (v: unknown): number => {
   const n = Number(v);
@@ -69,10 +74,12 @@ const toCount = (v: unknown): number => {
  * AuthoritySummary. An unexpected status counts toward `unknown`: the convert gate blocks it too.
  */
 export function tallyAuthority(rows: { status?: unknown; n?: unknown; actor?: unknown }[]): AuthoritySummary {
-  const out: AuthoritySummary = { actor: null, total: 0, authorized: 0, self_authorizable: 0, needs_grant: 0, unknown: 0, not_checked: 0 };
+  const out: AuthoritySummary = { actor: null, total: 0, authorized: 0, self_authorizable: 0, needs_grant: 0, unknown: 0, not_checked: 0, profiled: 0 };
   for (const r of rows ?? []) {
     const n = toCount(r.n);
     const status = typeof r.status === 'string' ? r.status.trim().toUpperCase() : '';
+    out.profiled += n;
+    if (status === DONE_STATUS) continue;
     out.total += n;
     if (status === '' || status === 'NOT_CHECKED') out.not_checked += n;
     else if (status === 'AUTHORIZED') out.authorized += n;
@@ -84,15 +91,19 @@ export function tallyAuthority(rows: { status?: unknown; n?: unknown; actor?: un
   return out;
 }
 
-/** The aggregate tallyAuthority reads: tables still to convert by their latest verdict's status. */
+/**
+ * The aggregate tallyAuthority reads: every manifest table, the ones still to convert by their
+ * latest verdict's status and the rest as DONE_STATUS (so an empty manifest reads as unprofiled).
+ */
 export function authoritySummarySql(controlFqn: string): string {
   return (
-    'SELECT COALESCE(au.status, \'NOT_CHECKED\') AS status, COUNT(*) AS n, MAX(au.actor) AS actor ' +
+    "SELECT CASE WHEN UPPER(COALESCE(m.state, '')) IN ('DROPPED','CONVERTED','CONVERTED_EXTERNAL','VALIDATED','CLEANED') " +
+    `THEN '${DONE_STATUS}' ELSE COALESCE(au.status, 'NOT_CHECKED') END AS status, ` +
+    'COUNT(*) AS n, MAX(au.actor) AS actor ' +
     `FROM ${controlFqn}.table_manifest m ` +
     'LEFT JOIN (SELECT full_name, status, actor FROM (' +
     'SELECT full_name, status, actor, ROW_NUMBER() OVER (PARTITION BY full_name ORDER BY evaluated_at DESC) AS rn ' +
     `FROM ${controlFqn}.convert_authority) WHERE rn = 1) au ON au.full_name = m.full_name ` +
-    "WHERE UPPER(COALESCE(m.state, '')) NOT IN ('DROPPED','CONVERTED','CONVERTED_EXTERNAL','VALIDATED','CLEANED') " +
     'GROUP BY 1'
   );
 }

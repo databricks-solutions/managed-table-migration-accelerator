@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import type { PlanLine } from '../../client/src/lib/provision.pure.js';
 import {
+  auditDetail,
   auditInsertSql,
   handbackDoneSql,
   installAuditRow,
@@ -26,6 +27,9 @@ const SQL = (JSON.parse(
 ) as { sql: Record<string, unknown> }).sql as {
   line: PlanLine;
   audit_row: Record<string, unknown>;
+  audit_detail: string;
+  jobs_line: PlanLine;
+  jobs_audit_detail: string;
   audit_insert: string;
   scope_rows: Record<string, unknown>[];
   scope_merge: string;
@@ -49,6 +53,13 @@ describe('install-record SQL equals provision.py (golden fixture)', () => {
     });
     expect(row).toEqual(SQL.audit_row);
     expect(auditInsertSql('main', 'migration', [row])).toBe(SQL.audit_insert);
+  });
+
+  it('audit detail, with the job ids on a jobs-permission line', () => {
+    expect(auditDetail(SQL.line, { door: 'app', pid: 'd04c4bab08e2', added: true, prior_held: false, grantor: '`hr-owners`' }))
+      .toBe(SQL.audit_detail);
+    expect(auditDetail(SQL.jobs_line, { door: 'cli', pid: 'd04c4bab08e2', added: false, prior_held: true })).toBe(SQL.jobs_audit_detail);
+    expect((JSON.parse(SQL.jobs_audit_detail) as { job_ids: string[] }).job_ids).toEqual(['11', '12']);
   });
 
   it('scope rows and MERGE', () => {

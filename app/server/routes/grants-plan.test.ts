@@ -45,7 +45,7 @@ describe('buildGrantsPlan', () => {
     expect(plan.tier2[0]).toMatchObject({ catalog: 'sales', schema: 'orders' });
     expect(plan.tier2[0].grants[0].stmt).toContain('GRANT USE CATALOG ON CATALOG sales TO `' + SP + '`');
     expect(plan.targets_known).toBe(true);
-    expect(plan.authority_summary).toEqual({ actor: SP, total: 4, authorized: 3, self_authorizable: 0, needs_grant: 1, unknown: 0, not_checked: 0 });
+    expect(plan.authority_summary).toEqual({ actor: SP, total: 4, authorized: 3, self_authorizable: 0, needs_grant: 1, unknown: 0, not_checked: 0, profiled: 4 });
   });
 
   it('degrades honestly: null SP → placeholder; a SHOW GRANTS error → unknown', async () => {

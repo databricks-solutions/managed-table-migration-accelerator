@@ -633,6 +633,10 @@ export const SECTION_COPY = {
       title: 'Plan',
       subtitle: 'The grants still missing. Grant the ones you can, and send the rest.',
     },
+    permissionsUnchecked: {
+      title: 'Not checked from the app',
+      subtitle: 'The app can’t read these, so they may already be in place. The CLI check reads them as you.',
+    },
     permissionsFinish: {
       title: 'Finish install',
       subtitle: 'The control tables do not exist yet. Run the installer from a notebook or the CLI.',

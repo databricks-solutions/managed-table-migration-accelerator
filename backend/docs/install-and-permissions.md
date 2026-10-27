@@ -292,6 +292,21 @@ option plus a redeploy. After the redeploy, the installer moves the Look, Read a
 to the new identity (grant to the new one, verify, then revoke from the old one only what the tool
 recorded as `added`).
 
+**Recommended installer: a workspace admin who is also a metastore admin**, ideally through a
+group. The install grants across the estate, and the two roles cover every line of the plan
+between them (checked against the Databricks docs):
+
+| Role | Covers | Why it is needed |
+|---|---|---|
+| Workspace admin | The jobs' run permission and the freeze jobs' `CAN_MANAGE`; binding the warehouse and jobs to the app; the deploy folder | Workspace admins hold `CAN MANAGE` on every job and can edit warehouse permissions; adding an app resource needs Can Manage on the resource and the app. Any user can create the app itself. |
+| Metastore admin | Look, Read and Change on every in-scope catalog, the control catalog, the system schemas | A metastore admin can manage privileges on any object in the metastore. A workspace admin cannot grant on existing objects it does not own. |
+| Account admin | Not needed, except to create or rotate a service principal | The docs say granting system-table access takes an admin who is both a metastore admin and an account admin; the installer reports a failed system-schema line for whoever holds both. |
+
+The roles are for the install and its grants only: the jobs run as the jobs' identity
+(`prod_run_as_sp` on `prod`), and operators need only `CAN_USE` on the app. An installer without
+both roles grants what it can, and the rest is routed to its grantor (CUJ-4). The operator guide
+carries the same advice: [Recommended installer](../../docs/00-installation.md#recommended-installer).
+
 ## 6. Day-one flow: one ask at install, convert rights handed back at the end
 
 1. **Rights and coverage check.** Read-only. Says whether this installer can install, how much of

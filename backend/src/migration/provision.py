@@ -1229,6 +1229,8 @@ def audit_detail(line: Mapping[str, Any], *, door: str, pid: str, added: Optiona
          "scope": line.get("scope"), "added": added, "prior_held": prior_held}
     if grantor:
         d["grantor"] = grantor
+    if line.get("job_ids"):
+        d["job_ids"] = [str(j) for j in line["job_ids"]]
     return json.dumps(d, sort_keys=True)
 
 

@@ -14,8 +14,9 @@ import { CircleCheck, CircleX, Copy, Download, RefreshCw, X } from 'lucide-react
 import { Link } from 'react-router';
 import { SectionHeader } from '../../components/SectionHeader';
 import { PlanConfirmDialog } from '../../components/PlanConfirmDialog';
+import { JobTriggerDialog } from '../../components/JobTriggerDialog';
 import { useCatalog } from '../../context/CatalogProvider';
-import { DIALOG_COPY, LABEL_COPY, SECTION_COPY } from '../../lib/sectionCopy';
+import { DIALOG_COPY, LABEL_COPY, SECTION_COPY, dialogProps } from '../../lib/sectionCopy';
 import {
   CONVERT_ALL_AT_ONCE,
   CONVERT_PER_WAVE,
@@ -33,17 +34,20 @@ import {
   type ScopeRow,
   type ViewLine,
   convertHolders,
+  convertSummaryCase,
   errorText,
   grantBody,
   grantSummary,
   grantorSentence,
   identityLabel,
   panelMode,
+  planHeading,
   planSql,
   requestText,
   runnableLines,
   scopeRows,
   scopesWithPicks,
+  jobsHeldText,
   statusLabel,
   viewUrl,
 } from '../../lib/permissionsPanel.pure';
@@ -346,6 +350,7 @@ function RightsPart({ view }: { view: PermissionsView }) {
 function JobsPart({ view }: { view: PermissionsView }) {
   const [open, setOpen] = useState(false);
   const change = `MTM_JOBS_IDENTITY=sp:<application-id> ${view.cli_command.replace(/^(MTM_\S+ )+/, '')}`;
+  const held = jobsHeldText(view);
   return (
     <section className="flex flex-col gap-2">
       <SectionHeader
@@ -359,6 +364,7 @@ function JobsPart({ view }: { view: PermissionsView }) {
           {LABEL_COPY.changeIdentity}
         </Button>
       </div>
+      {held ? <p className="text-xs text-muted-foreground">{held}</p> : null}
       {open ? <CommandBlock label="CLI" text={change} /> : null}
     </section>
   );
@@ -518,6 +524,20 @@ function ConvertPart({
 /** Per-table convert permission, from `convert_authority` (read as the app; the jobs write it). */
 function ConvertSummary({ summary: a, loaded }: { summary: AuthoritySummary | null; loaded: boolean }) {
   if (!loaded) return null;
+  const show = convertSummaryCase(a);
+  if (show === 'unprofiled') {
+    return (
+      <div className="flex flex-col items-start gap-2">
+        <p className="text-xs text-muted-foreground">
+          No tables profiled yet. Run the profiler to list them and check convert permission.
+        </p>
+        <JobTriggerDialog alias="profiler" {...dialogProps(DIALOG_COPY.runProfiler)} triggerVariant="outline" triggerSize="sm" />
+      </div>
+    );
+  }
+  if (show === 'all_done') {
+    return <p className="text-xs text-muted-foreground">No tables left to convert. Every profiled table is converted or dropped.</p>;
+  }
   const blocked = a ? a.total - a.authorized : 0;
   return (
     <div className="flex flex-col gap-2">
@@ -563,19 +583,28 @@ function PlanPart({ view, busy, onGrant }: { view: PermissionsView; busy: boolea
   const mine = runnableLines(view);
   const request = requestText(view);
   const pending = view.lines.filter((l) => l.status !== 'present');
+  const missing = pending.filter((l) => l.status !== 'unknown');
+  const unchecked = pending.filter((l) => l.status === 'unknown');
   return (
     <section className="flex flex-col gap-3">
       <SectionHeader
         copy={SECTION_COPY.settings.permissionsPlan}
         variant="inline"
-        title={pending.length ? `Plan · ${pending.length} grants missing` : 'Plan · nothing missing'}
+        title={planHeading(missing.length, unchecked.length)}
       />
       {view.wave?.error ? (
         <Alert variant="destructive">
           <AlertDescription>{view.wave.error}</AlertDescription>
         </Alert>
       ) : null}
-      <PlanLines lines={pending} />
+      <PlanLines lines={missing} />
+      {unchecked.length ? (
+        <div className="flex flex-col gap-2 rounded-md border border-border p-3">
+          <SectionHeader copy={SECTION_COPY.settings.permissionsUnchecked} variant="inline" />
+          <PlanLines lines={unchecked} known={false} />
+          <CommandBlock label="CLI check" text={view.check_command} />
+        </div>
+      ) : null}
       {pending.length ? (
         <div className="flex flex-wrap gap-2">
           <PlanConfirmDialog

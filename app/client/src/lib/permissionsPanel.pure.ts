@@ -5,8 +5,14 @@
  * install engine (provision.pure.ts) as the signed-in user. Nothing here decides who can grant.
  */
 import {
+  DOOR_CLI,
+  EVIDENCE_DEPLOYER,
+  EVIDENCE_LIVE,
+  EVIDENCE_RECORDED,
   GRANT_SETS,
   type Identity,
+  JOBS_SECURABLE,
+  type JobsEvidence,
   KIND_LABEL,
   type PlanLine,
   type RevokeItem,
@@ -15,12 +21,16 @@ import {
   STATUS_MISSING,
   STATUS_PRESENT,
   STATUS_UNKNOWN,
+  jobRunAcl,
+  samePrincipal,
 } from './provision.pure';
 
 export interface ViewLine extends PlanLine {
   status: typeof STATUS_PRESENT | typeof STATUS_MISSING | typeof STATUS_UNKNOWN;
   grantor: string | null;
   commands?: string[];
+  /** How the jobs line's status was decided (jobs line only). */
+  evidence?: JobsEvidence | null;
 }
 
 export interface PermissionsView {
@@ -46,11 +56,16 @@ export interface PermissionsView {
   summary: Record<string, number>;
   lines: ViewLine[];
   pending: number;
+  /** Pending lines read back as missing, and pending lines the app could not read (`unknown`). */
+  missing: number;
+  unchecked: number;
   need_someone_else: number;
   handback: { revokes: RevokeItem[]; refused: RevokeItem[]; waiting?: string[]; plan_id: string };
   record_errors: string[];
   estate_error: string | null;
   cli_command: string;
+  /** A dry run of the same options (no confirm, no plan_id): it checks as the installer. */
+  check_command: string;
 }
 
 export interface GrantResult extends PlanLine {
@@ -128,36 +143,72 @@ export interface RequestGroup {
   statements: string[];
 }
 
-/** The lines this user cannot run, grouped by who can (jobs-permission lines carry their commands). */
+/** A line read back as missing (an `unknown` read is not checked, so nobody is asked for it). */
+const isMissing = (l: ViewLine) => isPending(l) && l.status !== STATUS_UNKNOWN;
+
+/**
+ * A jobs-permission line as one shell loop, labelled as not SQL, with the Jobs UI path. Job
+ * permissions are workspace settings: there is no SQL GRANT for them.
+ */
+export function jobRunLoop(l: Pick<ViewLine, 'grantee' | 'grantee_kind' | 'job_ids'>): string[] {
+  const ids = l.job_ids ?? [];
+  return [
+    '# Not SQL: job permissions are workspace settings, not Unity Catalog grants.',
+    `# Or in the Jobs UI: open each job, then Permissions, then add ${l.grantee} with Can Manage Run.`,
+    `for id in ${ids.join(' ')}; do databricks permissions update jobs "$id" --json '${jobRunAcl(l)}'; done`,
+  ];
+}
+
+/** What to run for a line: SQL, the jobs loop, or a non-SQL line's commands as-is. */
+function lineStatements(l: ViewLine): string[] {
+  if (String(l.securable_type).toUpperCase() === JOBS_SECURABLE && l.job_ids?.length) return jobRunLoop(l);
+  return l.commands?.length ? l.commands : [`${l.statement};`];
+}
+
+/** The missing lines this user cannot run, grouped by who can. Not-checked lines are left out. */
 export function requestGroups(v: Pick<PermissionsView, 'lines'>): RequestGroup[] {
   const out = new Map<string, string[]>();
-  for (const l of v.lines.filter(isPending)) {
+  for (const l of v.lines.filter(isMissing)) {
     if (runnable(l)) continue;
     const who = l.grantor ?? 'a metastore admin';
-    const stmts = l.commands?.length ? l.commands : [`${l.statement};`];
-    out.set(who, [...(out.get(who) ?? []), ...stmts]);
+    out.set(who, [...(out.get(who) ?? []), ...lineStatements(l)]);
   }
   return [...out.entries()].map(([grantor, statements]) => ({ grantor, statements }));
 }
 
-/** The text for Copy request: who to ask, then exactly what to run, then the plan fingerprint. */
-export function requestText(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who'>): string {
+/** One line per not-checked grant, for the note that ends the request. */
+const uncheckedSummary = (v: Pick<PermissionsView, 'lines'>): string[] =>
+  v.lines.filter((l) => l.status === STATUS_UNKNOWN).map((l) => (l.commands?.length ? l.statement.replace(/^-- /, '') : l.statement));
+
+/**
+ * The text for Copy request: who to ask, then exactly what to run, then the plan fingerprint.
+ * Lines the app could not read are only noted, with the dry-run check that reads them.
+ */
+export function requestText(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who' | 'check_command'>): string {
   const groups = requestGroups(v);
   if (!groups.length) return '';
   const parts = [`The managed-table migration needs these grants (plan ${v.plan_id}).`];
   for (const g of groups) parts.push('', `For ${g.grantor} to run:`, ...g.statements.map((s) => `  ${s}`));
+  const unchecked = uncheckedSummary(v);
+  if (unchecked.length) {
+    parts.push('', `Not checked from the app (run ${v.check_command} to confirm):`, ...unchecked.map((s) => `  ${s}`));
+  }
   if (v.who.user) parts.push('', `Requested by ${v.who.user}.`);
   return parts.join('\n');
 }
 
-/** Download plan: every pending grant as a SQL script, with a header naming the plan. */
-export function planSql(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who'>): string {
+/** Download plan: every missing grant as a SQL script, with a header naming the plan. */
+export function planSql(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who' | 'check_command'>): string {
   const head = [`-- Migration grant plan ${v.plan_id}`, `-- Jobs run as: ${identityLabel(v.who.jobs_identity)}`];
   const body: string[] = [];
-  for (const l of v.lines.filter(isPending)) {
+  for (const l of v.lines.filter(isMissing)) {
     body.push(`-- ${l.set}: ${l.reason}${l.grantor ? ` (ask ${l.grantor})` : ''}`);
-    if (l.commands?.length) body.push(...l.commands.map((c) => `-- ${c}`));
+    if (l.commands?.length) body.push(...lineStatements(l).map((c) => (c.startsWith('#') ? `-- ${c.slice(2)}` : `-- ${c}`)));
     else body.push(`${l.statement};`);
+  }
+  const unchecked = uncheckedSummary(v);
+  if (unchecked.length) {
+    body.push('', `-- Not checked from the app (run ${v.check_command} to confirm):`, ...unchecked.map((s) => `--   ${s}`));
   }
   return [...head, '', ...body, ''].join('\n');
 }
@@ -165,6 +216,42 @@ export function planSql(v: Pick<PermissionsView, 'lines' | 'plan_id' | 'who'>): 
 /** "You can’t grant this. X can." The engine's grantor phrases are lower-case for mid-sentence use. */
 export function grantorSentence(grantor: string): string {
   return `You can’t grant this. ${grantor.charAt(0).toUpperCase()}${grantor.slice(1)} can.`;
+}
+
+/** The Plan heading: missing and not-checked lines counted apart, so an unread line never reads as missing. */
+export function planHeading(missing: number, unchecked: number): string {
+  const parts = [missing ? `${missing} missing` : '', unchecked ? `${unchecked} not checked` : ''].filter(Boolean);
+  return parts.length ? `Plan · ${parts.join(' · ')}` : 'Plan · nothing missing';
+}
+
+/** Which convert-permission sentence to show: `profiled` 0 is an empty manifest, `total` 0 a finished one. */
+export type ConvertSummaryCase = 'unread' | 'unprofiled' | 'all_done' | 'counts';
+
+export function convertSummaryCase(a: { total: number; profiled?: number } | null): ConvertSummaryCase {
+  if (!a) return 'unread';
+  if (a.profiled === 0) return 'unprofiled';
+  return a.total === 0 ? 'all_done' : 'counts';
+}
+
+/**
+ * Why the jobs line reads as held, for the Jobs part: the app can't read the jobs' access lists, so
+ * it says which evidence it used. Null when the line is not held (the plan lists it instead).
+ */
+export function jobsHeldText(v: Pick<PermissionsView, 'lines' | 'who'>): string | null {
+  const line = v.lines.find((l) => String(l.securable_type).toUpperCase() === JOBS_SECURABLE);
+  if (!line || line.status !== STATUS_PRESENT) return null;
+  const ev = line.evidence;
+  if (ev?.kind === EVIDENCE_RECORDED) {
+    const door = ev.door === DOOR_CLI ? 'CLI' : 'notebook';
+    const on = ev.at ? ` on ${String(ev.at).slice(0, 10)}` : '';
+    return `Can Manage Run held: checked by the ${door} install${on}.`;
+  }
+  if (ev?.kind === EVIDENCE_DEPLOYER) {
+    return samePrincipal(v.who.jobs_identity?.name, v.who.user)
+      ? 'Can Manage Run held: you deployed these jobs, so you own them.'
+      : 'Can Manage Run held: the jobs’ identity deployed them, so it owns them.';
+  }
+  return ev?.kind === EVIDENCE_LIVE || !ev ? 'Can Manage Run held on every job.' : null;
 }
 
 /** A plan line's status as the panel labels it; `unknown` is a read that did not happen, never "missing". */

@@ -3,10 +3,14 @@ import {
   type PermissionsView,
   type ViewLine,
   convertHolders,
+  convertSummaryCase,
+  planHeading,
   errorText,
   grantSummary,
   grantorSentence,
   identityLabel,
+  jobRunLoop,
+  jobsHeldText,
   panelMode,
   permissionsBanner,
   planSql,
@@ -34,8 +38,9 @@ function view(lines: ViewLine[], over: Partial<PermissionsView> = {}): Permissio
     rights: { installer: 'ana', checks: [], coverage: { schemas: 0, tables: 0, grantable_schemas: 0, grantable_tables: 0, uncovered: [], candidates: [], headline: '', band: 'none' }, caveat: null, can_install: true, suggested_scopes: '' },
     who: { user: 'ana@example.com', metastore_admin: false, jobs_identity: { kind: 'service_principal', name: SP }, job_count: 20, installer_group: null, deployment: '[e2e] mtm', install_notebook: null },
     scopes: ['sales.orders', 'hr.pay'], stored_scopes: ['sales.orders'], scopes_from: 'stored', convert_rights: 'all_at_once', wave: null,
-    plan_id: 'abcdefabcdef', counts: {}, summary: {}, lines, pending: 0, need_someone_else: 0,
+    plan_id: 'abcdefabcdef', counts: {}, summary: {}, lines, pending: 0, missing: 0, unchecked: 0, need_someone_else: 0,
     handback: { revokes: [], refused: [], plan_id: 'x' }, record_errors: [], estate_error: null, cli_command: '',
+    check_command: 'databricks bundle run install -t e2e --profile <your-profile>',
     ...over,
   };
 }
@@ -99,6 +104,38 @@ describe('request and plan text', () => {
     expect(sql).toContain('-- databricks permissions update jobs 11');
   });
 
+  it('leaves not-checked lines out of the request and the plan, and only notes them with the check', () => {
+    const v = view([
+      line({ grantor: 'hr-admins', securable: 'hr.pay', statement: 'GRANT SELECT ON SCHEMA `hr`.`pay` TO `x`' }),
+      line({ status: 'unknown', securable_type: 'JOBS', grantor: "the jobs' owner or a workspace admin", job_ids: ['11'],
+        statement: '-- Jobs permission (not SQL): CAN_MANAGE_RUN on the 1 jobs', commands: ['databricks permissions update jobs 11 --json x'] }),
+    ]);
+    expect(requestGroups(v).map((g) => g.grantor)).toEqual(['hr-admins']);
+    const text = requestText(v);
+    expect(text).toContain('Not checked from the app (run databricks bundle run install -t e2e --profile <your-profile> to confirm):');
+    expect(text).toContain('  Jobs permission (not SQL): CAN_MANAGE_RUN on the 1 jobs');
+    expect(text).not.toContain('permissions update');
+    const sql = planSql(v);
+    expect(sql).not.toContain('permissions update');
+    expect(sql).toContain('-- Not checked from the app');
+    expect(requestText(view([line({ status: 'unknown', grantor: 'x' })]))).toBe('');
+  });
+
+  it('asks for a missing jobs permission as one loop, labelled not SQL, with the Jobs UI path', () => {
+    const jobs = line({ securable_type: 'JOBS', grantee: 'ana@example.com', grantee_kind: 'user', grantor: "the jobs' owner or a workspace admin",
+      job_ids: ['11', '12'], statement: '-- Jobs permission (not SQL)', commands: ['databricks permissions update jobs 11', 'databricks permissions update jobs 12'] });
+    const [loop] = requestGroups(view([jobs]));
+    expect(loop.statements).toEqual([
+      '# Not SQL: job permissions are workspace settings, not Unity Catalog grants.',
+      '# Or in the Jobs UI: open each job, then Permissions, then add ana@example.com with Can Manage Run.',
+      'for id in 11 12; do databricks permissions update jobs "$id" --json \'{"access_control_list": [{"user_name": "ana@example.com", "permission_level": "CAN_MANAGE_RUN"}]}\'; done',
+    ]);
+    expect(jobRunLoop(jobs)[2]).toContain('for id in 11 12;');
+    const sql = planSql(view([jobs]));
+    expect(sql).toContain('-- Not SQL: job permissions are workspace settings');
+    expect(sql).toContain('-- for id in 11 12; do');
+  });
+
   it('labels identities and the schemas holding convert rights', () => {
     expect(identityLabel({ kind: 'service_principal', name: SP })).toBe(`service principal ${SP}`);
     expect(identityLabel(null)).toBe('not resolved');
@@ -152,5 +189,51 @@ describe('permissionsBanner', () => {
   it('scopesWithPicks adds the picks to the stored scope, and sends nothing when nothing is picked', () => {
     expect(scopesWithPicks(['sales.orders'], [])).toBe('');
     expect(scopesWithPicks(['sales.orders'], ['HR.pay', 'sales.orders', 'fin.*'])).toBe('sales.orders,hr.pay,fin.*');
+  });
+});
+
+describe('convertSummaryCase', () => {
+  it('reads an empty manifest as not profiled, not as 0 of 0', () => {
+    expect(convertSummaryCase({ total: 0, profiled: 0 })).toBe('unprofiled');
+  });
+  it('reads a profiled estate with nothing left as finished', () => {
+    expect(convertSummaryCase({ total: 0, profiled: 12 })).toBe('all_done');
+  });
+  it('counts when tables are still to convert, and when an older server sends no profiled count', () => {
+    expect(convertSummaryCase({ total: 3, profiled: 5 })).toBe('counts');
+    expect(convertSummaryCase({ total: 3 })).toBe('counts');
+  });
+  it('is unread without a summary', () => {
+    expect(convertSummaryCase(null)).toBe('unread');
+  });
+});
+
+describe('jobsHeldText', () => {
+  const jobs = (status: ViewLine['status'], evidence: ViewLine['evidence']) => {
+    const v = view([line({ securable_type: 'JOBS', privilege: 'CAN_MANAGE_RUN', status, evidence })]);
+    return { ...v, who: { ...v.who, jobs_identity: { kind: 'user', name: 'ana@example.com' } } };
+  };
+  it('names the evidence behind a held jobs line', () => {
+    expect(jobsHeldText(jobs('present', { kind: 'recorded', door: 'cli', at: '2026-10-20 09:00:00' })))
+      .toBe('Can Manage Run held: checked by the CLI install on 2026-10-20.');
+    expect(jobsHeldText(jobs('present', { kind: 'recorded', door: 'notebook', at: null })))
+      .toBe('Can Manage Run held: checked by the notebook install.');
+    expect(jobsHeldText(jobs('present', { kind: 'deployer' }))).toBe('Can Manage Run held: you deployed these jobs, so you own them.');
+    const sp = view([line({ securable_type: 'JOBS', status: 'present', evidence: { kind: 'deployer' } })]);
+    expect(jobsHeldText(sp)).toBe('Can Manage Run held: the jobs’ identity deployed them, so it owns them.');
+    expect(jobsHeldText(jobs('present', { kind: 'live' }))).toBe('Can Manage Run held on every job.');
+  });
+  it('says nothing when the line is missing or not checked', () => {
+    expect(jobsHeldText(jobs('missing', { kind: 'live' }))).toBeNull();
+    expect(jobsHeldText(jobs('unknown', null))).toBeNull();
+  });
+});
+
+describe('planHeading', () => {
+  it('counts not-checked lines apart from missing ones', () => {
+    expect(planHeading(0, 1)).toBe('Plan · 1 not checked');
+    expect(planHeading(2, 0)).toBe('Plan · 2 missing');
+    expect(planHeading(2, 1)).toBe('Plan · 2 missing · 1 not checked');
+    expect(planHeading(0, 0)).toBe('Plan · nothing missing');
   });
 });

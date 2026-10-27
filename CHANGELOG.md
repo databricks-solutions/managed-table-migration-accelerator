@@ -97,7 +97,8 @@ release may change job parameters or control-table columns; every such change is
   builds it too.
 - **CI and the docs site deploy run on GitHub Actions.** `ci.yml` runs the `make ci` checks on
   every pull request and push to `main` (secretless, read-only, every action pinned to a commit
-  SHA, Python dependencies hash-locked in `backend/requirements-ci.txt`); `deploy-docs.yml`
+  SHA, installs without install scripts, Python dependencies hash-locked and wheel-only in
+  `backend/requirements-ci.txt`); `deploy-docs.yml`
   publishes the docs site to GitHub Pages. Dependabot watches the actions, npm and pip
   dependencies. Releases are still cut locally with `make release`.
 

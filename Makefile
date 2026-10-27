@@ -40,13 +40,13 @@ test: ## Run the pure-logic unit tests (no cluster)
 	python -m pytest backend/src/tests/ -q
 
 ci: test docs-build ## Every pre-merge check (CI runs the same on GitHub): backend tests, docs site build, app typecheck/tests/lint
-	cd app && npm ci --no-audit --no-fund && npm run typecheck && npx vitest run && npx eslint client/src server
+	cd app && npm ci --ignore-scripts --no-audit --no-fund && npm run typecheck && npx vitest run && npx eslint client/src server
 
 docs-dev: ## Run the docs site locally with live reload (docs/site, http://localhost:3000)
 	cd docs/site && npm start
 
 docs-build: ## Build the docs site (link-rewrite tests, typecheck, build; a broken link fails it)
-	cd docs/site && npm ci --no-audit --no-fund && npm test && npm run typecheck && npm run build
+	cd docs/site && npm ci --ignore-scripts --no-audit --no-fund && npm test && npm run typecheck && npm run build
 
 release-check: ## Check TAG=vX.Y.Z matches the version in every versioned file and CHANGELOG.md
 	@if [ -z "$(TAG)" ]; then echo "ERROR: TAG is required (make release-check TAG=v0.1.0)"; exit 1; fi

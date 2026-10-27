@@ -21,9 +21,12 @@ Express routes). Read queries live as `.sql` files in `app/config/queries/`.
 From `app/client/src/components/nav.ts` (four nav groups, plus the workstream detail route):
 
 - **MIGRATE**: `/overview`, `/workstreams` (+ `/workstreams/:workstream` detail), `/blocked`,
-  `/waves`, `/convert`, `/bulk` (Bulk Convert: parallel-safe batches).
-- **OBSERVE**: `/runs`, `/freeze`, `/dashboard`, `/runbook`.
+  `/waves`, `/convert`.
+- **OBSERVE**: `/runs`, `/freeze`, `/coverage` (how much of the estate the scans can see),
+  `/dashboard`, `/runbook`.
 - **LEARN / SETUP**: `/how-it-works`, `/settings`.
+
+`/bulk` (Bulk Convert, below) is a route but not a sidebar item: open it by URL.
 
 Genie is a docked panel available on every route, not a route of its own (the **Ask Genie**
 button, backed by the Genie space).

@@ -85,8 +85,8 @@ Each has a default, so you can take them as they come:
    host to set: the workspace is the one that holds the Git folder.
 3. **Deploy.** With `databricks.yml` open, click the **Deployments** icon, pick the `dev` target
    and click **Deploy**. In a few minutes this creates the stage jobs, the setup job, the
-   dashboard and the app. A blank `warehouse_id` stops the deploy with
-   `dashboard warehouse_id is required`.
+   dashboard and the app. A blank `warehouse_id` stops the deploy, and any later `bundle run`,
+   with `dashboard warehouse_id is required`.
 4. **Preview.** Open `backend/notebooks/install.py` from the same Git folder and click
    **Run all**. With the default widgets (`confirm_grants=false`) nothing is granted. The run
    explains each widget first (here with `action=check`, which stops after the plan):

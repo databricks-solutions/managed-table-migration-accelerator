@@ -93,7 +93,7 @@ logged and never fails the setup job.
 
 | Variable | Default | Meaning |
 |---|---|---|
-| `warehouse_id` | blank | The SQL warehouse behind the dashboard and Genie. Required for both; leave blank to skip Genie. |
+| `warehouse_id` | blank | The SQL warehouse behind the dashboard and Genie. Required: the dashboard needs it, and a blank value fails the deploy or a `bundle run`. To deploy without Genie, set `ensure_genie=false`. |
 | `ensure_genie` | `true` | Whether `job_99_setup` creates or updates the Genie space. |
 | `genie_grant_users` | `true` | Grant the `users` group `CAN_RUN` on the space (`false` = creator-only). |
 | `dataset_catalog` / `dataset_schema` | the manifest catalog / schema | Where the dashboard and Genie read the control tables. Leave unset: they follow `manifest_catalog` / `manifest_schema`. |

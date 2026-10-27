@@ -82,7 +82,8 @@ release may change job parameters or control-table columns; every such change is
 - **One deploy.** The app looks the Genie space up per request instead of once at boot, so the
   space the installer creates works without a second deploy. The install notebook's "deploy
   again" step is gone, and every installer run (notebook or CLI) now ends with the conductor, so
-  the app's views and next step reflect it: to upgrade, deploy and re-run the installer.
+  the app's views and next step reflect it. To upgrade, deploy again and run `job_08_conductor`
+  once.
 - **An under-privileged banner on every page.** When the jobs are missing permissions, every page
   says so ("The migration is missing permissions on 2 schemas.") and links to Settings →
   Permissions. It reads the same plan as that page and never grants.
@@ -103,6 +104,13 @@ release may change job parameters or control-table columns; every such change is
   dependencies. Releases are still cut locally with `make release`.
 
 ### Fixed
+
+- **Docs match the current code.** The app's page list now includes Coverage and says Bulk
+  Convert is opened by URL; the MCP tier is set with the `mcp_tier` bundle variable; the playbook's
+  first step points to the installer; `warehouse_id` is described as required, with
+  `ensure_genie=false` to skip Genie; upgrading means deploy, then run `job_08_conductor` once
+  (the installer notebook said to re-run it); who receives the Control grants is corrected; and the
+  READMEs describe CI and the docs site.
 
 - **Dependency security updates.** The app moves to `@modelcontextprotocol/sdk` 1.32.1,
   `react-router` 7.18.4, `zod` 4.6.7 and `vitest` 4.1.12, and overrides the copies of

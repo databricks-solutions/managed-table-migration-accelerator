@@ -177,8 +177,10 @@ anything.
 | **Read** | Profile a table (`DESCRIBE DETAIL` / `HISTORY` / `TABLE`) | `USE CATALOG`, `USE SCHEMA`, `SELECT` | Each schema the installer picks | Install | Schema or catalog owner, `MANAGE` holder, metastore admin |
 | **Change** | Convert and roll back | `MANAGE` on the schema; `MODIFY` per table through Authorize | The chosen scopes (default), or the schemas of one wave (stricter option) | At install (default), or before each wave converts | Same as Read |
 
-Who receives each set is in section 5: Control goes to the app's service principal, and the other
-three go to the identity the jobs run as.
+Who receives each set is in section 5. Control goes to the app's service principal, to the
+installers' group (or the installer, when no group is set) for the install records, and to the
+jobs' identity for its deployment folder and jobs. The other three go to the identity the jobs run
+as.
 
 Why **Read** cannot be avoided: `SET MANAGED` needs `SELECT` + `MODIFY` unless the identity owns the
 table (`authority.py`, pinned by `convert_authority_cases.json`). Anything the tool will convert

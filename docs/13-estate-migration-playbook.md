@@ -51,8 +51,10 @@ already in flight and never skip a gate.
 **0. Prereqs and runtime.** Confirm the runtime floor: `SET MANAGED` /
 `TRUNCATE UNIFORM HISTORY` need DBR 17.3 LTS+ or Serverless; all stage jobs run serverless, which
 satisfies this. Confirm a managed storage location is configured (schema -> catalog ->
-metastore). It is a fail-closed gate. Run `job_99_setup` once (install-time) to create the
-control plane, the Genie space, and the App SP grants. See
+metastore). It is a fail-closed gate. Install with the installer (the `install.py` notebook or
+`databricks bundle run install`): it runs `job_99_setup` for you (control plane, Genie space, App SP
+grants), grants the jobs what they need, profiles and verifies. See
+[Installation](./00-installation.md) and
 [Overview](./01-overview.md#non-negotiable-set-managed-facts).
 
 **1. Profile the estate.** Run `job_00_profiler` (read-only) to discover every EXTERNAL table,

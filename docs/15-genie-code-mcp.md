@@ -59,7 +59,8 @@ everything the app controls:
 
 - **`MCP_TIER=v2` by default** — reads + non-mutating stages + `mtm_conversion_preflight` **plus** the
   gated mutating tools (freeze / authorize / convert / unfreeze / rollback / cleanup / reshare / compat /
-  optimize / campaign; the bulk family — the four `mtm_bulk_*` tools and the `mtm_get_bulk_status` read — is built but withheld until customers ask for it). Set `MCP_TIER=v1` to hide the mutating tools.
+  optimize / campaign; the bulk family — the four `mtm_bulk_*` tools and the `mtm_get_bulk_status` read — is built but withheld until customers ask for it). To hide the mutating tools, deploy with the
+  bundle variable `mcp_tier=v1` (`--var="mcp_tier=v1"`); it sets the app's `MCP_TIER` env.
 - **`mcp-` app-name prefix** (`var.app_name` = `mcp-${bundle.name}`) so Databricks recognizes it as a
   custom MCP server.
 - **`ai-gateway` user API scope** so the forwarded user token flows through Unity Gateway.

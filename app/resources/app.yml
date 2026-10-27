@@ -148,9 +148,9 @@ resources:
           # source using either value or valueFrom"). Empty → client omits ?o=.
           - name: DATABRICKS_WORKSPACE_ID
             value: "${var.workspace_id}"
-          # Genie Code MCP surface (POST /mcp). MCP_TIER=v1 (default) exposes reads + non-mutating
-          # stages only; set to v2 to expose gated conversions (each behind confirm=true + the job's
-          # own fail-closed gates). CORS is locked to DATABRICKS_HOST at runtime (never "*"); set the
+          # Genie Code MCP surface (POST /mcp). MCP_TIER=v2 (the var.mcp_tier default) adds the gated
+          # conversions (each behind confirm=true + the job's own fail-closed gates); v1 exposes
+          # reads + non-mutating stages only. CORS is locked to DATABRICKS_HOST at runtime (never "*"); set the
           # optional MCP_ALLOWED_ORIGIN env here to override. Quoted so an empty var renders "".
           - name: MCP_TIER
             value: "${var.mcp_tier}"

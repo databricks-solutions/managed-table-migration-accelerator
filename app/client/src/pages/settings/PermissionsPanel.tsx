@@ -76,7 +76,7 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
     if (window.location.hash === '#permissions') document.getElementById('permissions')?.scrollIntoView();
   }, []);
   const { bumpRefresh } = useCatalog();
-  /** Schemas picked this visit, on top of the stored migration scope (lower case). */
+  /** Schemas picked this visit, on top of the stored scopes (lower case). */
   const [picks, setPicks] = useState<string[]>([]);
   const [convertRights, setConvertRights] = useState<string>('');
   const [view, setView] = useState<PermissionsView | null>(null);
@@ -451,6 +451,13 @@ function ScopePart({ view, busy, picker }: { view: PermissionsView; busy: boolea
         </p>
       )}
       {view.scope_note ? <p className="text-xs text-muted-foreground">{view.scope_note}</p> : null}
+      <p className="text-xs text-muted-foreground">
+        Which tables convert: see{' '}
+        <Link to="/waves" className="underline">
+          Waves
+        </Link>
+        .
+      </p>
       {view.catalog_types_error && view.scopes_from === SCOPES_FROM_ALL ? (
         <p className="text-xs text-muted-foreground">
           Could not read catalog types, so only system, hive_metastore and samples are left out.

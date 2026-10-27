@@ -112,7 +112,7 @@ release may change job parameters or control-table columns; every such change is
 
 - **The e2e control-plane wipe empties every control table.** `--wipe-control-plane` now also
   empties `convert_authority` and `migration_scope`, so a fresh install no longer shows old convert
-  rights or the old migration scope.
+  rights or old stored scopes.
 - **Settings → Permissions explains a sign-in with no SQL access.** When your sign-in to the app
   has no `sql` scope (it predates the app asking for it), the panel now says so and how to fix it
   (open the app in a new private window and approve the prompt). It no longer shows `can't read` on
@@ -156,6 +156,9 @@ release may change job parameters or control-table columns; every such change is
   stops with NO-GO and both fixes (keep the old identity, or move to the new one), instead of
   granting a second identity silently. If your prod jobs ran as a service principal, keep it with
   `jobs_identity=sp:<application-id>` before you redeploy.
+- **Settings → Permissions → Where the jobs have access** (was Migration scope). The part lists
+  where the jobs can read and convert, and now says that this grants access only: the profiler
+  finds the tables, and nothing converts until you launch a wave. A line under it points to Waves.
 - **Blank scopes cover your catalogs.** `scopes` takes the new token `all`, and a blank value with
   no stored scopes now means `all`: every catalog with external tables you can grant on, as
   `catalog.*`, or the schemas you can grant on where you cannot grant on the whole catalog
@@ -188,7 +191,7 @@ release may change job parameters or control-table columns; every such change is
 - **Settings has one grant panel per identity.** "Permissions the app needs" is now **The app's
   own access**: the app service principal's control-table grants, checked and copyable. Its
   copy-paste grants for the jobs identity duplicated the Permissions plan and are gone; its schema
-  picker moved into Permissions → Migration scope, where a ticked schema joins the plan directly,
+  picker moved into Permissions → Where the jobs have access, where a ticked schema joins the plan directly,
   and the per-table convert permission summary and script moved into Convert rights. Picks are no
   longer saved in the browser. `GET /api/grants/plan` takes `tier2=0` to skip the per-schema reads;
   without it the response is unchanged (the MCP tool `mtm_get_grants_plan` still gets Tier 2).

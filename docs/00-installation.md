@@ -211,11 +211,12 @@ profiling finishes, **Overview** shows your estate and the recommended next step
 
 The app takes over once the first install has run. After the first install, **Connection & policy → Permissions** shows the same check, the stored
 scopes with their live status, and the plan, for the signed-in admin. With nothing stored yet,
-**Migration scope** starts with every catalog you can grant on, as rows you can remove to narrow.
+**Where the jobs have access** starts with every catalog you can grant on, as rows you can remove to narrow.
+It grants access only: the profiler finds the tables, and the waves decide what converts.
 **Add schemas** widens the scope; **Grant** runs the plan as you, with your own rights, after a confirm that lists every
 statement. Lines you cannot grant name who can, with a **Copy request**.
 
-![Settings → Permissions: the rights check, who runs the jobs (you), the migration scope starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
+![Settings → Permissions: the rights check, who runs the jobs (you), where the jobs have access, starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
 
 When you deployed the jobs, you own them, so **Who runs the jobs** reads the run permission as held
 without asking for it:
@@ -226,7 +227,7 @@ Before the first profile, **Convert rights** has no tables to check yet and offe
 
 ![Convert rights before profiling: all at once, handed back at the end, the jobs hold MANAGE on the catalog, and No tables profiled yet with Run the profiler](images/install/app/convert-rights-empty.png)
 
-![Add schemas: the schemas with external tables you can see, grouped by catalog with table counts, and a box for catalog.schema or catalog.*](images/install/app/add-schemas.png)
+![Add schemas under Where the jobs have access: the schemas with external tables you can see, grouped by catalog with table counts, and a box for catalog.schema or catalog.*](images/install/app/add-schemas.png)
 
 When the jobs run as a service principal (`jobs_identity=sp:<application-id>`), the plan lists what
 it still needs, and **Grant** gives it:
@@ -534,7 +535,7 @@ backticks; a display name grants nothing), shown on the app's page in the worksp
 The app's **Settings** page (**Connection & policy**) has two panels, one per identity:
 
 - **Permissions** is for the migration jobs. It checks, grants and hands back as the signed-in admin
-  ([Carry on in the app](#carry-on-in-the-app)). Its **Migration scope** part lists the schemas with
+  ([Carry on in the app](#carry-on-in-the-app)). Its **Where the jobs have access** part lists the schemas with
   external tables you can see: tick a schema (or type one) and its grants join the plan straight
   away, so you can grant access before the first profiler run. Nothing is ticked for you. The list
   is your visibility, not the whole estate: the profiler finds the authoritative set once the grants

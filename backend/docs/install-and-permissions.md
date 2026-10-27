@@ -182,14 +182,14 @@ three go to the identity the jobs run as.
 
 Why **Read** cannot be avoided: `SET MANAGED` needs `SELECT` + `MODIFY` unless the identity owns the
 table (`authority.py`, pinned by `convert_authority_cases.json`). Anything the tool will convert
-needs `SELECT` anyway, so granting it to the migration scope at install adds no access the convert
+needs `SELECT` anyway, so granting it on the granted scopes at install adds no access the convert
 would not need.
 
 Why **Change** is granted once, at install, by default: the only convert right a person must grant
 is `MANAGE` (or ownership, which the tool never changes). `MANAGE` lets its holder grant any
 privilege on the schema, so a job can never give it to itself; once it is held, Authorize
-(`job_03d`) grants the `MODIFY` it still needs and `07` revokes it. Granting it once for the whole
-migration scope means one approval, no person between waves, and one hand-back at the end. The
+(`job_03d`) grants the `MODIFY` it still needs and `07` revokes it. Granting it once for all the
+granted scopes means one approval, no person between waves, and one hand-back at the end. The
 trade-off is a wider standing right: the jobs' identity holds `MANAGE` on schemas that may not
 convert for weeks. Every convert is still gated by the dry run, the wave pin and the live
 `convert_authority` re-check in `04`, so holding the right does not convert anything by itself.
@@ -1247,7 +1247,7 @@ principal's control-table grants:
 1. **Can you grant here?** The rights and coverage report for the signed-in user.
 2. **Who runs the jobs.** The jobs' identity, its kind and warnings; **Change** opens the command
    generator (section 5), never an in-app change.
-3. **Migration scope.** The stored scopes with door, who and when, and per-set status
+3. **Where the jobs have access.** The stored scopes with door, who and when, and per-set status
    (`present` / `missing` / `not checked`), plus **Add schemas** (the "Schemas you can see"
    picker of the external tables the signed-in admin can see, and a typed input).
 4. **Convert rights.** All at once or per wave, the schemas holding `MANAGE` from the tool,
@@ -1284,7 +1284,7 @@ stateDiagram-v2
 │                                                                             │
 │ Who runs the jobs     mtm-jobs · service principal · all 24 jobs   [Change] │
 │                                                                             │
-│ Migration scope                                              [Add schemas]  │
+│ Where the jobs have access                                   [Add schemas]  │
 │   sales.*          CLI · alice · Oct 26     Control ✓ Look ✓ Read ✓ Change ✓ │
 │   finance.orders   CLI · alice · Oct 26     Control ✓ Look ✓ Read ✓ Change ✓ │
 │   finance.billing  app · bob   · Nov 12     Read missing · Change missing    │

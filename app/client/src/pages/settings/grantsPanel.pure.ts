@@ -17,7 +17,7 @@ export interface MergedScope extends Scope {
   /** External tables the admin can see in it; null for a picked scope the scan did not list. */
   externalTableCount: number | null;
   selected: boolean;
-  /** Already in the stored migration scope, so the plan includes it whatever is ticked. */
+  /** Already in the stored scopes, so the plan includes it whatever is ticked. */
   covered: boolean;
 }
 

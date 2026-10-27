@@ -74,7 +74,7 @@ describe('mergeScopes', () => {
     expect(mergeScopes([{ catalog: 'c', schema: 's', externalTableCount: 2 }], [])[0].selected).toBe(false);
   });
 
-  it('marks a schema already in the migration scope as covered, so Select all skips it', () => {
+  it('marks a schema already in the stored scopes as covered, so Select all skips it', () => {
     const merged = mergeScopes(
       [
         { catalog: 'M', schema: 'stored', externalTableCount: 3 },

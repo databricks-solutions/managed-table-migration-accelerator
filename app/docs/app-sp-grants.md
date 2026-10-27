@@ -422,7 +422,7 @@ This is a UX degradation, **not** a correctness problem — and it must be surfa
 > - **Permissions** (`app/client/src/pages/settings/PermissionsPanel.tsx`, `GET/POST
 >   /api/permissions*`) is the installer's Settings front door for **the jobs' identity**: it runs
 >   the shared rights check and grant plan, and its **Grant** and **Hand back** run as the signed-in
->   admin (their forwarded token), never as the app SP. Its **Migration scope** part holds the
+>   admin (their forwarded token), never as the app SP. Its **Where the jobs have access** part holds the
 >   schema picker (`ScopePicker.tsx`, fed by `GET /api/estate/obo-discovery`), and its **Convert
 >   rights** part the per-table convert summary and the `GET /api/grants/convert-permissions.sql`
 >   download (the old `ownership.sql` path is an alias).

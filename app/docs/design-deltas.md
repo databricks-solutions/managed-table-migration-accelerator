@@ -1479,7 +1479,7 @@ app removes the copy and paste, not the check.
 service principal's Tier 1 control-table grants with their `SHOW GRANTS` status and **Copy**, and
 nothing else. Its Tier 2 block (the jobs identity's grants as copy-paste SQL) and its schema
 picker left: Tier 2 repeated the Permissions plan for the same identity, and two pickers fed two
-different lists. The picker now lives in Permissions → **Migration scope** ("Schemas you can see",
+different lists. The picker now lives in Permissions → **Where the jobs have access** ("Schemas you can see",
 `ScopePicker.tsx`), where a ticked schema joins the plan as a `new` row, and the per-table convert
 permission summary and `convert-permissions.sql` download moved into **Convert rights**. Both
 panels share one `GET /api/grants/plan?tier2=0` read (`useAppGrantsPlan.ts`); without `tier2=0`
@@ -1542,6 +1542,10 @@ already in scope and are never ticked twice. Convert rights reads "All N tables 
 are authorized for …" when none is blocked, instead of zero counts and an empty grant script, and
 the toast after **Grant** counts not-checked lines apart from missing ones ("Checked after: 2 not
 checked").
+**Update:** the part is titled **Where the jobs have access**, not "Migration scope". Seeded with
+every catalog, the old title read as the list of what would be migrated, but the part only grants
+access: the profiler (`catalog_filter` / `schema_filter`) finds the tables and the wave plan decides
+what converts. Its tooltip says so, and a line under it points to **Waves**.
 
 **Why.** The tool migrates an estate, and the installer is usually a workspace and metastore admin
 who will run it themselves. Asking them to list schemas before the first profile, and to set up a

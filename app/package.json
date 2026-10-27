@@ -34,7 +34,7 @@
     "@databricks/sdk-experimental": "0.17.0",
     "@modelcontextprotocol/sdk": "1.32.1",
     "clsx": "2.1.1",
-    "driver.js": "1.8.0",
+    "driver.js": "1.10.2",
     "embla-carousel-react": "8.6.0",
     "lucide-react": "0.546.0",
     "next-themes": "0.4.6",

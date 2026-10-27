@@ -1,0 +1,6 @@
+# Docusaurus build output and caches (also listed in the repo root .gitignore,
+# which the bundle sync honours).
+/node_modules
+/build
+/.docusaurus
+.cache-loader

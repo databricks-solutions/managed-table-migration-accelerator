@@ -89,6 +89,12 @@ release may change job parameters or control-table columns; every such change is
 - **The Settings grants panel addresses schema grants to the jobs' identity.** Step 2 now reads
   who the deployed jobs run as (`jobs_identity` on `GET /api/grants/plan`), instead of assuming the
   app service principal.
+- **A documentation site.** `docs/site/` is a Docusaurus site built from the existing `docs/`
+  pages plus six backend reference pages (the two contracts, architecture, state machine, install
+  and permissions, privileges), with search, Mermaid diagrams and image zoom. The markdown is
+  unchanged: links that leave a page's folder are rewritten at build time to a site page or to the
+  file on GitHub, and a broken link fails the build. Run it with `make docs-dev`; `make ci` now
+  builds it too.
 
 ### Fixed
 
@@ -126,6 +132,8 @@ release may change job parameters or control-table columns; every such change is
   grants you already hold or names guessed grantors: every line reads "not checked". Its CLI
   command is a dry run without a `plan_id`, because a plan built from failed reads is not the plan
   the CLI computes and the CLI would refuse it.
+- **A sequence diagram in the install and permissions design did not render.** A `;` in a message
+  ends the statement in Mermaid; it now reads "Writes control tables, app reads them back".
 
 - **The `prod` target validates.** A target-level `run_as` also applied to the app, which the
   Apps platform refuses ("apps do not support a setting a run_as user that is different from the

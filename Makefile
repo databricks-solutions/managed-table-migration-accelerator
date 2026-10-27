@@ -1,7 +1,7 @@
 .DEFAULT_GOAL := help
 TARGET ?= dev
 
-.PHONY: help validate deploy deploy-prod test ci release-check release typegen-check install setup profiler wave-plan dry-run convert validate-stage rollback cleanup e2e-all
+.PHONY: help validate deploy deploy-prod test ci docs-dev docs-build release-check release typegen-check install setup profiler wave-plan dry-run convert validate-stage rollback cleanup e2e-all
 
 # Convert selector (schema is the safe default). Streaming waves are excluded from a
 # schema/bucket scope unless INCLUDE_STREAMING=true (or BUCKET=streaming).
@@ -39,8 +39,14 @@ deploy-prod: ## Deploy all jobs to prod (PROFILE=<prod workspace profile>; the j
 test: ## Run the pure-logic unit tests (no cluster)
 	python -m pytest backend/src/tests/ -q
 
-ci: test ## Every pre-merge check (no GitHub Actions here): backend tests + app typecheck/tests/lint
+ci: test docs-build ## Every pre-merge check (no GitHub Actions here): backend tests, docs site build, app typecheck/tests/lint
 	cd app && npm ci --no-audit --no-fund && npm run typecheck && npx vitest run && npx eslint client/src server
+
+docs-dev: ## Run the docs site locally with live reload (docs/site, http://localhost:3000)
+	cd docs/site && npm start
+
+docs-build: ## Build the docs site (link-rewrite tests, typecheck, build; a broken link fails it)
+	cd docs/site && npm ci --no-audit --no-fund && npm test && npm run typecheck && npm run build
 
 release-check: ## Check TAG=vX.Y.Z matches the version in every versioned file and CHANGELOG.md
 	@if [ -z "$(TAG)" ]; then echo "ERROR: TAG is required (make release-check TAG=v0.1.0)"; exit 1; fi

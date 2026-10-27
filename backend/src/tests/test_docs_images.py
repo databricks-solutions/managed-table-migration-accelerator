@@ -9,6 +9,8 @@ IMAGES = ROOT / "docs" / "images"
 INSTALL_IMAGES = IMAGES / "install"
 DOORS = ("notebook", "cli", "app", "mcp")
 IGNORED = ("superpowers", "plans")
+# The docs site project: build output and node_modules, no source pages.
+SITE = ROOT / "docs" / "site"
 IMAGE_SUFFIXES = (".png", ".jpg", ".jpeg", ".gif", ".svg", ".webp")
 
 _MD_IMG = re.compile(r"!\[([^\]]*)\]\(\s*<?([^)\s>]+)>?(?:\s+\"[^\"]*\")?\s*\)")
@@ -22,6 +24,8 @@ def _docs():
             yield r
         elif r.exists():
             for p in sorted(r.rglob("*.md")):
+                if p.is_relative_to(SITE):
+                    continue
                 if not any(part in IGNORED for part in p.relative_to(ROOT).parts):
                     yield p
 

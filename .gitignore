@@ -49,3 +49,9 @@ databricks.local*.yml
 
 # e2e UI screenshots (e2e_app_ui.py --screenshots)
 backend/.e2e/artifacts/
+
+# Docs site (docs/site/) build output, cache and dependencies. Listed explicitly: the bundle
+# deploy uploads the repo and honours this file.
+docs/site/build/
+docs/site/.docusaurus/
+docs/site/node_modules/

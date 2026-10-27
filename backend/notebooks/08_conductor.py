@@ -331,6 +331,8 @@ selector = {
     "wave_id": (selected_wave or {}).get("wave_id"),
     "open_compat": (selected_wave or {}).get("open_compat"),
     "bundle_target": os.environ.get("BUNDLE_TARGET", "dev"),
+    # Nothing profiled yet: the replan command names the profiler, not the wave planner.
+    "needs_profile": cd.needs_profile(next_step_kind, estate),
 }
 exact_command = cd.build_exact_command(selector)
 # Thread the convert identity onto the selected wave so the Authorize directive names it (the

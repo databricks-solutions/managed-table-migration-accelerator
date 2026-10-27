@@ -100,9 +100,11 @@ The conductor (`job_08_conductor`) is the recommender. It reads the live control
 | `optimize` | Turn on liquid clustering | `job_08c_enable_optimization` (app alias `enable_optimization`) |
 | `blocked` / `done` | Resolve blockers / Migration complete | — |
 
+A `replan` row with nothing profiled yet (`estate_total_schemas` and `estate_discovered_tables` both 0) is the first step of a fresh install: its title is **Run the profiler first**, its job is `job_00_profiler` (`next_job_alias = profiler`), and the waves are planned after it. The kind stays `replan`.
+
 **Precedence** (the single decision path):
 
-1. Re-plan, when there is no plan yet or no profiled schemas.
+1. Re-plan, when there is no plan yet or no profiled schemas (the profiler first, when nothing is profiled).
 2. The lowest-ordered wave that has already started converting — resumed ahead of anything else, even a lower-ordered READY wave.
 3. A fully-converted wave's next finish step (unfreeze → re-share → external readers → liquid clustering), ahead of a wave that has not started and ahead of reporting done. Finish steps are offered for streaming waves too, because a converted streaming wave must restart its streams.
 4. The first ACTIVE team pin (see below).

@@ -47,3 +47,24 @@ def test_bulk_cockpit_reconciles_read_views_before_the_joined_read():
     assert "from migration import conductor as cd" in src
     i_reconcile = src.index("cd.reconcile_read_views(spark, MANIFEST_CATALOG, MANIFEST_SCHEMA)")
     assert i_reconcile < src.index("JOINED_ROWS = _read_joined_rows()")
+
+
+def test_conductor_flags_the_first_profile_on_the_selector():
+    src = _read("08_conductor.py")
+    i_flag = src.index('"needs_profile": cd.needs_profile(next_step_kind, estate),')
+    assert i_flag < src.index("exact_command = cd.build_exact_command(selector)")
+
+
+def test_cockpit_launches_the_profiler_for_a_first_profile_row():
+    src = _read("09_cockpit.py")
+    profiler_job = os.path.join(_NB, "..", "resources", "job_00_profiler.yml")
+    with open(profiler_job, encoding="utf-8") as fh:
+        assert ":: 00 profiler\"" in fh.read()
+    assert '"00_profiler": ":: 00 profiler",' in src
+    i_first = src.index(
+        "if kind == cd.STEP_REPLAN and cd.row_needs_profile(NXT) and not _manifest_has_tables():")
+    i_launch = src.index('_launch("00_profiler")')
+    i_replan = src.index("elif kind == cd.STEP_REPLAN:")
+    assert i_first < i_launch < i_replan
+    # A later profile filled the manifest: the stale row plans the waves instead.
+    assert src.index('_launch("02_wave_planner")', i_replan) > i_replan

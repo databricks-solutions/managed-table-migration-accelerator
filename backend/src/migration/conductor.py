@@ -475,6 +475,32 @@ def readiness_evaluated_for_wave(
     return False
 
 
+def needs_profile(next_step_kind: Optional[str], estate: Optional[dict]) -> bool:
+    """True when a ``replan`` recommendation has no profiled estate behind it.
+
+    No planned schema and no discovered table means the profiler has not found anything yet,
+    so the first step is the profiler, not the wave planner. The kind stays ``replan``; only
+    the title, directive, command and job alias change. Missing counts read as 0. Mirrored in
+    ``app/client/src/lib/needsProfile.pure.ts`` and ``app/server/mcp/estateNextStep.pure.ts``
+    (golden fixture ``tests/fixtures/needs_profile_cases.json``).
+    """
+    e = estate or {}
+    return (
+        next_step_kind == STEP_REPLAN
+        and _i(e.get("total_schemas")) == 0
+        and _i(e.get("discovered_tables")) == 0
+    )
+
+
+def row_needs_profile(row: Optional[dict]) -> bool:
+    """:func:`needs_profile` over a ``migration_next_actions`` row (its ``estate_*`` columns)."""
+    r = row or {}
+    return needs_profile(r.get("next_step_kind"), {
+        "total_schemas": r.get("estate_total_schemas"),
+        "discovered_tables": r.get("estate_discovered_tables"),
+    })
+
+
 def classify_next_step(
     estate: dict,
     next_wave: Optional[dict],
@@ -916,6 +942,8 @@ def build_exact_command(selector: dict) -> str:
             return f"databricks bundle run job_05_validate -t {target} --params {_validate_filters(ts)}"
         return f"databricks bundle run job_05_validate -t {target}"
     if kind == STEP_REPLAN:
+        if selector.get("needs_profile"):
+            return f"databricks bundle run job_00_profiler -t {target}"
         return f"databricks bundle run job_02_wave_planner -t {target}"
     if kind == STEP_LEASE:
         prid, wid = selector.get("plan_run_id"), selector.get("wave_id")
@@ -1006,6 +1034,10 @@ _STEP_TITLES = {
     STEP_OPTIMIZE: "Turn on liquid clustering",
 }
 
+# A ``replan`` row with nothing profiled (:func:`needs_profile`) targets the profiler instead.
+FIRST_PROFILE_TITLE = "Run the profiler first"
+FIRST_PROFILE_JOB_ALIAS = "profiler"
+
 
 # Steps that run before a wave converts: the pre-convert external-reader warning rides on these.
 _PRE_CONVERT_STEPS = (STEP_PREP, STEP_FREEZE, STEP_LEASE, STEP_CONVERT, STEP_RESUME)
@@ -1045,6 +1077,8 @@ def _build_directive(estate, next_step_kind, next_wave, implications, blockers,
     imp = implications or {}
     if next_step_kind == STEP_DONE:
         return "All in-scope schemas are converted and validated. Nothing to advance."
+    if needs_profile(next_step_kind, estate):
+        return "No tables profiled yet. Run the profiler (job_00_profiler); plan the waves after it."
     if next_step_kind == STEP_REPLAN:
         return "No current wave plan for this scope. Run the wave planner (advance) to generate one."
     if next_step_kind == STEP_BLOCKED:
@@ -1174,6 +1208,7 @@ def build_next_action_row(
     estate = estate or {}
     imp = implications or {}
     gk = _group_key(next_wave)
+    first_profile = needs_profile(next_step_kind, estate)
     row = {
         "as_of": as_of,
         "plan_run_id": plan_run_id,
@@ -1185,13 +1220,14 @@ def build_next_action_row(
         "schemas_blocked": _i(estate.get("schemas_blocked")),
         "prev_summary": prev_summary,
         "next_step_kind": next_step_kind,
-        "next_step_title": _STEP_TITLES.get(next_step_kind, next_step_kind),
+        "next_step_title": (FIRST_PROFILE_TITLE if first_profile
+                            else _STEP_TITLES.get(next_step_kind, next_step_kind)),
         "next_wave_id": (next_wave or {}).get("wave_id"),
         "next_group_key": gk,
         "next_bucket": (next_wave or {}).get("bucket"),
         "next_selector": gk,
         "next_selector_kind": "target_schema" if gk else None,
-        "next_job_alias": job_alias_for_step(next_step_kind),
+        "next_job_alias": FIRST_PROFILE_JOB_ALIAS if first_profile else job_alias_for_step(next_step_kind),
         "mutates": bool(imp.get("mutates", False)),
         "reversible": bool(imp.get("reversible", False)),
         "eta_copy_min": _f(imp.get("eta_copy_min")),

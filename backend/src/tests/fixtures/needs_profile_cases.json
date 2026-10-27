@@ -1,0 +1,14 @@
+{
+  "_doc": "Golden cases for conductor.row_needs_profile (backend) and its TS mirrors (app/client/src/lib/needsProfile.pure.ts, app/server/mcp/estateNextStep.pure.ts). A migration_next_actions row with no profiled estate behind it recommends the profiler, never the wave planner.",
+  "cases": [
+    {"name": "never profiled", "row": {"next_step_kind": "replan", "estate_total_schemas": 0, "estate_discovered_tables": 0}, "expected": true},
+    {"name": "counts as strings", "row": {"next_step_kind": "replan", "estate_total_schemas": "0", "estate_discovered_tables": "0"}, "expected": true},
+    {"name": "missing counts read as 0", "row": {"next_step_kind": "replan"}, "expected": true},
+    {"name": "null counts read as 0", "row": {"next_step_kind": "replan", "estate_total_schemas": null, "estate_discovered_tables": null}, "expected": true},
+    {"name": "profiled, not planned", "row": {"next_step_kind": "replan", "estate_total_schemas": 0, "estate_discovered_tables": 128}, "expected": false},
+    {"name": "planned estate", "row": {"next_step_kind": "replan", "estate_total_schemas": 3, "estate_discovered_tables": 120}, "expected": false},
+    {"name": "other kind on an empty estate", "row": {"next_step_kind": "done", "estate_total_schemas": 0, "estate_discovered_tables": 0}, "expected": false},
+    {"name": "convert", "row": {"next_step_kind": "convert", "estate_total_schemas": 2, "estate_discovered_tables": 40}, "expected": false},
+    {"name": "no kind", "row": {"estate_total_schemas": 0, "estate_discovered_tables": 0}, "expected": false}
+  ]
+}

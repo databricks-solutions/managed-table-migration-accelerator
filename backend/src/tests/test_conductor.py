@@ -402,6 +402,11 @@ def test_build_exact_command_prep_and_replan():
     replan = c.build_exact_command({"kind": c.STEP_REPLAN})
     assert replan.startswith("databricks bundle run job_02_wave_planner")
     assert "make " not in replan
+    first = c.build_exact_command({"kind": c.STEP_REPLAN, "needs_profile": True})
+    assert first == "databricks bundle run job_00_profiler -t dev"
+    # The flag only applies to replan.
+    assert "job_10_campaign" in c.build_exact_command(
+        {"kind": c.STEP_PREP, "target_schema": "cat.sch", "needs_profile": True})
 
 
 # --------------------------------------------------------------------------- #
@@ -454,6 +459,79 @@ def test_every_step_kind_is_fireable_or_navigate_only():
 
 def test_next_job_alias_registered_in_next_actions():
     assert "next_job_alias" in c.NEXT_ACTIONS_COLUMN_NAMES
+
+
+# --------------------------------------------------------------------------- #
+# needs_profile — a replan row with nothing profiled recommends the profiler
+# --------------------------------------------------------------------------- #
+
+_NEEDS_PROFILE_FIXTURE = os.path.join(os.path.dirname(__file__), "fixtures", "needs_profile_cases.json")
+
+
+def _needs_profile_cases():
+    with open(_NEEDS_PROFILE_FIXTURE, encoding="utf-8") as fh:
+        return json.load(fh)["cases"]
+
+
+def test_needs_profile_matches_golden_fixture():
+    cases = _needs_profile_cases()
+    assert len(cases) >= 5
+    for case in cases:
+        row = case["row"]
+        assert c.row_needs_profile(row) is case["expected"], case["name"]
+        estate = {"total_schemas": row.get("estate_total_schemas"),
+                  "discovered_tables": row.get("estate_discovered_tables")}
+        assert c.needs_profile(row.get("next_step_kind"), estate) is case["expected"], case["name"]
+
+
+def _replan_row(estate, *, needs_profile_flag):
+    kind = c.classify_next_step(estate, None, has_plan=False)
+    assert kind == c.STEP_REPLAN
+    return c.build_next_action_row(
+        as_of=None, plan_run_id=None, estate=estate, next_step_kind=kind, next_wave=None,
+        implications=c.build_implications(kind, None, [], []), blockers=[], prev_summary="",
+        exact_command=c.build_exact_command({"kind": kind, "bundle_target": "dev",
+                                             "needs_profile": needs_profile_flag}),
+        directive=c.build_directive(estate, kind, None, {}, []),
+    )
+
+
+def test_never_profiled_estate_recommends_the_profiler():
+    estate = c.summarize_estate([], discovered_tables=0)
+    assert c.needs_profile(c.STEP_REPLAN, estate) is True
+    row = _replan_row(estate, needs_profile_flag=True)
+    assert row["next_step_kind"] == c.STEP_REPLAN  # the kind is a contract and stays replan
+    assert row["next_step_title"] == "Run the profiler first"
+    assert row["next_job_alias"] == "profiler"
+    assert row["next_job_alias"] in _APP_JOB_ALIASES
+    assert row["exact_command"] == "databricks bundle run job_00_profiler -t dev"
+    assert row["directive"] == (
+        "No tables profiled yet. Run the profiler (job_00_profiler); plan the waves after it.")
+    assert c.row_needs_profile(row) is True
+
+
+def test_unreadable_manifest_with_no_plan_still_recommends_the_profiler():
+    # discovered_tables falls back to the planned total (0 with no plan).
+    estate = c.summarize_estate([], discovered_tables=None)
+    assert c.needs_profile(c.STEP_REPLAN, estate) is True
+
+
+def test_profiled_unplanned_estate_keeps_replan():
+    estate = c.summarize_estate([], discovered_tables=128)
+    assert c.needs_profile(c.STEP_REPLAN, estate) is False
+    row = _replan_row(estate, needs_profile_flag=False)
+    assert row["next_step_title"] == "Re-plan waves"
+    assert row["next_job_alias"] == "wave_planner"
+    assert row["exact_command"] == "databricks bundle run job_02_wave_planner -t dev"
+    assert row["directive"].startswith("No current wave plan for this scope.")
+    assert c.row_needs_profile(row) is False
+
+
+def test_needs_profile_leaves_step_vocabulary_unchanged():
+    assert c.job_alias_for_step(c.STEP_REPLAN) == "wave_planner"
+    assert "profiler" not in c.STEP_JOB_ALIAS.values()
+    assert c.FIRST_PROFILE_JOB_ALIAS in _APP_JOB_ALIASES
+    assert not any(k == "profile" or k == "profiler" for k in c.ALL_STEP_KINDS)
 
 
 # --------------------------------------------------------------------------- #

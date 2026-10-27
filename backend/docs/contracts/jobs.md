@@ -1536,7 +1536,10 @@ remaining finish steps (`unfreeze` → `reshare` → `compat` → `optimize`, fr
 and `next_wave_id` then names that converted wave. An in-flight wave keeps priority: if any
 runnable wave has started, the lowest-ordered started one is recommended (`resume` / `validate` /
 convert the rest, even ahead of a lower-ordered READY wave) and nothing is preempted; `replan`
-stays first; finish steps are never excluded by
+stays first. A `replan` with nothing profiled yet (`conductor.needs_profile`: no planned schema
+and `COUNT(table_manifest)` 0) keeps the kind but names the profiler: title `Run the profiler
+first`, alias `profiler`, command `databricks bundle run job_00_profiler -t <target>`, and a
+directive to plan the waves after it. Finish steps are never excluded by
 `include_streaming` (a converted streaming wave still owes its restarts); this is recommendation
 order only (no convert gate reads it). `optimize`
 recommends `job_08c_enable_optimization` (§15) with `enable_po_on_convert=true`, routed off
@@ -2776,6 +2779,7 @@ recommendation or advanced controls.
 - `migration_actions[*]`
 - `freeze_ledger[*]`
 - `migration_next_actions_by_scope[*]` (latest batch) when `target_schema` is set.
+- `table_manifest` (one row) when `advance` meets a `replan` row with nothing profiled.
 - Export and digest additionally read `action_queue_open[*]`, `table_manifest[*]`,
   `freeze_ledger[*]` and `migration_actions[*]`.
 
@@ -2784,8 +2788,13 @@ recommendation or advanced controls.
 - No control tables.
 - `export_runbook` writes `.sql` and `.md` files to a Volume.
 - `digest` may write a `.txt` file.
-- Launches Jobs API runs for 02, 03c, 03d (Authorize, for a `lease` step), 04, 05, 05b, 06,
+- Launches Jobs API runs for 00 (the profiler, for a first-profile `replan` row), 02, 03c, 03d (Authorize, for a `lease` step), 04, 05, 05b, 06,
   07, 08 Conductor, 08 re-share, 08b, 08c and 10.
+
+For a `replan` row with nothing profiled (`conductor.row_needs_profile`), `action=advance`
+launches `job_00_profiler` with its defaults, unless `table_manifest` already has a row (a
+normal profile does not refresh the conductor, so the row can be older than the profile); then
+it launches `job_02_wave_planner` as for any `replan`.
 
 For `next_step_kind=optimize`, `action=advance` launches `job_08c_enable_optimization` (§15)
 pinned to the latest recommendation's `plan_run_id` + `next_wave_id`. When a `target_schema`

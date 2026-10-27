@@ -19,6 +19,7 @@ export function useOverviewLanding(): { landing: OverviewLanding; facts: Landing
   const discoveryQ = useMigrationQuery('estate_discovery', {});
   const coverageQ = useMigrationQuery('coverage_report', {});
 
+  const next = nextQ.data?.[0];
   const disc = discoveryQ.data?.[0];
   const coverage = coverageQ.data ?? [];
   const latestRun = coverage
@@ -27,6 +28,9 @@ export function useOverviewLanding(): { landing: OverviewLanding; facts: Landing
 
   const facts: LandingFacts = {
     nextActionsRows: nextQ.data?.length ?? 0,
+    nextStepKind: next?.next_step_kind ?? null,
+    estateTotalSchemas: next?.estate_total_schemas ?? null,
+    estateDiscoveredTables: next?.estate_discovered_tables ?? null,
     manifestTables: disc?.tables_discovered ?? 0,
     manifestSchemas: disc?.schemas_discovered ?? 0,
     lastAssessedAt: disc?.last_assessed_at ?? null,

@@ -72,6 +72,7 @@ import {
   schemaStates,
   verify,
 } from '../../client/src/lib/provision.pure.js';
+import { type JobsEvidence, EVIDENCE_LIVE, deployerHeld, jobsAuditSql, jobsLineHeld, recordedJobsHeld } from './jobsEvidence.pure.js';
 import type { OboSql } from './oboSql.js';
 import {
   LEDGER_BOOLEAN_COLUMNS,
@@ -98,6 +99,8 @@ export interface DeployedJobs {
   jobIds: string[];
   /** Job name → its run-as identity (null when unreadable). */
   byJob: Record<string, Identity | null>;
+  /** Job id → the principal that created it (null when unreadable). */
+  creatorByJob: Record<string, string | null>;
   /** Whether the jobs' service principal is active (null = not read). */
   active: boolean | null;
   /** `<root>/files/backend/notebooks/install`, from a bound job's notebook path; null if unknown. */
@@ -155,6 +158,10 @@ export interface Context {
   estate_error: string | null;
   deployment: string | null;
   install_notebook: string | null;
+  /** Job id → its creator, for the jobs line's deployer evidence. */
+  job_creators: Record<string, string | null>;
+  /** Successful jobs-line install audit rows, newest first (empty when unreadable). */
+  jobs_audit: Rows;
 }
 
 /** `provision_io.group_member`: the account-group query first (grants follow account groups, and
@@ -196,6 +203,7 @@ export async function probe(deps: FlowDeps): Promise<[Probes, Context]> {
   if (deps.installerGroup) records.member = await groupMember(deps, deps.installerGroup, groups);
   else records.can_self_grant = exists ? canGrantSchema(owners, principals, ctlFqn, ma) : ctlCan;
   const [estateRaw, estateErr] = await attempt(deps.sql, ESTATE_SQL);
+  const [jobsAudit] = exists ? await attempt(deps.sql, jobsAuditSql(deps.catalog, deps.schema)) : [null];
   const estate: EstateRow[] = estateRaw ? estateRowsFrom(estateRaw, owners, principals, ma) : [];
   const appCanGrant = wh !== null ? true : deps.tokenScopes && !deps.tokenScopes.includes('sql') ? false : null;
 
@@ -210,6 +218,7 @@ export async function probe(deps: FlowDeps): Promise<[Probes, Context]> {
     grantable_schemas: estate.filter((r) => r.can_grant).map((r) => `${r.catalog}.${r.schema}`),
     grantable_catalogs: Object.keys(owners.catalog_owner).filter((c) => canGrantCatalog(owners, principals, c, ma)).sort(),
     estate_error: estateErr, deployment: deps.deployment, install_notebook: deployed.installNotebook,
+    job_creators: deployed.creatorByJob, jobs_audit: jobsAudit ?? [],
   };
   return [probes, context];
 }
@@ -253,6 +262,8 @@ export interface CheckedLine extends PlanLine {
   status: 'present' | 'missing' | 'unknown';
   grantor: string | null;
   commands?: string[];
+  /** How the jobs line's status was decided (jobs line only). */
+  evidence?: JobsEvidence | null;
 }
 
 export interface Prep {
@@ -268,7 +279,14 @@ export interface Prep {
   lines: PlanLine[];
   plan_id: string;
   held: Map<string, Set<string> | null>;
+  evidence: Map<string, JobsEvidence | null>;
   checked: CheckedLine[];
+}
+
+export interface HeldRead {
+  held: Map<string, Set<string> | null>;
+  /** `line_key → evidence` for the jobs line. */
+  evidence: Map<string, JobsEvidence | null>;
 }
 
 /** The groups a grant to `grantee` can come through (the user's own are known; others only `account users`). */
@@ -278,8 +296,11 @@ function groupsOf(grantee: string, kind: string, ctx: Context): string[] {
   return [ALL_ACCOUNT_USERS];
 }
 
-/** `line_key → privileges` the grantee holds (directly, inherited, through its known groups, or as owner); null if unreadable. */
-export async function readHeld(deps: FlowDeps, lines: PlanLine[], ctx: Context): Promise<Map<string, Set<string> | null>> {
+/**
+ * `line_key → privileges` the grantee holds (directly, inherited, through its known groups, or as owner); null if unreadable.
+ * The jobs line falls back to the install record, then the deployer (`jobsEvidence.pure`), when the live read fails.
+ */
+export async function readHeld(deps: FlowDeps, lines: PlanLine[], ctx: Context): Promise<HeldRead> {
   const shows = new Map<string, Promise<Rows | null>>();
   const showGrants = (stmt: string) => {
     let p = shows.get(stmt);
@@ -290,11 +311,17 @@ export async function readHeld(deps: FlowDeps, lines: PlanLine[], ctx: Context):
     return p;
   };
   const out = new Map<string, Set<string> | null>();
+  const evidence = new Map<string, JobsEvidence | null>();
   await Promise.all(lines.map(async (ln) => {
     const whos = [ln.grantee, ...groupsOf(ln.grantee, ln.grantee_kind, ctx)];
     const stype = String(ln.securable_type).toUpperCase();
     if (stype === JOBS_SECURABLE) {
-      out.set(lineKeyString(ln), await deps.jobRunHeld(ln.job_ids ?? [], whos));
+      const ids = (ln.job_ids ?? []).map(String);
+      const live = await deps.jobRunHeld(ids, whos);
+      const read = jobsLineHeld(live, recordedJobsHeld(ctx.jobs_audit, ids, [ln.grantee]),
+        deployerHeld(ctx.job_creators, ids, [ln.grantee]));
+      out.set(lineKeyString(ln), read.held);
+      evidence.set(lineKeyString(ln), read.evidence);
       return;
     }
     if (stype === FOLDER_SECURABLE) {
@@ -311,7 +338,7 @@ export async function readHeld(deps: FlowDeps, lines: PlanLine[], ctx: Context):
     if (chainOwners.some((o) => o && whos.some((w) => samePrincipal(o, w)))) held = new Set([...(held ?? []), 'OWNER']);
     out.set(lineKeyString(ln), held);
   }));
-  return out;
+  return { held: out, evidence };
 }
 
 export async function waveSchemas(deps: FlowDeps, waveId: string, pinned: string | null): Promise<Wave> {
@@ -345,21 +372,22 @@ export async function prepare(deps: FlowDeps, opts: ParsedOptions): Promise<Prep
     deployment: context.deployment, job_ids: context.job_ids, deploy_folder: deployRoot(context.install_notebook),
   });
   const inst = installerLines(lines);
-  const held = await readHeld(deps, inst, context);
+  const { held, evidence } = await readHeld(deps, inst, context);
   return {
     probes, context, rights, records, stored_scopes: stored, wave, scopes,
     scopes_from: opts.scope_list.length ? 'option' : stored.length ? 'stored' : 'none',
     convert_rights: opts.convert_rights || CONVERT_ALL_AT_ONCE,
-    lines, plan_id: planId(lines), held, checked: check(inst, held, context),
+    lines, plan_id: planId(lines), held, evidence, checked: check(inst, { held, evidence }, context),
   };
 }
 
-function check(inst: PlanLine[], held: Map<string, Set<string> | null>, ctx: Context): CheckedLine[] {
-  return verify(inst, held).map((ln) => {
+function check(inst: PlanLine[], read: HeldRead, ctx: Context): CheckedLine[] {
+  return verify(inst, read.held).map((ln) => {
     const [can, who] = lineGrantable(ln, ctx);
     const isApi = API_SECURABLES.includes(String(ln.securable_type).toUpperCase());
     const grantor = ln.status === STATUS_PRESENT ? null : isApi ? who : can === false ? who : null;
-    return { ...ln, grantor, ...(isApi ? { commands: apiCommands(ln) } : {}) };
+    const ev = read.evidence.get(lineKeyString(ln));
+    return { ...ln, grantor, ...(isApi ? { commands: apiCommands(ln) } : {}), ...(ev !== undefined ? { evidence: ev } : {}) };
   });
 }
 
@@ -417,6 +445,13 @@ export async function applyPlan(deps: FlowDeps, prep: Prep): Promise<ApplyOutcom
       }
       if (!prior && grantorOf.get(k)) {
         results.push({ ...ln, outcome: 'cannot_grant', grantor: grantorOf.get(k) });
+        continue;
+      }
+      const ev = prep.evidence.get(k);
+      if (prior && ev && ev.kind !== EVIDENCE_LIVE) {
+        // Held by the install record or the deployer, not read here: no new audit row, so it is never
+        // mistaken for a read later.
+        results.push({ ...ln, outcome: 'skipped', added: false, prior_held: true });
         continue;
       }
       if (prior) {

@@ -88,6 +88,19 @@ export const METASTORE_ADMIN_GRANTOR = 'a metastore admin';
 export const JOBS_SECURABLE = 'JOBS';
 export const JOB_RUN_PRIVILEGE = 'CAN_MANAGE_RUN';
 export const JOBS_GRANTOR = "the jobs' owner or a workspace admin";
+
+/** How the app decided the jobs line (server `jobsEvidence.pure`): read live, an install record, or the deployer. */
+export const EVIDENCE_LIVE = 'live';
+export const EVIDENCE_RECORDED = 'recorded';
+export const EVIDENCE_DEPLOYER = 'deployer';
+
+export interface JobsEvidence {
+  kind: typeof EVIDENCE_LIVE | typeof EVIDENCE_RECORDED | typeof EVIDENCE_DEPLOYER;
+  /** The install door that read the access lists (`recorded` only). */
+  door?: string | null;
+  /** When that install read them (`recorded` only). */
+  at?: string | null;
+}
 export const FOLDER_SECURABLE = 'FOLDER';
 export const FOLDER_READ_PRIVILEGE = 'CAN_READ';
 export const FOLDER_GRANTOR = "the deployment folder's owner or a workspace admin";
@@ -462,11 +475,16 @@ const JOB_RUN_KEY: Record<string, string> = {
   [KIND_USER]: 'user_name',
 };
 
-/** The exact CLI command per job for a `JOBS` line (run permission is not SQL). */
-export function jobRunCommands(ln: Pick<PlanLine, 'grantee' | 'grantee_kind' | 'job_ids'>): string[] {
-  const acl = pyJson({
+/** The `--json` body that adds run permission on a job for a `JOBS` line's grantee. */
+export function jobRunAcl(ln: Pick<PlanLine, 'grantee' | 'grantee_kind'>): string {
+  return pyJson({
     access_control_list: [{ [JOB_RUN_KEY[ln.grantee_kind] ?? 'user_name']: ln.grantee, permission_level: JOB_RUN_PRIVILEGE }],
   });
+}
+
+/** The exact CLI command per job for a `JOBS` line (run permission is not SQL). */
+export function jobRunCommands(ln: Pick<PlanLine, 'grantee' | 'grantee_kind' | 'job_ids'>): string[] {
+  const acl = jobRunAcl(ln);
   return (ln.job_ids ?? []).map((jid) => `databricks permissions update jobs ${jid} --json '${acl}'`);
 }
 

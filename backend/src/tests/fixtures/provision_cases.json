@@ -4131,6 +4131,25 @@
    "databricks permissions update jobs 7 --json '{\"access_control_list\": [{\"group_name\": \"mtm-jobs\", \"permission_level\": \"CAN_MANAGE_RUN\"}]}'",
    "databricks permissions update jobs 8 --json '{\"access_control_list\": [{\"group_name\": \"mtm-jobs\", \"permission_level\": \"CAN_MANAGE_RUN\"}]}'"
   ],
+  "jobs_audit_detail": "{\"added\": false, \"front_door\": \"cli\", \"grantee\": \"11111111-2222-3333-4444-555555555555\", \"grantee_kind\": \"service_principal\", \"job_ids\": [\"11\", \"12\"], \"plan_id\": \"d04c4bab08e2\", \"prior_held\": true, \"privilege\": \"CAN_MANAGE_RUN\", \"scope\": null, \"securable\": \"[e2e] mtm\", \"securable_type\": \"JOBS\", \"set\": \"Control\"}",
+  "jobs_line": {
+   "executor": "installer",
+   "grantee": "11111111-2222-3333-4444-555555555555",
+   "grantee_kind": "service_principal",
+   "job_ids": [
+    "11",
+    "12"
+   ],
+   "privilege": "CAN_MANAGE_RUN",
+   "reason": "the jobs' identity runs its own jobs (cockpit launches and conductor tails)",
+   "scope": null,
+   "securable": "[e2e] mtm",
+   "securable_type": "JOBS",
+   "set": "Control",
+   "stage": "main",
+   "statement": "-- Jobs permission (not SQL): CAN_MANAGE_RUN on the 2 jobs of [e2e] mtm for 11111111-2222-3333-4444-555555555555",
+   "wave_id": null
+  },
   "ledger_merge": "MERGE INTO main.migration.ownership_ledger t USING (SELECT 'INSTALL|SCHEMA sales.orders|MANAGE|11111111-2222-3333-4444-555555555555' AS ledger_key, CAST(NULL AS STRING) AS action_key, CAST(NULL AS STRING) AS action_id, 'GRANT' AS op_kind, 'SCHEMA' AS scope, 'sales' AS catalog, 'orders' AS schema, CAST(NULL AS STRING) AS table_name, CAST(NULL AS STRING) AS full_name, CAST(NULL AS STRING) AS prior_owner, CAST(NULL AS STRING) AS new_owner, false AS dry_run, 'GRANTED' AS status, TIMESTAMP '2026-10-26 12:00:00' AS leased_at, 'ann@x.com' AS leased_by, CAST(NULL AS TIMESTAMP) AS restored_at, CAST(NULL AS STRING) AS restored_by, CAST(NULL AS STRING) AS plan_run_id, CAST(NULL AS STRING) AS wave_id, '{\"front_door\": \"app\", \"plan_id\": \"d04c4bab08e2\"}' AS evidence, 'installer convert rights (handed back with revoke_convert)' AS notes, TIMESTAMP '2026-10-26 12:00:00' AS updated_at, 'SCHEMA' AS securable_type, 'sales.orders' AS securable_name, 'MANAGE' AS privilege, '11111111-2222-3333-4444-555555555555' AS grantee, false AS prior_held, true AS added, TIMESTAMP '2026-10-26 12:00:00' AS granted_at, CAST(NULL AS TIMESTAMP) AS revoked_at UNION ALL SELECT 'INSTALL|CATALOG finance|MANAGE|11111111-2222-3333-4444-555555555555' AS ledger_key, CAST(NULL AS STRING) AS action_key, CAST(NULL AS STRING) AS action_id, 'GRANT' AS op_kind, 'CATALOG' AS scope, 'finance' AS catalog, CAST(NULL AS STRING) AS schema, CAST(NULL AS STRING) AS table_name, CAST(NULL AS STRING) AS full_name, CAST(NULL AS STRING) AS prior_owner, CAST(NULL AS STRING) AS new_owner, false AS dry_run, 'HANDBACK_READY' AS status, TIMESTAMP '2026-10-26 12:00:00' AS leased_at, 'ann@x.com' AS leased_by, CAST(NULL AS TIMESTAMP) AS restored_at, CAST(NULL AS STRING) AS restored_by, CAST(NULL AS STRING) AS plan_run_id, CAST(NULL AS STRING) AS wave_id, '{\"front_door\": \"app\", \"plan_id\": \"d04c4bab08e2\"}' AS evidence, 'installer convert rights (handed back with revoke_convert)' AS notes, TIMESTAMP '2026-10-26 12:00:00' AS updated_at, 'CATALOG' AS securable_type, 'finance' AS securable_name, 'MANAGE' AS privilege, '11111111-2222-3333-4444-555555555555' AS grantee, false AS prior_held, true AS added, TIMESTAMP '2026-10-26 12:00:00' AS granted_at, CAST(NULL AS TIMESTAMP) AS revoked_at) s ON t.ledger_key = s.ledger_key WHEN MATCHED AND NOT (coalesce(s.prior_held, false) AND coalesce(t.added, false) AND NOT coalesce(t.prior_held, false) AND t.status IN ('GRANTED', 'HANDBACK_READY')) THEN UPDATE SET t.dry_run = s.dry_run, t.status = s.status, t.leased_at = s.leased_at, t.leased_by = s.leased_by, t.restored_at = s.restored_at, t.restored_by = s.restored_by, t.plan_run_id = s.plan_run_id, t.wave_id = s.wave_id, t.evidence = s.evidence, t.notes = s.notes, t.updated_at = s.updated_at, t.prior_held = s.prior_held, t.added = s.added, t.granted_at = s.granted_at, t.revoked_at = s.revoked_at WHEN NOT MATCHED THEN INSERT (ledger_key, action_key, action_id, op_kind, scope, catalog, schema, table_name, full_name, prior_owner, new_owner, dry_run, status, leased_at, leased_by, restored_at, restored_by, plan_run_id, wave_id, evidence, notes, updated_at, securable_type, securable_name, privilege, grantee, prior_held, added, granted_at, revoked_at) VALUES (s.ledger_key, s.action_key, s.action_id, s.op_kind, s.scope, s.catalog, s.schema, s.table_name, s.full_name, s.prior_owner, s.new_owner, s.dry_run, s.status, s.leased_at, s.leased_by, s.restored_at, s.restored_by, s.plan_run_id, s.wave_id, s.evidence, s.notes, s.updated_at, s.securable_type, s.securable_name, s.privilege, s.grantee, s.prior_held, s.added, s.granted_at, s.revoked_at)",
   "ledger_rows": [
    {

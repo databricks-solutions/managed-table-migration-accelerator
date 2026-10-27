@@ -20,6 +20,8 @@ export interface World {
   warehouse: boolean;
   failAudit: boolean;
   accountGroups: string[];
+  /** Rows the jobs-line install audit read returns. */
+  jobsAudit: Record<string, unknown>[];
   log: string[];
 }
 
@@ -42,6 +44,7 @@ export function world(over: Partial<World> = {}): World {
     warehouse: true,
     failAudit: false,
     accountGroups: [],
+    jobsAudit: [],
     log: [],
     ...over,
   };
@@ -56,6 +59,7 @@ function sqlFor(w: World) {
     if (s.includes('information_schema.catalogs')) return ok(w.catalogs);
     if (s.includes('information_schema.schemata')) return ok(w.schemata);
     if (s.includes('catalog_privileges') || s.includes('schema_privileges')) return ok([]);
+    if (s.startsWith('SELECT action, phase, detail, created_at FROM')) return ok(w.jobsAudit);
     const member = groupMemberSql('').replace("'') AS m", '');
     if (s.startsWith(member)) {
       return ok([{ m: w.accountGroups.includes(s.slice(member.length + 1, s.lastIndexOf("')")).replace(/''/g, "'")) }]);
@@ -99,6 +103,7 @@ export function deps(w: World, over: Partial<FlowDeps> = {}): FlowDeps {
     jobs: () => Promise.resolve({
       jobIds: ['11', '12'],
       byJob: { 11: { kind: 'service_principal', name: SP }, 12: { kind: 'service_principal', name: SP } },
+      creatorByJob: { 11: ME, 12: ME },
       active: null,
       installNotebook: '/Workspace/x/.bundle/mtm/e2e/files/backend/notebooks/install',
     }),

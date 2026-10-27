@@ -23,6 +23,8 @@ import {
   type Identity,
   JOB_RUN_PRIVILEGE,
   type RawOptions,
+  STATUS_MISSING,
+  STATUS_UNKNOWN,
   heldCovers,
   identityFromPrincipal,
   identityFromRunAs,
@@ -71,10 +73,10 @@ function stateOf(prep: Prep): { state: PanelState; reason: string | null } {
   return { state: 'ready', reason: null };
 }
 
-/** The CLI options for the panel's command. Without SQL the plan was built blind (every read
- *  failed), so the command is a dry run: it prints the real plan and its plan_id to confirm. */
-function commandOptions(prep: Prep, raw: RawOptions, state: PanelState): Record<string, string | null> {
-  const blind = state === 'cannot_act';
+/** The CLI options for the panel's command. A dry run (`dryRun`) has no confirm and no plan_id: it
+ *  checks as the installer and prints the real plan and its plan_id. Without SQL the plan was built
+ *  blind (every read failed), so the panel's own command is a dry run too. */
+function commandOptions(prep: Prep, raw: RawOptions, dryRun: boolean): Record<string, string | null> {
   return {
     action: String(raw.action ?? ACTION_INSTALL),
     scopes: prep.scopes.join(','),
@@ -83,8 +85,8 @@ function commandOptions(prep: Prep, raw: RawOptions, state: PanelState): Record<
     plan_run_id: prep.wave?.plan_run_id ?? null,
     grantee_group: typeof raw.grantee_group === 'string' ? raw.grantee_group : null,
     jobs_identity: typeof raw.jobs_identity === 'string' ? raw.jobs_identity : null,
-    confirm_grants: blind ? null : 'true',
-    plan_id: blind ? null : prep.plan_id,
+    confirm_grants: dryRun ? null : 'true',
+    plan_id: dryRun ? null : prep.plan_id,
   };
 }
 
@@ -117,11 +119,14 @@ export function viewOf(prep: Prep, deps: Pick<FlowDeps, 'target'>, raw: RawOptio
     summary: verifySummary(prep.checked),
     lines: prep.checked,
     pending: pending.length,
+    missing: pending.filter((l) => l.status === STATUS_MISSING).length,
+    unchecked: pending.filter((l) => l.status === STATUS_UNKNOWN).length,
     need_someone_else: pending.filter((l) => l.grantor).length,
     handback,
     record_errors: prep.records.errors,
     estate_error: ctx.estate_error,
-    cli_command: installCommand(deps.target, commandOptions(prep, raw, state)),
+    cli_command: installCommand(deps.target, commandOptions(prep, raw, state === 'cannot_act')),
+    check_command: installCommand(deps.target, commandOptions(prep, raw, true)),
   };
 }
 
@@ -193,7 +198,9 @@ export async function handBack(deps: FlowDeps, raw: RawOptions) {
 // --------------------------------------------------------------------------- //
 
 type JobsClient = {
-  jobs: { get(r: { job_id: number }): Promise<{ run_as_user_name?: string; settings?: Record<string, unknown> }> };
+  jobs: {
+    get(r: { job_id: number }): Promise<{ run_as_user_name?: string; creator_user_name?: string; settings?: Record<string, unknown> }>;
+  };
   permissions: {
     get(r: { request_object_type: string; request_object_id: string }): Promise<{
       access_control_list?: {
@@ -217,18 +224,28 @@ function notebookPathOf(settings: Record<string, unknown> | undefined): string |
 
 export async function deployedJobs(client: JobsClient, ids: number[]): Promise<DeployedJobs> {
   const byJob: Record<string, Identity | null> = {};
+  const creatorByJob: Record<string, string | null> = {};
   let installNotebook: string | null = null;
   await Promise.all([...new Set(ids)].map(async (job_id) => {
     try {
       const job = await client.jobs.get({ job_id });
       byJob[String(job_id)] = identityFromRunAs(job.settings?.run_as as Record<string, unknown> | undefined)
         ?? identityFromPrincipal(job.run_as_user_name);
+      creatorByJob[String(job_id)] = job.creator_user_name || null;
       installNotebook ??= notebookPathOf(job.settings);
     } catch {
       byJob[String(job_id)] = null;
+      creatorByJob[String(job_id)] = null;
     }
   }));
-  return { jobIds: Object.keys(byJob).sort(), byJob, active: null, installNotebook };
+  return { jobIds: Object.keys(byJob).sort(), byJob, creatorByJob, active: null, installNotebook };
+}
+
+/** What kind of error a job access-list read hit (an error code or HTTP status; never the message). */
+export function errorKindOf(err: unknown): string {
+  const e = err as { errorCode?: unknown; error_code?: unknown; statusCode?: unknown; name?: unknown } | null;
+  const kind = e?.errorCode ?? e?.error_code ?? e?.statusCode ?? e?.name;
+  return typeof kind === 'string' || typeof kind === 'number' ? String(kind) : 'unknown';
 }
 
 export async function jobsRunHeld(client: JobsClient, jobIds: string[], principals: string[]): Promise<Set<string> | null> {
@@ -240,7 +257,11 @@ export async function jobsRunHeld(client: JobsClient, jobIds: string[], principa
       levels = new Set(acl
         .filter((a) => principals.some((p) => samePrincipal(a.user_name || a.group_name || a.service_principal_name, p)))
         .flatMap((a) => (a.all_permissions ?? []).map((p) => String(p.permission_level ?? ''))));
-    } catch {
+    } catch (err) {
+      if (!unreadable) {
+        console.warn(`[permissions] Could not read the jobs' access lists (${errorKindOf(err)}). ` +
+          'The app is bound at Can Manage Run, and only Can Manage holders can read them, so the jobs line uses the install record or the deployer instead.');
+      }
       levels = null;
     }
     if (levels === null) unreadable = true;

@@ -1495,3 +1495,31 @@ since the owner reads failed too, and the CLI command is a dry run with no `plan
 done twice. Before the fix, the no-SQL state also showed `can't read` on grants the admin already
 held, named grantors it had guessed, and handed out a `plan_id` from a plan built without a single
 successful read, which the CLI would refuse.
+
+## T61 · Settings counts "not checked" apart from "missing" and says why the jobs line is held (not in the v4 mockup)
+
+**What.** Convert rights reads **No tables profiled yet** with a **Run the profiler** button when
+the manifest is empty (the authority summary now carries `profiled`), and **No tables left to
+convert** when every profiled table is converted or dropped, instead of "0 of 0" for both. The
+Plan heading counts the two kinds of pending line apart (`Plan · 1 missing · 1 not checked`): a
+not-checked line moves into its own **Not checked from the app** box with a dry-run **CLI check**
+(`check_command`, never a `plan_id`), and **Copy request** and the downloaded plan leave it out of
+what someone else is asked to grant, listing it after with "run the CLI check to confirm". The
+jobs-permission line renders as one shell loop plus the Jobs UI path, labelled "Not SQL", since job
+permissions are workspace settings rather than Unity Catalog grants.
+
+The app can't read the jobs' access lists: its service principal is bound at `CAN_MANAGE_RUN`, and
+only `CAN_MANAGE` holders can read them. So the jobs line is decided by a ladder
+(`server/permissions/jobsEvidence.pure.ts`): the live read; else a notebook or CLI install record
+(`INSTALL_GRANT` / `INSTALL_GRANT_SKIPPED` `SUCCESS` for the same grantee whose `detail.job_ids`
+cover the current jobs, with no later revoke on any of them); else every job's creator is the
+jobs' identity; else not checked. The Jobs part says which one held it ("checked by the CLI
+install on …", "you deployed these jobs, so you own them"). App-door rows never count, and the
+app writes no audit row for a line it holds only on a record or the deployer, so an inference is
+never recorded as if it had been read.
+
+**Why.** "0 of 0 tables still to convert" read as a finished migration on a fresh install, and
+"Plan · 2 missing" asked a workspace admin to grant a permission they already held as the jobs'
+owner, because the app had no way to see it. Granting the app `CAN_MANAGE` on the jobs would let it
+read the lists, but that is new authority for a display fix, so the app infers from evidence it
+can see and says so.

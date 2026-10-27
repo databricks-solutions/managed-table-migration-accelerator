@@ -55,7 +55,21 @@ describe('tallyAuthority', () => {
         { status: 'UNKNOWN', n: '1' },
         { status: 'NOT_CHECKED', n: '4', actor: null },
       ]),
-    ).toEqual({ actor: 'sp-1', total: 15, authorized: 5, self_authorizable: 2, needs_grant: 3, unknown: 1, not_checked: 4 });
+    ).toEqual({ actor: 'sp-1', total: 15, authorized: 5, self_authorizable: 2, needs_grant: 3, unknown: 1, not_checked: 4, profiled: 15 });
+  });
+
+  it('counts converted tables as profiled but not still to convert, and takes no identity from them', () => {
+    expect(
+      tallyAuthority([
+        { status: 'DONE', n: '7', actor: 'old-sp' },
+        { status: 'NEEDS_GRANT', n: '2', actor: null },
+      ]),
+    ).toEqual({ actor: null, total: 2, authorized: 0, self_authorizable: 0, needs_grant: 2, unknown: 0, not_checked: 0, profiled: 9 });
+  });
+
+  it('reads a fully converted estate as profiled with nothing left', () => {
+    const a = tallyAuthority([{ status: 'DONE', n: 4 }]);
+    expect([a.total, a.profiled]).toEqual([0, 4]);
   });
 
   it('counts an unexpected status as unknown (the gate blocks it too)', () => {
@@ -63,17 +77,18 @@ describe('tallyAuthority', () => {
   });
 
   it('is all zeros for no rows', () => {
-    expect(tallyAuthority([])).toEqual({ actor: null, total: 0, authorized: 0, self_authorizable: 0, needs_grant: 0, unknown: 0, not_checked: 0 });
+    expect(tallyAuthority([])).toEqual({ actor: null, total: 0, authorized: 0, self_authorizable: 0, needs_grant: 0, unknown: 0, not_checked: 0, profiled: 0 });
   });
 });
 
 describe('authoritySummarySql', () => {
-  it('reads the latest verdict per table over the tables still to convert', () => {
+  it('reads every manifest table, with the latest verdict for the ones still to convert', () => {
     const sql = authoritySummarySql('cat.mig');
     expect(sql).toContain('FROM cat.mig.table_manifest m');
     expect(sql).toContain('FROM cat.mig.convert_authority');
     expect(sql).toContain('ROW_NUMBER() OVER (PARTITION BY full_name ORDER BY evaluated_at DESC)');
-    expect(sql).toContain("NOT IN ('DROPPED','CONVERTED','CONVERTED_EXTERNAL','VALIDATED','CLEANED')");
+    expect(sql).toContain("IN ('DROPPED','CONVERTED','CONVERTED_EXTERNAL','VALIDATED','CLEANED') THEN 'DONE'");
+    expect(sql).not.toContain('WHERE UPPER');
     expect(sql).not.toMatch(/comms_feed|OWNER TO/);
   });
 });

@@ -21,10 +21,37 @@ Nothing here runs `SET MANAGED`; a person does that later, from the deployed job
 |---|---|
 | A Unity Catalog workspace | Every table this tool converts is a Unity Catalog EXTERNAL table. |
 | Databricks Runtime 17.3 LTS+ or serverless | `SET MANAGED`, `UNSET MANAGED` and the day-14 `VACUUM` need it. Every stage job runs on serverless; on a classic-cluster workspace, give each job a cluster pinned to one 17.3+ runtime so convert and rollback never drift. |
-| Workspace admin, and owner of (or `MANAGE` on) the control catalog | Creating the app needs workspace admin. Creating the control schema and granting access to it needs the catalog. Day-to-day users need neither ([who needs what](#who-needs-which-permissions)). |
+| Workspace admin, and owner of (or `MANAGE` on) the control catalog | Workspace admin covers the app's job and warehouse bindings and the job permissions the install sets. Creating the control schema and granting access to it needs the catalog. Day-to-day users need neither ([recommended installer](#recommended-installer), [who needs what](#who-needs-which-permissions)). |
 | A SQL warehouse you can use, and its ID | Powers the app, the AI/BI dashboard and the Genie space (`warehouse_id`). The ID is the last part of the warehouse's URL. |
 | A managed storage location on each target schema, catalog or metastore | Converted data is written there. The convert refuses a table without one (`no_managed_location`). |
 | The Databricks CLI, CLI path only | 1.3.0 or later: the bundle uses the direct deployment engine (`bundle.engine: direct`). |
+
+### Recommended installer
+
+The install grants across the whole estate, so do it as someone who is **both a workspace admin
+and a metastore admin**, ideally through a group (Databricks recommends a group as the metastore
+admin). Those two roles cover every grant the install makes, so nobody else has to act:
+
+- **Workspace admin, for the workspace side.** Workspace admins hold `CAN MANAGE` on every job,
+  so they can read and set the jobs' permissions, including an OPTIMIZE or VACUUM job someone else
+  owns that the freeze pauses. Binding the warehouse and the jobs to the app needs Can Manage on
+  each of them and on the app. Workspace admins also manage the deploy folder.
+- **Metastore admin, for the Unity Catalog side.** A metastore admin can grant privileges on any
+  object in the metastore: the control catalog, the system schemas the profiler reads, and every
+  catalog you migrate. A workspace admin can't grant on catalogs or schemas it doesn't own.
+- **Not needed: account admin**, unless you create or rotate a service principal. One caveat:
+  Databricks documents that granting access to the system tables takes an admin who is both a
+  metastore admin and an account admin. If the installer's system-schema lines fail, ask one, or
+  skip them when the jobs' identity can already read `system.access`, `system.compute` and
+  `system.lakeflow`.
+
+The admin roles are for the install and the grants only. Every stage job runs as the jobs'
+identity (a service principal, `prod_run_as_sp`, on `prod`), and operators need only `CAN_USE` on
+the app.
+
+Without both roles, install with what you hold: the installer grants what it can and names who
+must grant the rest, and the app's Settings page lists those lines with a **Copy request** for
+each grantor.
 
 ### Decide first
 
@@ -406,7 +433,7 @@ What each step needs:
 
 | Step | Who | Needs | Granted by |
 |---|---|---|---|
-| **Install** | Installer | Workspace admin (to create the app); owner of, or `MANAGE` on, the control catalog | Your admins, once |
+| **Install** | Installer | Workspace admin (to bind the jobs and warehouse to the app and set job permissions); owner of, or `MANAGE` on, the control catalog | Your admins, once |
 | **Provision the app** | App service principal | `USE CATALOG`, `USE SCHEMA` and `SELECT` on the control schema; `MODIFY` on `migration_actions` only | `job_99_setup`, automatically |
 | **Use the app** | Operators | `CAN_USE` on the app. No data grants. | App permissions |
 | **Profile, dry run, validate** | Convert identity | `USE CATALOG`, `USE SCHEMA` and `SELECT` on the target schemas | A target schema owner, or the Settings page script |
@@ -420,11 +447,13 @@ How Authorize grants and cleanup revokes is pictured in
 In detail, the four identities:
 
 - **The installer** (deploys the bundle and provisions the app's service principal):
-  - **Workspace side**: creating the app is usually the gate, so in practice a workspace admin.
-    Also `CAN_USE` (or `CAN_MANAGE`) on the SQL warehouse and write access to the deploy path.
+  - **Workspace side**: any workspace user can create an app, but binding the warehouse and the
+    jobs to it needs Can Manage on each, and setting the jobs' permissions needs `CAN MANAGE` on
+    every job, so in practice a workspace admin. Also write access to the deploy path.
   - **Unity Catalog side**: owner of, or `MANAGE` on, the control catalog (to create the control
     schema and grant the app SP read access) and on each target catalog or schema (to grant the
-    convert identity what it needs). For a whole-estate migration a metastore admin is simplest.
+    convert identity what it needs). For a whole-estate migration a metastore admin covers all of
+    it ([recommended installer](#recommended-installer)).
     Account admin is not needed unless you create or rotate the service principal.
 - **The app service principal** (the app's own identity). `job_99_setup` grants it least-privilege
   access to the control plane (`USE CATALOG`, `USE SCHEMA`, `SELECT` on the control schema, and

@@ -61,7 +61,7 @@ export function auditInsertSql(catalog: string, schema: string, rows: AuditRow[]
 }
 
 type AuditLine = Pick<PlanLine, 'set' | 'grantee' | 'privilege' | 'securable_type' | 'securable' | 'statement'> &
-  Partial<Pick<PlanLine, 'grantee_kind' | 'scope' | 'wave_id'>>;
+  Partial<Pick<PlanLine, 'grantee_kind' | 'scope' | 'wave_id' | 'job_ids'>>;
 
 export function auditDetail(
   ln: AuditLine,
@@ -73,6 +73,7 @@ export function auditDetail(
     securable: ln.securable ?? null, scope: ln.scope ?? null, added: o.added ?? null, prior_held: o.prior_held ?? null,
   };
   if (o.grantor) d.grantor = o.grantor;
+  if (ln.job_ids?.length) d.job_ids = ln.job_ids.map(String);
   return pyJson(d, { sortKeys: true });
 }
 

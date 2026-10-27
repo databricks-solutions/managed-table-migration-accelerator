@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest';
-import { HttpError, depsFor, grantPermissions, handBack, installerGroupFromEnv, jobsRunHeld, permissionsView } from './permissions.js';
+import { describe, expect, it, vi } from 'vitest';
+import { HttpError, depsFor, errorKindOf, grantPermissions, handBack, installerGroupFromEnv, jobsRunHeld, permissionsView } from './permissions.js';
 import { APP_SP, SP, deps, world } from './permissions.testutil.js';
 
 async function rejects(p: Promise<unknown>): Promise<HttpError> {
@@ -46,6 +46,41 @@ describe('GET /api/permissions (view)', () => {
     expect(v.cli_command).toContain('databricks bundle run install');
   });
 
+  it('counts an unreadable line as not checked, not missing, and offers a dry-run check', async () => {
+    const v = await permissionsView(deps(world(), { jobRunHeld: () => Promise.resolve(null) }), { scopes: 'sales.orders' });
+    const jobs = v.lines.find((l) => l.securable_type === 'JOBS');
+    expect(jobs?.status).toBe('unknown');
+    expect(v.unchecked).toBeGreaterThanOrEqual(1);
+    expect(v.missing + v.unchecked).toBe(v.pending);
+    expect(v.check_command).toContain('databricks bundle run install');
+    expect(v.check_command).not.toContain('MTM_PLAN_ID');
+    expect(v.check_command).not.toContain('MTM_CONFIRM_GRANTS');
+    expect(v.cli_command).toContain(`MTM_PLAN_ID=${v.plan_id}`);
+  });
+
+  it('the jobs line: a deployer, a CLI record, an app record, a revoke', async () => {
+    const unread = { jobRunHeld: () => Promise.resolve(null) };
+    const jobsLine = async (w: ReturnType<typeof world>, over: Parameters<typeof deps>[1] = {}) =>
+      (await permissionsView(deps(w, { ...unread, ...over }), { scopes: 'sales.orders' })).lines.find((l) => l.securable_type === 'JOBS');
+    const deployed = async () => ({
+      ...(await deps(world()).jobs()), creatorByJob: { 11: SP, 12: SP },
+    });
+    expect(await jobsLine(world(), { jobs: deployed })).toMatchObject({ status: 'present', evidence: { kind: 'deployer' } });
+
+    const detail = (door: string) => JSON.stringify({
+      front_door: door, grantee: SP, privilege: 'CAN_MANAGE_RUN', securable_type: 'JOBS', job_ids: ['11', '12'], prior_held: true,
+    });
+    const cli = { action: 'INSTALL_GRANT_SKIPPED', phase: 'SUCCESS', created_at: '2026-10-20 09:00:00', detail: detail('cli') };
+    expect(await jobsLine(world({ jobsAudit: [cli] })))
+      .toMatchObject({ status: 'present', evidence: { kind: 'recorded', door: 'cli', at: '2026-10-20 09:00:00' } });
+    expect(await jobsLine(world({ jobsAudit: [{ ...cli, detail: detail('app') }] })))
+      .toMatchObject({ status: 'unknown', evidence: null });
+    const revoke = { ...cli, action: 'INSTALL_REVOKE', created_at: '2026-10-21 09:00:00' };
+    expect((await jobsLine(world({ jobsAudit: [cli, revoke] })))?.status).toBe('unknown');
+    expect(await jobsLine(world({ jobsAudit: [cli] }), { jobRunHeld: () => Promise.resolve(new Set<string>()) }))
+      .toMatchObject({ status: 'missing', evidence: { kind: 'live' } });
+  });
+
   it('refuses uninstall and bad options with 400', async () => {
     expect((await rejects(permissionsView(deps(world()), { action: 'uninstall' }))).status).toBe(400);
     expect((await rejects(permissionsView(deps(world()), { scopes: 'not a scope' }))).status).toBe(400);
@@ -59,6 +94,19 @@ describe('POST /api/permissions/grant', () => {
     const e = await rejects(grantPermissions(deps(w), { scopes: 'sales.orders', plan_id: '000000000000' }));
     expect(e.status).toBe(409);
     expect(w.log.some((s) => s.startsWith('GRANT'))).toBe(false);
+  });
+
+  it('writes no audit row for a jobs line held only by the deployer or a record', async () => {
+    const w = world();
+    const d = deps(w, {
+      jobRunHeld: () => Promise.resolve(null),
+      jobs: async () => ({ ...(await deps(world()).jobs()), creatorByJob: { 11: SP, 12: SP } }),
+    });
+    const { plan_id } = await permissionsView(d, { scopes: 'sales.orders' });
+    w.log.length = 0;
+    const out = await grantPermissions(d, { scopes: 'sales.orders', plan_id });
+    expect(out.results.find((r) => r.securable_type === 'JOBS')?.outcome).toBe('skipped');
+    expect(w.log.filter((s) => s.startsWith('INSERT INTO ctl.migration.audit_log')).some((s) => s.includes('JOBS'))).toBe(false);
   });
 
   it('writes the audit row first, grants, records the scope and ledger, and reads every grant back', async () => {
@@ -166,6 +214,19 @@ describe('wiring', () => {
     });
     expect(await jobsRunHeld(client({ 1: 'CAN_MANAGE_RUN', 2: 'CAN_MANAGE' }), ['1', '2'], [SP])).toEqual(new Set(['CAN_MANAGE_RUN']));
     expect(await jobsRunHeld(client({ 1: 'CAN_MANAGE_RUN', 2: 'CAN_VIEW' }), ['1', '2'], [SP])).toEqual(new Set());
+  });
+
+  it('an unreadable access list is null, and the log names only the error kind', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
+    const denied = Object.assign(new Error('secret detail about user@x.com'), { errorCode: 'PERMISSION_DENIED' });
+    const client = { jobs: { get: () => Promise.resolve({}) }, permissions: { get: () => Promise.reject(denied) } };
+    expect(await jobsRunHeld(client, ['1', '2'], [SP])).toBeNull();
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(String(warn.mock.calls[0][0])).toContain('PERMISSION_DENIED');
+    expect(String(warn.mock.calls[0][0])).not.toContain('user@x.com');
+    warn.mockRestore();
+    expect(errorKindOf({ statusCode: 403 })).toBe('403');
+    expect(errorKindOf(null)).toBe('unknown');
   });
 });
 

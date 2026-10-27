@@ -1,5 +1,5 @@
 # Backend unit-test dependencies (no Spark, no workspace). Compile with:
 #   uv pip compile backend/requirements-ci.in --universal --python-version 3.11 --generate-hashes -o backend/requirements-ci.txt
-pytest==9.0.2
+pytest==9.0.3
 pyyaml==6.0.3
 databricks-sdk==0.101.0

@@ -29,7 +29,8 @@
 # MAGIC 6. **Genie** — nothing to restart: the app looks the new Genie space up by itself.
 # MAGIC 7. **Data** — per `data_mode`: `real` (profile → plan → recommend), `fixture` (dev-only
 # MAGIC    synthetic estate), or `none`. Every run ends with the conductor, so the app's views
-# MAGIC    and next step reflect it (to upgrade, re-run this notebook).
+# MAGIC    and next step reflect it. To upgrade, deploy again and run `job_08_conductor` once
+# MAGIC    (docs/00-installation.md#upgrade); re-run this notebook only if the release notes say so.
 # MAGIC 8. **Verify** — config handshake complete, App-SP grants landed, app RUNNING with its URL,
 # MAGIC    and a representative read succeeds.
 # MAGIC

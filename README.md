@@ -298,8 +298,9 @@ backend/             the migration tooling; runs on its own, with no app deploye
   src/tests/         pytest suite; needs no cluster or Spark
   docs/              contracts (jobs, control tables), architecture, operations, reference
 app/                 the Databricks App (React + TypeScript on AppKit) and its MCP server
-docs/                the operator documentation
+docs/                the operator documentation (site/ builds it into the docs website)
 scripts/release.py   local release tooling
+.github/workflows/   CI and the docs-site deploy
 ```
 
 The app talks to the tooling only through the control tables and job parameters, documented in
@@ -309,10 +310,10 @@ The app talks to the tooling only through the control tables and job parameters,
 
 ```bash
 make test   # backend unit tests (fast, no cluster)
-make ci     # the full pre-merge gate: backend tests plus app typecheck, tests and lint
+make ci     # the full pre-merge gate: backend tests, the docs site build, app typecheck, tests and lint
 ```
 
-There is no hosted CI, so run `make ci` before opening a pull request. Read [AGENTS.md](./AGENTS.md)
+Run `make ci` before opening a pull request; GitHub Actions runs the same checks on it. Read [AGENTS.md](./AGENTS.md)
 first: it holds the safety rules and engineering conventions for people and coding agents alike.
 Add a line under `[Unreleased]` in [CHANGELOG.md](./CHANGELOG.md) for any user-visible change.
 Releases follow "Cutting a release" in AGENTS.md. Usage telemetry and how to turn it off are

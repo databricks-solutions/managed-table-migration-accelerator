@@ -152,10 +152,11 @@ bundle's `config.env`, and the app then fails at boot.
 * server/          # Express backend
   * server.ts      # Server entry point
   * routes/        # Routes
+  * mcp/           # The Genie Code MCP server (POST /mcp)
 * shared/          # Shared types
 * config/          # Configuration
   * queries/       # SQL query files
-* databricks.yml   # Bundle configuration
+* resources/app.yml  # The app resource (the bundle root is ../databricks.yml)
 * app.yaml         # App configuration
 * .env.example     # Environment variables example
 ```

@@ -62,7 +62,7 @@ client_secret = prod-client-secret
 Deploy using a specific profile:
 
 ```bash
-databricks bundle deploy --profile production
+databricks bundle deploy -t prod --profile production
 ```
 
 **Note:** Personal Access Tokens (PATs) are legacy authentication. OAuth is strongly recommended for better security.
@@ -125,39 +125,23 @@ npm run format:fix
 
 ## Deployment with Databricks Asset Bundles
 
-### 1. Configure Bundle
-
-Update `databricks.yml` with your workspace settings:
-
-```yaml
-targets:
-  default:
-    workspace:
-      host: https://your-workspace.cloud.databricks.com
-```
-
-Make sure to replace all placeholder values in `databricks.yml` with your actual resource IDs.
-
-### 2. Deploy
-
-Deploy and start the app with a single command:
+The app is part of the repository's one bundle: the root `databricks.yml` includes
+`app/resources/app.yml`, and no bundle file lives in `app/`. Deploy from the repository root, which
+deploys the jobs, the dashboard and the app together; the Apps platform builds the app at deploy
+time. The workspace comes from `--profile`.
 
 ```bash
-databricks apps deploy
+export BUNDLE_VAR_warehouse_id=<warehouse-id>
+databricks bundle deploy -t dev --profile <profile>
+# Production:
+databricks bundle deploy -t prod --profile <prod-profile>
 ```
 
-`databricks apps deploy` validates the project, deploys it, starts the app, and prints its URL.
+Do not run `databricks apps deploy`: the bundle owns the app's lifecycle. Then run the installer;
+see [Installation](../docs/00-installation.md).
 
-### Deploy to Production
-
-1. Configure the production target in `databricks.yml`
-2. Deploy to production:
-
-```bash
-databricks apps deploy -t prod
-```
-
-> **Restarting a stopped app:** apps stop after a period of inactivity. To start one again without redeploying, run `databricks apps start <APP_NAME>`.
+To restart the app, run `databricks bundle deploy` again. `databricks apps stop/start` drops the
+bundle's `config.env`, and the app then fails at boot.
 
 ## Project Structure
 

@@ -30,7 +30,7 @@ const plural = (n: number, word: string) => (n === 1 ? word : `${word}s`);
 /**
  * The schemas with external tables the signed-in admin can see (their visibility, never "the
  * estate"), grouped by catalog. Ticking one adds it to the Permissions panel's plan; a schema
- * already in the migration scope is shown as covered, never as a tick.
+ * already in the stored scopes is shown as covered, never as a tick.
  */
 export function ScopePicker({
   obo,
@@ -114,8 +114,8 @@ export function ScopePicker({
         {coveredCount > 0 ? (
           <p className="mt-1">
             {coveredCount === scopes.length
-              ? 'Every schema here is already in the migration scope.'
-              : `${coveredCount} of these ${coveredCount === 1 ? 'is' : 'are'} already in the migration scope.`}
+              ? 'Every schema here is already in the jobs’ access.'
+              : `${coveredCount} of these ${coveredCount === 1 ? 'is' : 'are'} already in the jobs’ access.`}
           </p>
         ) : null}
       </div>
@@ -254,7 +254,7 @@ function ScopeChip({ scope, onToggle }: { scope: MergedScope; onToggle: (key: st
   if (scope.covered) {
     return (
       <span
-        aria-label={`${key}, already in the migration scope`}
+        aria-label={`${key}, already in the jobs’ access`}
         className="flex items-center gap-1 rounded-md border border-[var(--success-border)] bg-[var(--success-bg)] px-2 py-0.5 font-mono text-[11px] text-[var(--success-foreground)]"
       >
         <CircleCheck className="size-3" aria-hidden />

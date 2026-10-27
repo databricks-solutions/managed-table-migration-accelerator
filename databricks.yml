@@ -192,9 +192,6 @@ variables:
     description: Extra catalog.schema allowed for the dev-only synthetic fixture estate (blank = none).
     default: ""
 
-  prod_host:
-    description: Workspace host for the prod target.
-    default: "https://CHANGE-ME-prod.cloud.databricks.com"
   prod_root_path:
     description: >-
       Workspace folder for the prod deployment. The default keeps existing installs where they
@@ -300,7 +297,8 @@ targets:
     # approval is enforced via job-run permissions + a human triggering the run.
     # The jobs run as the deployer here too (jobs_run_as default); production mode accepts a
     # user identity because every job sets run_as and root_path is explicit.
+    # The workspace comes from --profile, like dev and e2e: the CLI resolves auth before
+    # variables, so the host cannot be a ${var.*}.
     mode: production
     workspace:
-      host: ${var.prod_host}
       root_path: ${var.prod_root_path}

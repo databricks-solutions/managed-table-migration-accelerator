@@ -176,7 +176,9 @@ With `data_mode=real` (the default) the apply waits for `job_99_setup` and the p
 expect 30 to 45 minutes, even for a few schemas. `MTM_DATA_MODE=none` skips the profiling, so the
 apply finishes in a few minutes; run the profiler later from the app.
 
-For production, set `prod_host`, then `databricks bundle deploy -t prod`. The jobs run as you
+For production, deploy with the production workspace's profile:
+`databricks bundle deploy -t prod --profile <prod-profile>`, and pass the same `-t prod --profile`
+to the installer. The jobs run as you
 there too: anyone who can start them runs them with your access, which the installer says on the
 jobs' identity line. To use a service principal instead, run the installer with
 `jobs_identity=sp:<application-id>` and redeploy. Runs are approved through job-run permissions
@@ -209,11 +211,12 @@ profiling finishes, **Overview** shows your estate and the recommended next step
 
 The app takes over once the first install has run. After the first install, **Connection & policy → Permissions** shows the same check, the stored
 scopes with their live status, and the plan, for the signed-in admin. With nothing stored yet,
-**Migration scope** starts with every catalog you can grant on, as rows you can remove to narrow.
+**Where the jobs have access** starts with every catalog you can grant on, as rows you can remove to narrow.
+It grants access only: the profiler finds the tables, and the waves decide what converts.
 **Add schemas** widens the scope; **Grant** runs the plan as you, with your own rights, after a confirm that lists every
 statement. Lines you cannot grant name who can, with a **Copy request**.
 
-![Settings → Permissions: the rights check, who runs the jobs (you), the migration scope starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
+![Settings → Permissions: the rights check, who runs the jobs (you), where the jobs have access, starting with every catalog you can grant on and its Look, Read and Change status, convert rights, and the plan with nothing missing](images/install/app/settings-permissions.png)
 
 When you deployed the jobs, you own them, so **Who runs the jobs** reads the run permission as held
 without asking for it:
@@ -224,7 +227,7 @@ Before the first profile, **Convert rights** has no tables to check yet and offe
 
 ![Convert rights before profiling: all at once, handed back at the end, the jobs hold MANAGE on the catalog, and No tables profiled yet with Run the profiler](images/install/app/convert-rights-empty.png)
 
-![Add schemas: the schemas with external tables you can see, grouped by catalog with table counts, and a box for catalog.schema or catalog.*](images/install/app/add-schemas.png)
+![Add schemas under Where the jobs have access: the schemas with external tables you can see, grouped by catalog with table counts, and a box for catalog.schema or catalog.*](images/install/app/add-schemas.png)
 
 When the jobs run as a service principal (`jobs_identity=sp:<application-id>`), the plan lists what
 it still needs, and **Grant** gives it:
@@ -532,7 +535,7 @@ backticks; a display name grants nothing), shown on the app's page in the worksp
 The app's **Settings** page (**Connection & policy**) has two panels, one per identity:
 
 - **Permissions** is for the migration jobs. It checks, grants and hands back as the signed-in admin
-  ([Carry on in the app](#carry-on-in-the-app)). Its **Migration scope** part lists the schemas with
+  ([Carry on in the app](#carry-on-in-the-app)). Its **Where the jobs have access** part lists the schemas with
   external tables you can see: tick a schema (or type one) and its grants join the plan straight
   away, so you can grant access before the first profiler run. Nothing is ticked for you. The list
   is your visibility, not the whole estate: the profiler finds the authoritative set once the grants
@@ -561,7 +564,6 @@ them again:
 | `catalog_filter` / `schema_filter` | `*` / `*` | Glob filters that limit which catalogs and schemas the profiler scans. |
 | `workspace_id` | blank | Your workspace ID, so links from the app open in the right workspace. Optional. |
 | `jobs_run_as` | the deployer | Who every stage job runs as: `{service_principal_name: …}`, `{group_name: …}` or `{user_name: …}`. A complex variable: set it in the target or `.databricks/bundle/<target>/variable-overrides.json` (the installer's `jobs_identity` option writes it), not `BUNDLE_VAR_*`. Required when a service principal deploys. |
-| `prod_host` | placeholder | `prod` target only: the prod workspace URL. |
 | `prod_root_path` | `/Shared/.bundle/<bundle>/prod` | `prod` target only: the deployment folder. The default keeps existing installs in place. For a new install pick a folder only the deployers can edit; the installer warns when every workspace user can edit it. |
 | `mcp_tier` | `v2` | What Genie Code may do through the app: `v2` adds the gated tools that change things; `v1` is reads and non-mutating stages only. |
 | `telemetry_enabled` | `true` | `false` to turn off usage telemetry (see below). |

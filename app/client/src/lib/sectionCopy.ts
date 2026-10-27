@@ -616,13 +616,14 @@ export const SECTION_COPY = {
       technical: 'Set with the jobs_run_as bundle variable or the installer jobs_identity option, then redeploy.',
     },
     permissionsScope: {
-      title: 'Migration scope',
-      subtitle: 'What the migration may read and convert. With nothing saved yet, it starts with everything you can grant on.',
-      technical: 'Remove a row to narrow the plan, or tick more below to add them.',
+      title: 'Where the jobs have access',
+      subtitle: 'The schemas the jobs can read and convert. Access here does not pick what converts.',
+      detail: 'The profiler finds the tables and the wave plan groups them. Nothing converts until you launch a wave.',
+      technical: 'With nothing saved yet, it covers everything you can grant on. Remove a row to narrow, or tick more below to add them.',
     },
     permissionsPicker: {
       title: 'Schemas you can see',
-      subtitle: 'Schemas with external tables your account can see. Tick the ones to migrate.',
+      subtitle: 'Schemas with external tables your account can see. Tick the ones to give the jobs access to.',
       technical: 'Listed with your sign-in, so it shows only what you can see. Ticked schemas join the plan below.',
     },
     permissionsConvert: {

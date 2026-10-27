@@ -909,16 +909,17 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 
 | Field | Text |
 | --- | --- |
-| Title | Migration scope |
-| Subtitle | What the migration may read and convert. With nothing saved yet, it starts with everything you can grant on. |
-| Technical detail | Remove a row to narrow the plan, or tick more below to add them. |
+| Title | Where the jobs have access |
+| Subtitle | The schemas the jobs can read and convert. Access here does not pick what converts. |
+| Tooltip | The profiler finds the tables and the wave plan groups them. Nothing converts until you launch a wave. |
+| Technical detail | With nothing saved yet, it covers everything you can grant on. Remove a row to narrow, or tick more below to add them. |
 
 ### `permissionsPicker`
 
 | Field | Text |
 | --- | --- |
 | Title | Schemas you can see |
-| Subtitle | Schemas with external tables your account can see. Tick the ones to migrate. |
+| Subtitle | Schemas with external tables your account can see. Tick the ones to give the jobs access to. |
 | Technical detail | Listed with your sign-in, so it shows only what you can see. Ticked schemas join the plan below. |
 
 ### `permissionsConvert`

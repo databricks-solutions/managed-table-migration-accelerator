@@ -270,7 +270,7 @@ export function jobsHeldText(v: Pick<PermissionsView, 'lines' | 'who'>): string 
 export const statusLabel = (status: string): string => (status === STATUS_UNKNOWN ? 'not checked' : status);
 
 /**
- * The `scopes` option for the panel's picks: the stored migration scope plus the new picks,
+ * The `scopes` option for the panel's picks: the stored scopes plus the new picks,
  * de-duplicated in order. '' (no option, so the server uses the stored scope) when nothing is picked.
  */
 export function scopesWithPicks(stored: readonly string[], picks: readonly string[]): string {

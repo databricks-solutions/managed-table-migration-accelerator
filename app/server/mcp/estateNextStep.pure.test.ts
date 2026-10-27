@@ -1,3 +1,6 @@
+import { readFileSync } from 'node:fs';
+import { dirname, resolve } from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, expect, it } from 'vitest';
 import { readerDoNot, type ConvertImpacts } from './convertImpacts.pure.js';
 import { preconvertReaderWarning } from '../../client/src/lib/compatOpenApis.pure.js';
@@ -6,6 +9,7 @@ import {
   buildEstateHints,
   buildEstateNextStep,
   estateImpactsScope,
+  FIRST_PROFILE_ALIAS,
   KIND_TO_ALIAS,
   MUTATING_ALIASES as PURE_MUTATING,
   PIPELINE,
@@ -98,6 +102,48 @@ describe('buildEstateNextStep', () => {
     expect(out.verdict).toBe('none');
     expect(out.next_step).toBeNull();
     expect(out.recommendation).toMatch(/mtm_conversion_preflight|mtm_run_profiler/);
+  });
+
+  describe('a replan row with nothing profiled recommends the profiler (needs_profile fixture)', () => {
+    const HERE = dirname(fileURLToPath(import.meta.url));
+    const GOLDEN = JSON.parse(
+      readFileSync(resolve(HERE, '../../../backend/src/tests/fixtures/needs_profile_cases.json'), 'utf8'),
+    ) as { cases: { name: string; row: Record<string, unknown>; expected: boolean }[] };
+
+    it.each(GOLDEN.cases.map((c) => [c.name, c] as const))('%s', (_name, c) => {
+      const out = buildEstateNextStep(c.row);
+      if (c.expected) {
+        expect(out.verdict).toBe('replan');
+        expect(out.next_step).toEqual({ tool: 'mtm_run_profiler', args: {}, mutating: false, reversible: false });
+        expectArgsAcceptedByTool('mtm_run_profiler', out.next_step!.args);
+        expect(out.recommendation).toMatch(/Run the profiler first/);
+        expect(out.recommendation).not.toMatch(/confirm=true/);
+        expect(out.do_not.join(' ')).toMatch(/Do NOT plan waves yet/);
+        expect(out.then[0]).toBe('mtm_plan_waves');
+      } else {
+        expect(out.next_step?.tool).not.toBe('mtm_run_profiler');
+      }
+    });
+
+    it('a placeholder row written before the first profile plans the waves once the manifest has tables', () => {
+      const row = { next_step_kind: 'replan', estate_total_schemas: '0', estate_discovered_tables: '0',
+        directive: 'No tables profiled yet. Run the profiler (job_00_profiler); plan the waves after it.' };
+      const out = buildEstateNextStep(row, { liveDiscoveredTables: 128 });
+      expect(out.next_step).toMatchObject({ tool: 'mtm_plan_waves', args: {}, mutating: false });
+      expect(out.directive).toBeNull();
+      expect(out.hints).toEqual([expect.stringMatching(/found 128 table\(s\) since this recommendation/)]);
+      expect(out.do_not.join(' ')).not.toMatch(/Do NOT plan waves yet/);
+      // An empty or unread manifest keeps the profiler.
+      for (const live of [0, null, undefined]) {
+        expect(buildEstateNextStep(row, { liveDiscoveredTables: live }).next_step?.tool).toBe('mtm_run_profiler');
+      }
+    });
+
+    it('a profiled, unplanned estate still plans the waves', () => {
+      const out = buildEstateNextStep({ next_step_kind: 'replan', estate_total_schemas: '0', estate_discovered_tables: '128' });
+      expect(out.next_step).toMatchObject({ tool: 'mtm_plan_waves', args: {}, mutating: false });
+      expect(out.recommendation).toMatch(/Re-plan waves/);
+    });
   });
 
   it('a freeze recommendation names writer jobs (CUJ-4)', () => {
@@ -221,6 +267,13 @@ describe('estate mapping stays in lockstep with the MCP tool tables', () => {
   });
   it('KIND_TO_ALIAS equals backend conductor.STEP_JOB_ALIAS (including optimize)', () => {
     expect(KIND_TO_ALIAS).toEqual(backendStepJobAlias());
+  });
+  it('FIRST_PROFILE_ALIAS equals backend conductor.FIRST_PROFILE_JOB_ALIAS and is read-only', () => {
+    const conductor = readFileSync(
+      resolve(dirname(fileURLToPath(import.meta.url)), '../../../backend/src/migration/conductor.py'), 'utf8');
+    expect(/^FIRST_PROFILE_JOB_ALIAS = "([^"]+)"/m.exec(conductor)?.[1]).toBe(FIRST_PROFILE_ALIAS);
+    expect(ALIAS_TO_TOOL[FIRST_PROFILE_ALIAS]).toBe('mtm_run_profiler');
+    expect(isMutating(FIRST_PROFILE_ALIAS)).toBe(false);
   });
   it('PIPELINE ends with the four finish tools, in post_convert_step order', () => {
     expect(PIPELINE.slice(-5)).toEqual(['mtm_validate', 'mtm_unfreeze', 'mtm_reshare', 'mtm_enable_compat', 'mtm_enable_optimization']);

@@ -24,6 +24,7 @@ import { buildEstateNextStep, estateImpactsScope } from './estateNextStep.pure.j
 import { scopedNextStep } from './focusNextStep.pure.js';
 import { pickWaveRow } from './finishSteps.pure.js';
 import { OPEN_APIS_REASON } from '../../client/src/lib/compatOpenApis.pure.js';
+import { rowNeedsProfile } from '../../client/src/lib/needsProfile.pure.js';
 import type { ConvertImpacts } from './convertImpacts.pure.js';
 import { getRunStatus } from './run-status.js';
 import {
@@ -339,7 +340,18 @@ export function allToolDefs(env: NodeJS.ProcessEnv = process.env): ToolDef[] {
           // Omit it; the recommendation itself is unaffected.
         }
       }
-      return buildEstateNextStep(row, { impacts, wave });
+      // A first-profile row can predate the profile (a normal profile does not refresh the
+      // conductor), so re-check the live manifest (best-effort — a failed read keeps the row's step).
+      let liveDiscoveredTables: number | null = null;
+      if (rowNeedsProfile(row)) {
+        try {
+          const n = Number((await runControlQuery('estate_discovery'))[0]?.tables_discovered ?? 0);
+          liveDiscoveredTables = Number.isFinite(n) ? n : null;
+        } catch {
+          // Keep the row's recommendation.
+        }
+      }
+      return buildEstateNextStep(row, { impacts, wave, liveDiscoveredTables });
     },
   });
 

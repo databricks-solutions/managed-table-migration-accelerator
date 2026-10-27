@@ -162,6 +162,7 @@ audit_fqn = au.audit_log_fqn(MANIFEST_CATALOG, MANIFEST_SCHEMA)
 # (it is a bundle variable), so keying off the full `<bundle.name> :: ...` string is brittle.
 # Each tail is unique across the stage jobs.
 STAGE_SUFFIXES = {
+    "00_profiler": ":: 00 profiler",
     "02_wave_planner": ":: 02 wave planner",
     "03_dry_run": ":: 03 dry run",
     "03c_freeze": ":: 03c freeze",
@@ -643,6 +644,7 @@ displayHTML("""
 <table style='border-collapse:collapse;margin-top:6px' border='1' cellpadding='6'>
 <tr><th>Step</th><th>Runs</th><th>Mutates?</th><th>Effect</th></tr>
 <tr><td>replan</td><td>02 wave_planner</td><td>No</td><td>Rewrites the wave plan (new plan_run_id)</td></tr>
+<tr><td>replan (nothing profiled yet)</td><td>00 profiler</td><td>No</td><td>Discovers and assesses the tables; plan the waves after it</td></tr>
 <tr><td>prep</td><td>10 campaign (dry-run + gate)</td><td>No</td><td>Advances eligible tables to DRY_RUN_OK / BLOCKED</td></tr>
 <tr><td>freeze</td><td>03c freeze (gated)</td><td>Reversible metadata</td><td>OPTIONAL: pause compaction / stop streams before convert (skippable)</td></tr>
 <tr><td>convert</td><td>04 convert</td><td><b>YES — SET MANAGED</b></td><td>Converts a wave; reversible &lt;=14 days</td></tr>
@@ -743,6 +745,17 @@ def _reader_warning_for_next() -> str:
     return cm.preconvert_reader_warning(rows[0]["readers_undecided"], rows[0]["readers_fgac_required"])
 
 
+def _manifest_has_tables() -> bool:
+    """A normal profile does not refresh the conductor, so a first-profile row can predate the
+    tables it would find. An unreadable manifest reads as empty (the profiler is read-only)."""
+    try:
+        return len(spark.sql(
+            f"SELECT 1 FROM {MANIFEST_CATALOG}.{MANIFEST_SCHEMA}.table_manifest LIMIT 1").collect()) > 0
+    except Exception as e:  # noqa: BLE001
+        print(f"(manifest unreadable: {type(e).__name__})")
+        return False
+
+
 def _any_wave_in_flight() -> bool:
     try:
         rows = spark.sql(
@@ -773,7 +786,12 @@ elif ACTION == "advance":
             _readers = _reader_warning_for_next()
             if _readers:
                 print(f"EXTERNAL READERS (advisory, tell the reader teams before the window): {_readers}")
-        if kind == cd.STEP_REPLAN:
+        if kind == cd.STEP_REPLAN and cd.row_needs_profile(NXT) and not _manifest_has_tables():
+            print("Nothing profiled yet — launching the profiler (00, read-only). Plan the waves after it.")
+            _launch("00_profiler")
+        elif kind == cd.STEP_REPLAN:
+            if cd.row_needs_profile(NXT):
+                print("The profiler has found tables since this recommendation was written — planning the waves.")
             if _any_wave_in_flight() and not CONFIRM_REPLAN:
                 print("REFUSING re-plan: a wave is IN_PROGRESS/CONVERTING. Set confirm_replan=true to override.")
             else:

@@ -157,12 +157,12 @@ function SituationAndJourney() {
             // Hold until the landing-driving reads (discovery/coverage) resolve, so a poll
             // before the real facts arrive never flashes the NEVER_PROFILED first-run card.
             if (loading) return null;
-            if (landing.kind === 'PROFILED_UNPLANNED') return <ProfiledUnplannedSituation landing={landing} />;
-            if (landing.kind === 'ZERO_DISCOVERY') return <ZeroDiscoverySituation scopeLabel={landing.scopeLabel} />;
-            return <FreshSituation />; // NEVER_PROFILED
+            return landingSituation(landing);
           }}
         >
           {(rows) => {
+            // A row written before any profile is not a situation to report (overviewLanding).
+            if (landing.kind !== 'READY') return loading ? null : landingSituation(landing);
             // The estate rollup is precomputed by the conductor (summarize_estate) and read
             // straight off the latest migration_next_actions row — NO client-side aggregation,
             // matching how the AI/BI dashboard reads estate_pct_*. This row is the whole planned
@@ -492,14 +492,29 @@ function RecommendedNextStep() {
         // Hold until the landing-driving reads (discovery/coverage) resolve, so a poll
         // before the real facts arrive never flashes the NEVER_PROFILED first-run card.
         if (loading) return null;
-        if (landing.kind === 'PROFILED_UNPLANNED') return <PlanTheWavesResolution landing={landing} />;
-        if (landing.kind === 'ZERO_DISCOVERY') return <ZeroDiscoveryResolution scopeLabel={landing.scopeLabel} />;
-        return <FirstRunResolution />; // NEVER_PROFILED (and the readiness-softened first run)
+        return landingResolution(landing);
       }}
     >
-      {(rows) => <ResolutionCard n={rows[0]} />}
+      {(rows) =>
+        // A replan row written before any profile would say "plan the waves"; the landing knows better.
+        landing.kind !== 'READY' ? (loading ? null : landingResolution(landing)) : <ResolutionCard n={rows[0]} />
+      }
     </DataSurface>
   );
+}
+
+/** The situation for a landing with no usable recommendation (overviewLanding.pure). */
+function landingSituation(landing: OverviewLanding) {
+  if (landing.kind === 'PROFILED_UNPLANNED') return <ProfiledUnplannedSituation landing={landing} />;
+  if (landing.kind === 'ZERO_DISCOVERY') return <ZeroDiscoverySituation scopeLabel={landing.scopeLabel} />;
+  return <FreshSituation />; // NEVER_PROFILED
+}
+
+/** The next step for a landing with no usable recommendation (overviewLanding.pure). */
+function landingResolution(landing: OverviewLanding) {
+  if (landing.kind === 'PROFILED_UNPLANNED') return <PlanTheWavesResolution landing={landing} />;
+  if (landing.kind === 'ZERO_DISCOVERY') return <ZeroDiscoveryResolution scopeLabel={landing.scopeLabel} />;
+  return <FirstRunResolution />; // NEVER_PROFILED (and the readiness-softened first run)
 }
 
 /**

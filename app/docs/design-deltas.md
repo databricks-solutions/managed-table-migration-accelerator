@@ -1551,3 +1551,19 @@ what converts. Its tooltip says so, and a line under it points to **Waves**.
 who will run it themselves. Asking them to list schemas before the first profile, and to set up a
 service principal for prod, was friction with no safety gain: the grants still go only where they
 can grant, the plan still shows every line before **Grant**, and stored scopes are never widened.
+
+## T63 · Before the first profile the Overview recommends the profiler (not in the v4 mockup)
+
+**What.** The Overview treats a conductor row as the recommendation only when it reflects a
+profiled estate. A `replan` row with no planned schema and no discovered table
+(`needsProfile.pure.ts`, the mirror of `conductor.needs_profile`, pinned to the golden fixture
+`needs_profile_cases.json`) was written before any profile, typically by the installer's
+conductor-only run. For that row the situation card and the next step use the same landing as
+an empty table: **Run the profiler** when nothing has run, the zero-discovery card when a profile
+found nothing, and **Plan the waves** once a later profile filled the manifest. The conductor row
+itself now says the same: title **Run the profiler first**, alias `profiler`, the
+`job_00_profiler` command.
+
+**Why.** The landing classifier read any row as READY, so a fresh install showed **Plan the waves
+again** with 0 of 0 tables and "Profiled never". A normal profile does not re-run the conductor,
+so the row can also be older than the profile; the live manifest count decides.

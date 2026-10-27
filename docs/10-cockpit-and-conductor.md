@@ -52,7 +52,12 @@ dry-run → [freeze] → [authorize] → convert → validate → [unfreeze] →
 Bracketed steps are recommended only when they apply; otherwise they are skipped silently. The
 precedence in `resolve_next_step` is:
 
-1. `STEP_REPLAN` (no plan yet, or no profiled schemas).
+1. `STEP_REPLAN` (no plan yet, or no profiled schemas). When nothing is profiled yet
+   (`conductor.needs_profile`: no planned schema and an empty `table_manifest`), the row keeps the
+   kind but names the profiler: **Run the profiler first**, `job_00_profiler`, then plan the waves.
+   This is the row a fresh install writes when its conductor runs before any profile. A normal
+   profile does not re-run the conductor, so the app, the cockpit and Genie Code re-check the
+   manifest and plan the waves once it has tables.
 2. A wave already in flight: the lowest-ordered wave that has started converting is resumed,
    validated, or converted the rest of the way, even ahead of a lower-ordered READY wave.
 3. The **finishing wave**: `pick_finishing_wave` returns the lowest-ordered fully-migrated wave
@@ -149,7 +154,9 @@ it and "Run all" to get the briefing, then approve the recommendation:
   `enable_po_on_convert=true` and the wave pin. Freeze and unfreeze launch with
   `confirm_execute=true`; re-share, Compat and optimize honour the cockpit's `confirm_execute`
   widget (default `false`, a dry-run). When there is
-  no recommendation yet, `advance` launches `job_08_conductor` first to compute one.
+  no recommendation yet, `advance` launches `job_08_conductor` first to compute one. When the
+  recommendation is the first profile and the manifest is still empty, `advance` launches
+  `job_00_profiler`.
 - `action=advanced` with a `manual=` mode covers the rare operations:
   `replan` / `rollback` / `cleanup` / `export_runbook` / `digest`. There is no
   `manual=conductor` (advance already runs the conductor when needed).

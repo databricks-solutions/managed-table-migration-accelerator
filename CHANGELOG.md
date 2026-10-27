@@ -92,6 +92,13 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **A fresh install recommends the profiler, not "Plan the waves again".** Before the first
+  profile the conductor's `replan` row (no planned schema, no discovered table) is now titled
+  **Run the profiler first**, with the `job_00_profiler` command and the `profiler` alias; the kind
+  stays `replan`. The Overview shows the first-run card for that row instead of 0 of 0 tables, the
+  `09` cockpit's `advance` launches the profiler, and Genie Code's `mtm_get_next_step` returns
+  `mtm_run_profiler`. All three re-check the manifest, so once a profile has found tables they
+  plan the waves.
 - **Settings no longer reports "0 of 0" or asks for permissions it can't see.** Convert rights
   says **No tables profiled yet** (with **Run the profiler**) on an empty manifest and **No tables
   left to convert** once everything is converted. The Plan counts `missing` and `not checked`

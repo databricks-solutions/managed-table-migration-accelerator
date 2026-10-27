@@ -6,9 +6,20 @@ const base: LandingFacts = {
   manifestTables: 0,
   manifestSchemas: 0,
   lastAssessedAt: null,
+  nextStepKind: null,
+  estateTotalSchemas: null,
+  estateDiscoveredTables: null,
   profilerHasRun: false,
   scopeCatalogFilter: null,
   scopeSchemaFilter: null,
+};
+
+/** The conductor row written before any profile (e.g. the installer's conductor-only run). */
+const placeholder: Partial<LandingFacts> = {
+  nextActionsRows: 1,
+  nextStepKind: 'replan',
+  estateTotalSchemas: 0,
+  estateDiscoveredTables: 0,
 };
 
 describe('overviewLandingState', () => {
@@ -36,6 +47,31 @@ describe('overviewLandingState', () => {
 
   it('PROFILED_UNPLANNED takes precedence over profilerHasRun', () => {
     expect(overviewLandingState({ ...base, manifestTables: 5, profilerHasRun: true }).kind).toBe('PROFILED_UNPLANNED');
+  });
+
+  describe('a replan row written before any profile is not READY', () => {
+    it('NEVER_PROFILED when no profiler run exists', () => {
+      expect(overviewLandingState({ ...base, ...placeholder }).kind).toBe('NEVER_PROFILED');
+    });
+
+    it('ZERO_DISCOVERY when a profile ran and found nothing', () => {
+      const r = overviewLandingState({ ...base, ...placeholder, profilerHasRun: true, scopeCatalogFilter: 'sales' });
+      expect(r).toEqual({ kind: 'ZERO_DISCOVERY', scopeLabel: 'sales.*' });
+    });
+
+    it('PROFILED_UNPLANNED when a later profile filled the manifest (the profile does not refresh the row)', () => {
+      const r = overviewLandingState({ ...base, ...placeholder, profilerHasRun: true, manifestTables: 128, manifestSchemas: 7 });
+      expect(r).toMatchObject({ kind: 'PROFILED_UNPLANNED', tables: 128, schemas: 7 });
+    });
+  });
+
+  it('a replan row over a profiled estate stays READY (it plans the waves)', () => {
+    expect(overviewLandingState({ ...base, ...placeholder, estateDiscoveredTables: 128 }).kind).toBe('READY');
+    expect(overviewLandingState({ ...base, ...placeholder, estateTotalSchemas: 3 }).kind).toBe('READY');
+  });
+
+  it('other kinds on an empty estate stay READY', () => {
+    expect(overviewLandingState({ ...base, ...placeholder, nextStepKind: 'done' }).kind).toBe('READY');
   });
 });
 

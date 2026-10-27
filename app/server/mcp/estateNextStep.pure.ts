@@ -9,6 +9,7 @@
 
 import { readerDoNot, type ConvertImpacts } from './convertImpacts.pure.js';
 import { preconvertReaderWarning } from '../../client/src/lib/compatOpenApis.pure.js';
+import { rowNeedsProfile } from '../../client/src/lib/needsProfile.pure.js';
 import { FINISH_ALIASES, FINISH_DO_NOT, finishArgs, finishSelector, remainingPipeline, type WaveFinishRow } from './finishSteps.pure.js';
 
 export interface EstateNextStep {
@@ -37,6 +38,7 @@ export interface EstateNextStep {
 
 // Mirrors backend conductor.STEP_JOB_ALIAS. Kinds absent here are navigate-only (no job to fire):
 // 'actions', 'blocked', 'done'. Guarded against the MCP tool table by estateNextStep.pure.test.ts.
+// A 'replan' row with nothing profiled (rowNeedsProfile) targets FIRST_PROFILE_ALIAS instead.
 export const KIND_TO_ALIAS: Record<string, string> = {
   replan: 'wave_planner',
   prep: 'campaign',
@@ -51,8 +53,12 @@ export const KIND_TO_ALIAS: Record<string, string> = {
   optimize: 'enable_optimization',
 };
 
+/** Mirrors backend conductor.FIRST_PROFILE_JOB_ALIAS. */
+export const FIRST_PROFILE_ALIAS = 'profiler';
+
 // Alias -> MCP tool name. Mirrors job-tools.ts TOOL_NAME (guarded by estateNextStep.pure.test.ts).
 export const ALIAS_TO_TOOL: Record<string, string> = {
+  profiler: 'mtm_run_profiler',
   wave_planner: 'mtm_plan_waves',
   campaign: 'mtm_run_campaign',
   convert: 'mtm_convert',
@@ -66,7 +72,8 @@ export const ALIAS_TO_TOOL: Record<string, string> = {
 };
 
 // Aliases that MUTATE (require confirm=true). Mirrors tiers.ts MUTATING_ALIASES membership for the
-// aliases we map here (guarded by estateNextStep.pure.test.ts). wave_planner/validate are read-only.
+// aliases we map here (guarded by estateNextStep.pure.test.ts). profiler/wave_planner/validate are
+// read-only.
 export const MUTATING_ALIASES = new Set([
   'campaign', 'convert', 'freeze', 'unfreeze_verify', 'lease_ownership', 'reshare', 'enable_compat',
   'enable_optimization',
@@ -88,6 +95,9 @@ const VERB: Record<string, string> = {
   blocked: 'Resolve the blockers before converting',
   done: 'Nothing to do',
 };
+
+const FIRST_PROFILE_VERB = 'Run the profiler first for';
+const FIRST_PROFILE_DO_NOT = ['Do NOT plan waves yet — nothing is profiled, so the planner has no tables to group.'];
 
 const DO_NOT_BASE = 'Follow `next_step` / `exact_command` exactly; do not invent, reorder, or skip stages.';
 const DO_NOT: Record<string, string[]> = {
@@ -139,6 +149,7 @@ function argsFor(alias: string, selector: string, waveId: string, planRunId: str
   const catalog = dot > 0 ? selector.slice(0, dot) : '';
   const schema = dot > 0 ? selector.slice(dot + 1) : '';
   switch (alias) {
+    case 'profiler': // profiles the configured scope; no selector
     case 'wave_planner':
       return args; // regenerates the whole plan; no selector
     case 'lease_ownership':
@@ -237,7 +248,13 @@ export function buildEstateHints(row: Record<string, unknown>, impacts?: Convert
 /** Wrap one migration_next_actions row (or none) into the structured estate recommendation. */
 export function buildEstateNextStep(
   row: Record<string, unknown> | undefined,
-  opts?: { impacts?: ConvertImpacts; wave?: WaveFinishRow | null },
+  opts?: {
+    impacts?: ConvertImpacts;
+    wave?: WaveFinishRow | null;
+    /** Live COUNT(table_manifest), read only for a needs-profile row. A normal profile does not
+     *  refresh the conductor, so a placeholder row can predate the first profile's tables. */
+    liveDiscoveredTables?: number | null;
+  },
 ): EstateNextStep {
   if (!row) {
     return {
@@ -261,18 +278,20 @@ export function buildEstateNextStep(
   const nextPreview = str(row.next_next_preview) || null;
   const reversible = truthy(row.reversible);
 
-  const alias = KIND_TO_ALIAS[kind];
+  const profiledSinceRow = rowNeedsProfile(row) && (opts?.liveDiscoveredTables ?? 0) > 0;
+  const firstProfile = rowNeedsProfile(row) && !profiledSinceRow;
+  const alias = firstProfile ? FIRST_PROFILE_ALIAS : KIND_TO_ALIAS[kind];
   const tool = alias ? ALIAS_TO_TOOL[alias] : undefined;
   const mutating = alias ? MUTATING_ALIASES.has(alias) : false;
 
   let next_step: EstateNextStep['next_step'] = null;
   let recommendation: string;
-  const verb = VERB[kind] ?? 'Next step for';
+  const verb = firstProfile ? FIRST_PROFILE_VERB : (VERB[kind] ?? 'Next step for');
 
   const args = tool && alias ? argsFor(alias, selector, waveId, planRunId) : null;
   if (tool && args) {
     next_step = { tool, args, mutating, reversible };
-    const label = scopeLabel(selector, waveId);
+    const label = firstProfile ? 'the configured scope' : scopeLabel(selector, waveId);
     const call = `${tool}(${JSON.stringify(args)})${mutating ? ' with confirm=true' : ''}`;
     const kindClause = mutating ? 'MUTATING but reversible' : 'non-mutating and reversible';
     const downtime = str(row.max_downtime_min);
@@ -301,9 +320,12 @@ export function buildEstateNextStep(
     recommendation,
     next_step,
     then,
-    do_not: [DO_NOT_BASE, ...(DO_NOT[kind] ?? []), ...readerCaveat],
-    hints: buildEstateHints(row, opts?.impacts),
-    directive,
+    do_not: [DO_NOT_BASE, ...(firstProfile ? FIRST_PROFILE_DO_NOT : (DO_NOT[kind] ?? [])), ...readerCaveat],
+    hints: profiledSinceRow
+      ? [`The profiler has found ${opts?.liveDiscoveredTables} table(s) since this recommendation was written; plan the waves next.`]
+      : buildEstateHints(row, opts?.impacts),
+    // The stored directive still says nothing is profiled; it no longer applies.
+    directive: profiledSinceRow ? null : directive,
     exact_command: exactCommand,
     next_preview: nextPreview,
     estate: collectEstate(row),

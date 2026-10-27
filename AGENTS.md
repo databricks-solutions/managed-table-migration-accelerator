@@ -569,7 +569,12 @@ the finish steps through the shared `FinishStepCta` with `batch_id`). Batches co
   unfreeze → re-share → Compat → optimize) preempt a not-yet-started wave and `STEP_DONE`. An
   in-flight wave keeps priority: if any runnable wave has started, the lowest-ordered started one is
   resumed (even ahead of a lower-ordered READY wave) and nothing is preempted; `STEP_REPLAN` stays
-  first. Finish steps are
+  first. A `STEP_REPLAN` row with nothing profiled (`conductor.needs_profile`: `estate_total_schemas`
+  and `estate_discovered_tables` both 0; golden fixture `needs_profile_cases.json`, mirrored by the
+  app's `needsProfile.pure.ts`) keeps the kind but names the profiler (title, directive,
+  `job_00_profiler` command, alias `profiler`; no new step kind). A normal profile does not re-run
+  the conductor, so the Overview landing, the `09` `advance` and MCP re-check the live manifest
+  before acting on it. Finish steps are
   **never** streaming-excluded (`pick_finishing_wave` has no `include_streaming`: the opt-in guards
   *starting* a streaming convert, and a converted streaming wave must restart its streams).
   Recommendation order only — no gate reads it. `STEP_OPTIMIZE` ("Turn on liquid clustering") is

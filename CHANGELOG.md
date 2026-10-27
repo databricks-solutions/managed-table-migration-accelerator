@@ -92,6 +92,10 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **The e2e control-plane wipe empties every control table.** `--wipe-control-plane` now also
+  empties `convert_authority` and `migration_scope`, so a fresh install no longer shows old convert
+  rights or the old migration scope.
+
 - **The `prod` target validates.** A target-level `run_as` also applied to the app, which the
   Apps platform refuses ("apps do not support a setting a run_as user that is different from the
   owner"), and the e2e DLT pipeline pinned `development: true`, which production mode rejects.
@@ -107,6 +111,9 @@ release may change job parameters or control-table columns; every such change is
 
 ### Changed
 
+- **Your own bundle targets stay local.** The bundle includes an optional, git-ignored
+  `databricks.local.yml` for targets such as a long-lived demo deployment, and `.gitignore` now
+  ignores every `.env.<name>` file except the tracked `*.example` templates.
 - **The profiler preflight no longer offers `READ METADATA` for enrichment.** A live test showed
   `DESCRIBE DETAIL` and `DESCRIBE HISTORY` still need `SELECT` with `READ METADATA` held on the
   metastore or catalog. An enrichment gap with no known catalogs now prints `USE CATALOG`,

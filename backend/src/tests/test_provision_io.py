@@ -48,7 +48,7 @@ def _w(groups=("data-eng",), jobs=None, owner="ms-admins"):
     jobs = jobs if jobs is not None else [
         _job(f"{DEPLOY} :: 00 profiler"),
         _job(f"{DEPLOY} :: 99 setup", params={"installer_group": "", "app_name": "mcp-x"}),
-        _job("[fevm] managed-table-migration :: 00 profiler", run_as="someone@else.com"),
+        _job("[demo] managed-table-migration :: 00 profiler", run_as="someone@else.com"),
     ]
     by_id = {j.job_id: j for j in jobs}
     return NS(

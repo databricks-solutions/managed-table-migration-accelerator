@@ -81,7 +81,7 @@ everything, so the service principal path is first exercised in production.
 
 The plan was to give the service principal **permission to look** estate-wide, metadata only, so
 the profiler finds everything with no data access. Before relying on `READ METADATA` for that, it
-was tested on a serverless FEVM workspace against two real EXTERNAL Delta tables from the e2e
+was tested on a serverless test workspace against two real EXTERNAL Delta tables from the e2e
 estate.
 
 **Method.** A throwaway service principal ran every read the profiler and the convert-permission

@@ -23,6 +23,9 @@ bundle:
 include:
   - backend/resources/*.yml
   - app/resources/*.yml
+  # Optional, git-ignored: your own targets (e.g. a long-lived demo deployment) in
+  # databricks.local.yml. A glob, so the bundle validates when the file does not exist.
+  - "databricks.local*.yml"
 
 # The install CLI (backend/scripts/install.py), run in the bundle's auth context:
 #   databricks bundle run install -t <target> --profile <p>

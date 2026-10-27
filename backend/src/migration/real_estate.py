@@ -385,6 +385,8 @@ CONTROL_BASE_TABLES: tuple[str, ...] = (
     "coverage_matrix",      # catalog x workspace coverage snapshot; unwiped => a fresh install reads covered
     "profiler_run_ledger",  # append-only run provenance; unwiped => sticky ZERO_DISCOVERY first-run
     "stage_run_ledger",     # append-only stage-run history; unwiped => a fresh install shows old runs
+    "convert_authority",    # append-only verdicts; unwiped => a fresh install reads old convert rights
+    "migration_scope",      # install scopes; unwiped => a fresh install shows the old migration scope
 )
 
 

@@ -138,7 +138,7 @@ def test_resolve_job_ids_maps_every_key_and_reads_jobs_once():
 
 def test_resolve_job_id_with_deployment_ignores_another_target():
     jobs = _deployed({
-        "[dev alice] [fevm] managed-table-migration :: 00 profiler": 1,
+        "[dev alice] [demo] managed-table-migration :: 00 profiler": 1,
         "[dev alice] [e2e] managed-table-migration :: 00 profiler": 2,
         "[prod] managed-table-migration :: 00 profiler": 3,
     })
@@ -179,7 +179,7 @@ def test_name_matches_accepts_suffix_with_or_without_leading_space():
 
 def test_name_matches_suffix_that_already_names_the_bundle():
     assert ins.name_matches("[e2e] b :: 04 convert", "b :: 04 convert", "[e2e] b")
-    assert not ins.name_matches("[fevm] b :: 04 convert", "b :: 04 convert", "[e2e] b")
+    assert not ins.name_matches("[demo] b :: 04 convert", "b :: 04 convert", "[e2e] b")
     assert not ins.name_matches("[e2e] b :: 04 convert", "c :: 04 convert", "[e2e] b")
 
 

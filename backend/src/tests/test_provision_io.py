@@ -48,7 +48,7 @@ def _w(groups=("data-eng",), jobs=None, owner="ms-admins"):
     jobs = jobs if jobs is not None else [
         _job(f"{DEPLOY} :: 00 profiler"),
         _job(f"{DEPLOY} :: 99 setup", params={"installer_group": "", "app_name": "mcp-x"}),
-        _job("[fevm] managed-table-migration :: 00 profiler", run_as="someone@else.com"),
+        _job("[demo] managed-table-migration :: 00 profiler", run_as="someone@else.com"),
     ]
     by_id = {j.job_id: j for j in jobs}
     return NS(
@@ -82,6 +82,13 @@ def test_deployed_app_name_comes_from_this_deployments_setup_job():
     assert pio.deployed_app_name(_w(jobs=[blank]), blank.job_id) is None
     assert pio.deployed_app_name(w, None) is None
     assert pio.deployed_app_name(NS(jobs=NS(get=lambda i: (_ for _ in ()).throw(RuntimeError("denied")))), 7) is None
+
+
+def test_deployed_setup_parameters_are_trimmed_and_empty_when_unknown():
+    setup = _job(f"{DEPLOY} :: 99 setup", params={"genie_warehouse_id": " wh1 ", "manifest_catalog": "c"})
+    assert pio.deployed_setup_parameters(_w(jobs=[setup]), setup.job_id) == {
+        "genie_warehouse_id": "wh1", "manifest_catalog": "c"}
+    assert pio.deployed_setup_parameters(_w(jobs=[setup]), None) == {}
 
 
 def test_probe_degrades_to_unknown_when_reads_fail():

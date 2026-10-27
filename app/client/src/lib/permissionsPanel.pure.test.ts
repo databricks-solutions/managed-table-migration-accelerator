@@ -14,6 +14,8 @@ import {
   requestText,
   runnableLines,
   scopeRows,
+  scopesWithPicks,
+  statusLabel,
   viewUrl,
 } from './permissionsPanel.pure';
 import { installCommand } from './provision.pure';
@@ -142,7 +144,13 @@ describe('permissionsBanner', () => {
     expect(grantorSentence('`hr-owners`, or a metastore admin')).toBe('You can’t grant this. `hr-owners`, or a metastore admin can.');
   });
 
-  it('grantorSentence names only who can grant when the app could not read the user', () => {
-    expect(grantorSentence('a metastore admin', false)).toBe('A metastore admin can grant this.');
+  it('statusLabel reads an unread grant as not checked, never as missing', () => {
+    expect(statusLabel('unknown')).toBe('not checked');
+    expect(statusLabel('missing')).toBe('missing');
+  });
+
+  it('scopesWithPicks adds the picks to the stored scope, and sends nothing when nothing is picked', () => {
+    expect(scopesWithPicks(['sales.orders'], [])).toBe('');
+    expect(scopesWithPicks(['sales.orders'], ['HR.pay', 'sales.orders', 'fin.*'])).toBe('sales.orders,hr.pay,fin.*');
   });
 });

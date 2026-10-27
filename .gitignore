@@ -22,8 +22,10 @@ venv/
 *.swp
 .idea/
 
-# Local environment
+# Local environment: .env and any .env.<name>, except the tracked *.example templates
 .env
+.env.*
+!.env*.example
 
 # Do not add a `*conf*.json` pattern: it would untrack app/tsconfig*.json.
 
@@ -40,8 +42,8 @@ backend/docs/superpowers/
 docs/superpowers/
 app/docs/plans/
 
-# Local e2e workspace settings (template: .env.e2e.example)
-.env.e2e
+# Local bundle targets (see the include in databricks.yml)
+databricks.local*.yml
 
 .worktrees/
 

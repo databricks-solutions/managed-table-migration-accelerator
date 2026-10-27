@@ -2961,6 +2961,13 @@ variable. A guard test pins every widget and flag to the list.
 Deploy-fixed through `scripts.install.env`: `MTM_CATALOG`, `MTM_SCHEMA`, `MTM_TARGET`,
 `MTM_DEPLOYMENT`, `MTM_APP_NAME`, `MTM_WAREHOUSE_ID`, `MTM_FIXTURE_CONTROL_PLANE`.
 
+`bundle run` resolves the variables again, so set them the same way for the deploy and every run
+(the target's `variables` or `BUNDLE_VAR_*`, not a `--var` on the deploy alone). A blank
+`warehouse_id` fails `bundle run` itself (`dashboard warehouse_id is required`). A run whose
+`MTM_CATALOG` / `MTM_SCHEMA` differ from the deployed `99 setup` job's `manifest_catalog` /
+`manifest_schema` exits `2` before any read, naming the deployed control schema (the notebook
+stops the same way).
+
 ### Reads
 
 The installer's own rights (`current_user`, workspace and metastore admin, the control catalog's

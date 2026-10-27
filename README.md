@@ -73,88 +73,114 @@ control tables.
 | A SQL warehouse | The app, the AI/BI dashboard and the Genie space query through it. |
 | A managed storage location on each target schema, its catalog, or the metastore | Converted data needs somewhere to go. Tables without one are blocked, not guessed. |
 | Workspace admin, for the one-time install | Creating the app needs it. Day-to-day users do not. |
-| The Databricks CLI, 1.3.0 or later (CLI install only) | The bundle uses the direct deployment engine. |
+| The Databricks CLI, 1.3.0 or later (CLI install only; not needed from the workspace) | The bundle uses the direct deployment engine. |
 
 Readers and writers of the converted tables should run Databricks Runtime 15.4 LTS or later; the
 profiler flags any that do not.
 
 ## Permissions
 
-```mermaid
-flowchart LR
-  installer(["Installer"]) -- "installs once" --> app["Migration app"]
-  operator(["Operators"]) -- "use day to day" --> app
-  app -- "launches" --> jobs["Migration jobs"]
-  jobs -- "convert" --> tables[("Your tables")]
-```
-
-- **Installer, once:** a workspace admin who owns, or has `MANAGE` on, the control catalog.
-- **Operators, day to day:** `CAN_USE` on the app. Nothing else.
-- **The jobs, per table:** ownership **or** `MANAGE`, plus `SELECT` + `MODIFY`. Ownership never
-  changes; **Authorize** grants only what is missing.
-- **At install** the installer grants the jobs read access and, by default, `MANAGE` on each schema
-  you migrate, in one reviewed plan. A person hands `MANAGE` back after cleanup. Granting it per
-  wave instead is the stricter option.
-
-Every identity, privilege and grant statement, step by step:
+Elevated rights are needed **once, by whoever installs**: a workspace admin who owns, or has
+`MANAGE` on, the catalog for the control tables. People who run the migration day to day need only
+`CAN_USE` on the app. The installer grants the migration jobs what they need in one plan you review
+first, and a person hands the convert rights back after cleanup. Ownership of your tables never
+changes. Every identity, privilege and grant statement is in
 [Who needs which permissions](./docs/00-installation.md#who-needs-which-permissions).
 
 ## Install
 
-Deploy the bundle, then run the **installer**. It checks your rights up front, shows exactly what
-it will grant, grants it after you confirm, reads every grant back and verifies the app. Nothing
-is granted until you confirm, and if you cannot grant something it says who can.
+Installing takes two steps, and changes no table:
+
+1. **Deploy** the bundle. This creates the jobs, the dashboard and the app.
+2. **Run the installer.** It checks your rights, previews every grant, grants them once you
+   confirm, sets up the control tables, profiles your estate and checks the app. If you cannot
+   grant something, it says who can.
 
 ```mermaid
 flowchart LR
-  deploy["Deploy"] --> check["Check rights"] --> plan["Preview grants"] --> apply["Apply + verify"]
-  apply --> migrate["Profile, plan,<br/>convert"] --> handback["Hand convert<br/>rights back"]
+  deploy["1 Deploy<br/>jobs, dashboard, app"] --> preview["2a Preview<br/>rights and grant plan"]
+  preview --> apply["2b Apply<br/>grant, set up, verify"]
+  apply --> open["3 Open the app"]
 ```
 
-| Front door | How |
-|---|---|
-| **Notebook** (no local tools) | Clone into a **Git folder**, open `databricks.yml`, click **Deployments → Deploy**, then open `backend/notebooks/install.py` and **Run all** |
-| **CLI** | `databricks bundle deploy`, then `databricks bundle run install` (below) |
-| **The app**, after the first install | **Connection & policy → Permissions**: add schemas, grant as you, hand rights back |
+**Have these ready:**
 
-Run all first with `action=check`: one line per requirement, and how much of the estate you can
-grant on.
+- Workspace admin rights, and ownership of (or `MANAGE` on) the catalog for the control tables.
+- The ID of a SQL warehouse you can use: the last part of its URL, or of the HTTP path under the
+  warehouse's **Connection details**.
+- Where the control tables should live. The default is `main.migration`.
+- The schemas to migrate, as `catalog.schema` or `catalog.*`. Not sure yet? The installer lists
+  the ones you can grant on.
+
+### Install from the workspace (no local tools)
+
+1. **Clone** this repository into a **Git folder** (**Workspace → Create → Git folder**).
+2. **Set your warehouse.** Open `databricks.yml` in the Git folder. Under `targets:` → `dev:` →
+   `variables:`, set `warehouse_id` to your warehouse ID. To keep the control tables somewhere
+   other than `main.migration`, uncomment `manifest_catalog` and `manifest_schema` there and set
+   them too.
+3. **Deploy.** With `databricks.yml` open, click the **Deployments** icon, pick the `dev` target
+   and click **Deploy**. It takes a few minutes.
+4. **Preview.** Open `backend/notebooks/install.py` from the same Git folder and click
+   **Run all**. Nothing is granted. The run prints one GO, WARN or NO-GO line per requirement,
+   then the schemas you can grant on. Paste the schemas to migrate into the `scopes` widget (the
+   run prints a line you can paste) and click **Run all** again to see the grant plan and its
+   `plan_id`.
+5. **Apply.** Set `confirm_grants` to `true` and `plan_id` to the printed value, then click
+   **Run all**. The installer grants, reads every grant back, sets up the control tables,
+   profiles your estate and ends with `VERIFY PASSED` and the app URL. Expect 30 to 45 minutes,
+   even for a few schemas: most of it is the profiling job.
 
 ![The installer's rights and coverage report: go lines for workspace admin, the control catalog, the jobs' identity and the install records, a warning for metastore admin, and the coverage headline](docs/images/install/notebook/rights.png)
 
-Then set `confirm_grants=true` and the printed `plan_id`, and run all again. The run ends with
-`VERIFY PASSED` and the app URL.
+A WARN line does not stop the install. Above, metastore admin is a WARN: without it, the jobs can
+read system tables only if a metastore admin has already granted them.
+
+### Install with the CLI
+
+You need the Databricks CLI 1.3.0 or later and a profile for the workspace
+(`databricks auth login`). The workspace comes from `--profile`.
 
 ```bash
 git clone https://github.com/databricks-solutions/managed-table-migration-accelerator.git
 cd managed-table-migration-accelerator
 
-databricks bundle deploy -t dev --profile <profile> --var="warehouse_id=<warehouse-id>"
-MTM_ACTION=check databricks bundle run install -t dev --profile <profile>        # read-only
-MTM_SCOPES='sales.*' databricks bundle run install -t dev --profile <profile>    # preview the plan
+# Settings for every command below. Add BUNDLE_VAR_manifest_catalog and
+# BUNDLE_VAR_manifest_schema if the control tables should not live in main.migration.
+export BUNDLE_VAR_warehouse_id=<warehouse-id>
+
+# 1. Deploy.
+databricks bundle deploy -t dev --profile <profile>
+
+# 2. Preview: the rights check and the grant plan for the schemas to migrate. Grants nothing.
+MTM_SCOPES='sales.*' databricks bundle run install -t dev --profile <profile>
+
+# 3. Apply exactly the plan you previewed.
 MTM_SCOPES='sales.*' MTM_PLAN_ID=<plan_id> MTM_CONFIRM_GRANTS=true \
-  databricks bundle run install -t dev --profile <profile>                        # apply it
+  databricks bundle run install -t dev --profile <profile>
 ```
 
 ![The CLI check: the rights and coverage report, the stored scopes, and the grant plan with one Change line missing](docs/images/install/cli/check.png)
 
-Before deploying, set the `dev` target's workspace `host` in `databricks.yml` (it ships as a
-placeholder), and the catalog and schema for the control tables if `main.migration` is not right
-for you. Every variable is listed in [Configure the bundle](./docs/00-installation.md#configure-the-bundle).
+Leave out `MTM_SCOPES` on a terminal and the installer lists the schemas you can grant on and asks.
+`MTM_ACTION=check` runs only the rights check. Deploy only with `databricks bundle deploy`, never
+`databricks apps deploy`.
 
-> [!NOTE]
-> Run `job_08_conductor` after **every** deploy. It refreshes the views the app reads, so the app
-> never shows a stale step. Deploy only with `databricks bundle deploy`, never
-> `databricks apps deploy`.
+### Open the app
 
-**Check that it worked.** Open the app and go to **Connection & policy** (Settings). Every check
-should be green: the control plane is provisioned, the app's grants are in place, and the
-warehouse answers. If something is red, see
-[Troubleshooting](./docs/00-installation.md#troubleshooting).
+Open the app URL the installer printed. The first time, the app asks you to allow it to act for
+you: approve it. Then go to **Connection & policy** (Settings): every check should be green. If
+something is red, see [Troubleshooting](./docs/00-installation.md#troubleshooting).
 
-The full guide, with every option, each step's screenshots, Genie Code, handing convert rights back,
-production (`-t prod` with a service principal), the e2e target, and uninstalling, is
-[Installation](./docs/00-installation.md).
+After this first install, the app's **Connection & policy → Permissions** carries on where the
+installer left off: add schemas, grant convert rights wave by wave, and hand them back after
+cleanup, all as you and after a confirm. It cannot do the first install: until the installer
+has run, there are no control tables for it to read.
+
+To upgrade later, pull the new version and deploy again, then run `job_08_conductor` once so the
+app's views catch up ([Upgrade](./docs/00-installation.md#upgrade)). The full guide covers every
+option, production (`-t prod` with a service principal), Genie Code, handing convert rights back
+and uninstalling: [Installation](./docs/00-installation.md).
 
 ## Your first migration
 

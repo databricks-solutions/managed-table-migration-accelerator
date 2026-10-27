@@ -61,12 +61,20 @@ function stateOf(prep: Prep): { state: PanelState; reason: string | null } {
     return { state: 'not_installed', reason: 'The control schema does not exist yet. Finish the install from the notebook or the CLI.' };
   }
   if (prep.probes.app_can_grant === false) {
-    return { state: 'cannot_act', reason: 'This workspace does not let the app run SQL for you. Use the notebook or the CLI.' };
+    return {
+      state: 'cannot_act',
+      reason: 'Your sign-in to this app does not include SQL access, so nothing here was checked. ' +
+        'Open the app in a new private window, approve the sign-in prompt, then press Check again. ' +
+        'Or run the dry run below: it checks as you and prints the plan to confirm.',
+    };
   }
   return { state: 'ready', reason: null };
 }
 
-function commandOptions(prep: Prep, raw: RawOptions): Record<string, string | null> {
+/** The CLI options for the panel's command. Without SQL the plan was built blind (every read
+ *  failed), so the command is a dry run: it prints the real plan and its plan_id to confirm. */
+function commandOptions(prep: Prep, raw: RawOptions, state: PanelState): Record<string, string | null> {
+  const blind = state === 'cannot_act';
   return {
     action: String(raw.action ?? ACTION_INSTALL),
     scopes: prep.scopes.join(','),
@@ -75,8 +83,8 @@ function commandOptions(prep: Prep, raw: RawOptions): Record<string, string | nu
     plan_run_id: prep.wave?.plan_run_id ?? null,
     grantee_group: typeof raw.grantee_group === 'string' ? raw.grantee_group : null,
     jobs_identity: typeof raw.jobs_identity === 'string' ? raw.jobs_identity : null,
-    confirm_grants: 'true',
-    plan_id: prep.plan_id,
+    confirm_grants: blind ? null : 'true',
+    plan_id: blind ? null : prep.plan_id,
   };
 }
 
@@ -113,7 +121,7 @@ export function viewOf(prep: Prep, deps: Pick<FlowDeps, 'target'>, raw: RawOptio
     handback,
     record_errors: prep.records.errors,
     estate_error: ctx.estate_error,
-    cli_command: installCommand(deps.target, commandOptions(prep, raw)),
+    cli_command: installCommand(deps.target, commandOptions(prep, raw, state)),
   };
 }
 

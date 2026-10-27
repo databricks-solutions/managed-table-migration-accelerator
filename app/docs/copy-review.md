@@ -868,49 +868,25 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 
 | Field | Text |
 | --- | --- |
-| Title | Permissions the app needs |
-| Subtitle | SQL to give the app the access it needs. A person with rights runs it. |
-| Tooltip | The app writes and checks these grants but never runs them. Convert permission is checked per table before each convert. |
-| Technical detail | Step 1 is for the app service principal. Step 2 is for whoever the jobs run as. The app never runs a GRANT or changes a table owner. |
+| Title | The app’s own access |
+| Subtitle | What the app’s service principal needs to read the control tables. Setup grants it. |
+| Tooltip | The app checks these grants but never runs them. What the migration jobs need is under Permissions, above. |
+| Technical detail | Checked with SHOW GRANTS as the app service principal. The setup job grants them. The app never runs a GRANT or changes a table owner. |
 
 ### `grantsTier1`
 
 | Field | Text |
 | --- | --- |
-| Title | Step 1 · Control tables |
+| Title | Control tables |
 | Subtitle | Read access, plus one write to the action list. |
 | Technical detail | Least-privilege reads plus the single migration_actions write. |
-
-### `grantsTier2`
-
-| Field | Text |
-| --- | --- |
-| Title | Step 2 · Schemas |
-| Subtitle | Schema grants that cover every table in each schema, grouped by catalog. |
-| Tooltip | Missing only hides the grants already in place. Copy and Download take every grant in the current view, not only the open groups. |
-| Technical detail | USE CATALOG is listed once per catalog. Each catalog and schema is checked once with SHOW GRANTS, and the result is reused for up to a minute. Refresh checks again. |
-
-### `grantsTier2Selected`
-
-| Field | Text |
-| --- | --- |
-| Title | you picked it |
-| Subtitle | The estate scan has not listed this schema yet. Its grants cover every table in it. |
-| Technical detail | From the scopes ticked or typed in the panel, before the estate scan lists the schema. |
-
-### `grantsOwnership`
-
-| Field | Text |
-| --- | --- |
-| Title | Convert permission |
-| Subtitle | Converting needs ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes. |
 
 ### `permissions`
 
 | Field | Text |
 | --- | --- |
 | Title | Permissions |
-| Subtitle | Check and grant what the migration needs. Grants run as you, with your own rights. |
+| Subtitle | What the migration jobs need. You check and grant it here, with your own rights. |
 | Tooltip | Each grant is recorded first, then run, then checked. The app never changes a table owner. |
 | Technical detail | GET /api/permissions previews the plan. POST /api/permissions/grant and /hand-back run it as the signed-in user, pinned to plan_id. |
 
@@ -934,7 +910,15 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | Field | Text |
 | --- | --- |
 | Title | Migration scope |
-| Subtitle | The schemas the migration may read and convert. |
+| Subtitle | The schemas the migration may read and convert. Tick more to add them to the plan. |
+
+### `permissionsPicker`
+
+| Field | Text |
+| --- | --- |
+| Title | Schemas you can see |
+| Subtitle | Schemas with external tables your account can see. Tick the ones to migrate. |
+| Technical detail | Listed with your sign-in, so it shows only what you can see. Ticked schemas join the plan below. |
 
 ### `permissionsConvert`
 
@@ -942,6 +926,7 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 | --- | --- |
 | Title | Convert rights |
 | Subtitle | MANAGE on a schema lets the jobs convert it. It is handed back at the end. |
+| Tooltip | Each table is checked before it converts: ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes. |
 
 ### `permissionsPlan`
 
@@ -961,16 +946,8 @@ Every page, section, button, and dialog heading in the app. Edit the wording in
 
 | Field | Text |
 | --- | --- |
-| Title | Grant from the CLI |
-| Subtitle | The app cannot run grants for you here. Run the command, or use the SQL below. |
-
-### `grantsScope`
-
-| Field | Text |
-| --- | --- |
-| Title | What you can see |
-| Subtitle | Schemas with external tables your own account can see. Tick the ones to grant. |
-| Technical detail | Listed with your sign-in, so it shows only what you can see. Ticked schemas get their Step 2 grants. |
+| Title | Approve SQL access first |
+| Subtitle | The app checks and grants with your sign-in, which has no SQL access yet. |
 ## How
 
 ### `hub`

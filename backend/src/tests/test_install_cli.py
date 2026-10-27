@@ -50,10 +50,11 @@ class FakeSql:
         return [c for c in self.calls if c.startswith(("GRANT", "REVOKE"))]
 
 
-def _fake_w(runs):
+def _fake_w(runs, setup_params=None):
     jobs = []
     for i, (key, label) in enumerate(ins.ALL_JOB_LABELS.items()):
-        params = {"app_name": "mcp-x", "installer_group": ""} if key == "99_setup" else None
+        params = ({"app_name": "mcp-x", "installer_group": "", **(setup_params or {})}
+                  if key == "99_setup" else None)
         tasks = [NS(notebook_task=NS(base_parameters=params))] if params is not None else []
         jobs.append(NS(job_id=1000 + i, run_as_user_name=SP, settings=NS(name=f"{DEPLOY} :: {label}",
                                                                           run_as=None, tasks=tasks)))
@@ -113,7 +114,31 @@ def test_missing_warehouse_is_invalid(cli):
     out = io.StringIO()
     code = cli.main(["--output", "json"], dict(ENV), w=_fake_w([]), interactive=False, stream=out,
                     err=io.StringIO())
-    assert code == pv.EXIT_INVALID and "MTM_WAREHOUSE_ID" in json.loads(out.getvalue())["messages"][0]
+    message = json.loads(out.getvalue())["messages"][0]
+    assert code == pv.EXIT_INVALID and "MTM_WAREHOUSE_ID" in message
+    assert "targets.e2e.variables" in message and "BUNDLE_VAR_warehouse_id" in message
+
+
+@pytest.fixture
+def runners(monkeypatch):
+    from migration import provision_io as pio
+    used = []
+
+    def statement_runner(w, warehouse):
+        used.append(warehouse)
+        return FakeSql()
+
+    monkeypatch.setattr(pio, "statement_runner", statement_runner)
+    return used
+
+
+def test_a_control_schema_other_than_the_deploys_is_refused(cli, runners):
+    out = io.StringIO()
+    w = _fake_w([], {"manifest_catalog": "ops", "manifest_schema": "migration", "genie_warehouse_id": "wh"})
+    code = cli.main(["--output", "json"], dict(ENV), w=w, interactive=False, stream=out, err=io.StringIO())
+    message = json.loads(out.getvalue())["messages"][0]
+    assert code == pv.EXIT_INVALID and runners == []
+    assert "deployed with the control schema ops.migration" in message and "main.migration" in message
 
 
 def test_check_prints_one_json_document_and_runs_nothing(cli):

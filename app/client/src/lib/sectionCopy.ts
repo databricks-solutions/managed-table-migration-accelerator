@@ -590,34 +590,19 @@ export const SECTION_COPY = {
       subtitle: 'Every read query, run once against the target.',
     },
     grants: {
-      title: 'Permissions the app needs',
-      subtitle: 'SQL to give the app the access it needs. A person with rights runs it.',
-      detail: 'The app writes and checks these grants but never runs them. Convert permission is checked per table before each convert.',
-      technical: 'Step 1 is for the app service principal. Step 2 is for whoever the jobs run as. The app never runs a GRANT or changes a table owner.',
+      title: 'The app’s own access',
+      subtitle: 'What the app’s service principal needs to read the control tables. Setup grants it.',
+      detail: 'The app checks these grants but never runs them. What the migration jobs need is under Permissions, above.',
+      technical: 'Checked with SHOW GRANTS as the app service principal. The setup job grants them. The app never runs a GRANT or changes a table owner.',
     },
     grantsTier1: {
-      title: 'Step 1 · Control tables',
+      title: 'Control tables',
       subtitle: 'Read access, plus one write to the action list.',
       technical: 'Least-privilege reads plus the single migration_actions write.',
     },
-    grantsTier2: {
-      title: 'Step 2 · Schemas',
-      subtitle: 'Schema grants that cover every table in each schema, grouped by catalog.',
-      detail: 'Missing only hides the grants already in place. Copy and Download take every grant in the current view, not only the open groups.',
-      technical: 'USE CATALOG is listed once per catalog. Each catalog and schema is checked once with SHOW GRANTS, and the result is reused for up to a minute. Refresh checks again.',
-    },
-    grantsTier2Selected: {
-      title: 'you picked it',
-      subtitle: 'The estate scan has not listed this schema yet. Its grants cover every table in it.',
-      technical: 'From the scopes ticked or typed in the panel, before the estate scan lists the schema.',
-    },
-    grantsOwnership: {
-      title: 'Convert permission',
-      subtitle: 'Converting needs ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes.',
-    },
     permissions: {
       title: 'Permissions',
-      subtitle: 'Check and grant what the migration needs. Grants run as you, with your own rights.',
+      subtitle: 'What the migration jobs need. You check and grant it here, with your own rights.',
       detail: 'Each grant is recorded first, then run, then checked. The app never changes a table owner.',
       technical: 'GET /api/permissions previews the plan. POST /api/permissions/grant and /hand-back run it as the signed-in user, pinned to plan_id.',
     },
@@ -632,11 +617,17 @@ export const SECTION_COPY = {
     },
     permissionsScope: {
       title: 'Migration scope',
-      subtitle: 'The schemas the migration may read and convert.',
+      subtitle: 'The schemas the migration may read and convert. Tick more to add them to the plan.',
+    },
+    permissionsPicker: {
+      title: 'Schemas you can see',
+      subtitle: 'Schemas with external tables your account can see. Tick the ones to migrate.',
+      technical: 'Listed with your sign-in, so it shows only what you can see. Ticked schemas join the plan below.',
     },
     permissionsConvert: {
       title: 'Convert rights',
       subtitle: 'MANAGE on a schema lets the jobs convert it. It is handed back at the end.',
+      detail: 'Each table is checked before it converts: ownership or MANAGE, plus SELECT and MODIFY. Ownership never changes.',
     },
     permissionsPlan: {
       title: 'Plan',
@@ -647,13 +638,8 @@ export const SECTION_COPY = {
       subtitle: 'The control tables do not exist yet. Run the installer from a notebook or the CLI.',
     },
     permissionsCannotAct: {
-      title: 'Grant from the CLI',
-      subtitle: 'The app cannot run grants for you here. Run the command, or use the SQL below.',
-    },
-    grantsScope: {
-      title: 'What you can see',
-      subtitle: 'Schemas with external tables your own account can see. Tick the ones to grant.',
-      technical: 'Listed with your sign-in, so it shows only what you can see. Ticked schemas get their Step 2 grants.',
+      title: 'Approve SQL access first',
+      subtitle: 'The app checks and grants with your sign-in, which has no SQL access yet.',
     },
   },
   how: {

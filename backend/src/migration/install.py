@@ -217,6 +217,19 @@ def resolve_app_name(app_names: Iterable[Optional[str]], wanted: str) -> Optiona
     return candidates[0] if len(candidates) == 1 else None
 
 
+def deployed_control_schema_mismatch(catalog: str, schema: str,
+                                     deployed: Dict[str, str]) -> Optional[str]:
+    """``catalog.schema`` the deploy gave 99 setup when it differs from the one this run resolves;
+    None when they agree or the deploy is unknown. Unity Catalog names compare case-insensitively."""
+    d_catalog = (deployed.get("manifest_catalog") or "").strip()
+    d_schema = (deployed.get("manifest_schema") or "").strip()
+    if not d_catalog or not d_schema:
+        return None
+    if (d_catalog.lower(), d_schema.lower()) == ((catalog or "").lower(), (schema or "").lower()):
+        return None
+    return f"{d_catalog}.{d_schema}"
+
+
 # --------------------------------------------------------------------------- #
 # Preflight
 # --------------------------------------------------------------------------- #

@@ -226,20 +226,28 @@ except Exception as _ex:  # noqa: BLE001
     _all_jobs = []
     _log(f"could not list jobs ({type(_ex).__name__}: {str(_ex)[:140]}).")
 
-# Prefer THIS deployment's jobs (read from this notebook's own bundle path), so a workspace that
-# holds dev + prod never launches the other deployment's setup; else fall back to the bare tail.
+# Prefer THIS deployment's jobs (read from this notebook's own bundle path, or from the target
+# widget when it runs from a Git folder), so a workspace that holds dev + prod never launches the
+# other deployment's setup; else fall back to the bare tail.
 try:
     _NB_PATH = dbutils.notebook.entry_point.getDbutils().notebook().getContext().notebookPath().get()
 except Exception:  # noqa: BLE001
     _NB_PATH = ""
-DEPLOYMENT = ins.deployment_of_path(_NB_PATH)
+DEPLOYMENT = ins.deployment_of_path(_NB_PATH) or ins.deployment_qualifier(BUNDLE_NAME, TARGET)
 JOB_IDS = ins.resolve_job_ids(_all_jobs, ins.ALL_JOB_LABELS, DEPLOYMENT)
 if DEPLOYMENT and not any(JOB_IDS.values()):
     JOB_IDS = ins.resolve_job_ids(_all_jobs, ins.ALL_JOB_LABELS)
+_DEPLOYED = pio.deployed_setup_parameters(w, JOB_IDS.get(ins.SETUP_JOB_KEY))
+
+_other = ins.deployed_control_schema_mismatch(CATALOG, SCHEMA, _DEPLOYED)
+if _other:
+    print(f"This deployment's control schema is {_other}, not {CATALOG}.{SCHEMA}.")
+    print(f"  Set the catalog widget to {_other.split('.')[0]} and the schema widget to "
+          f"{_other.split('.')[1]}, then Run all again.")
+    _stop(f"catalog/schema do not match the deploy ({_other}).")
 
 # Resolve the app: the app_name option, else the one this deployment's 99 setup was given.
-APP_NAME_WANTED = (OPTS["app_name"] or pio.deployed_app_name(w, JOB_IDS.get(ins.SETUP_JOB_KEY))
-                   or APP_NAME_WANTED)
+APP_NAME_WANTED = OPTS["app_name"] or _DEPLOYED.get("app_name") or APP_NAME_WANTED
 try:
     _app_names = [getattr(a, "name", None) for a in w.apps.list()]
 except Exception as _ex:  # noqa: BLE001

@@ -81,7 +81,7 @@ everything, so the service principal path is first exercised in production.
 
 The plan was to give the service principal **permission to look** estate-wide, metadata only, so
 the profiler finds everything with no data access. Before relying on `READ METADATA` for that, it
-was tested on a serverless FEVM workspace against two real EXTERNAL Delta tables from the e2e
+was tested on a serverless test workspace against two real EXTERNAL Delta tables from the e2e
 estate.
 
 **Method.** A throwaway service principal ran every read the profiler and the convert-permission
@@ -428,8 +428,8 @@ MTM_ACTION=grant_convert MTM_WAVE_ID=w003 MTM_PLAN_RUN_ID=<plan_run_id> MTM_CONF
 signed-in user, the stored scopes with their read-back status, and the same options. **Preview**
 prints the plan; **Grant** runs it as the signed-in user. An admin who is not allowed to grant a
 line sees it with its grantor, exactly as the notebook prints it. When the app cannot act for the
-user (section 8, "When the app cannot grant"), the page shows the notebook and CLI commands
-instead.
+user (section 8, "When the app cannot grant"), the page shows a CLI dry run and the notebook path
+instead (CUJ-11).
 
 The first build step confirmed that a bundle script cannot take arguments, so the options come from
 the environment (`MTM_SCOPES=... databricks bundle run install`). `parse_options` reads either form,
@@ -490,10 +490,10 @@ flowchart LR
 
 1. **The workspace blocks the `sql` user scope.** Workspace admins can restrict which user scopes
    apps may request, and some presets leave `sql` out. The app then cannot act for the user. The
-   Settings page says so in one sentence and shows the notebook and CLI commands.
-2. **The user has not consented, or consented before `sql` was added.** Each user consents to the
-   app's scopes once; adding `sql` asks again on next sign-in. Until then the page shows the
-   commands.
+   Settings page says so and shows a CLI dry run and the notebook path (CUJ-11).
+2. **The user has not consented, or consented before `sql` was added.** Each user consents once per
+   app and set of scopes, and a session keeps its old token until it expires, so a new session (a
+   new private window) gets the prompt. Until then the page shows the same dry run.
 3. **The signed-in user lacks the authority.** Same as any installer: the line shows its grantor.
 
 So the notebook and CLI stay the guaranteed paths, and the app is the convenient one wherever the
@@ -845,7 +845,7 @@ So `CAN_USE` on the app **is** the operator permission. Give viewers the dashboa
 | CUJ-8 | Hand convert rights back at the end | Installer | Any | Every tool-added grant revoked and read back |
 | CUJ-9 | Move production off the app's service principal | Installer | Notebook or CLI | Jobs run as the new identity; the old one holds nothing the tool added |
 | CUJ-10 | Upgrade to a new release | Installer | Notebook or CLI | Redeploy plus one installer run; nothing re-granted that was already there |
-| CUJ-11 | The workspace blocks the `sql` scope | Installer | App, then notebook or CLI | The app explains and hands over the exact commands |
+| CUJ-11 | The app has no SQL access for the user | Installer | App, then notebook or CLI | The app explains and hands over a dry run |
 | CUJ-12 | Uninstall | Installer | Notebook or CLI | Every tool-added grant revoked; `bundle destroy` run; data untouched |
 
 ### CUJ-1 · First install from a notebook
@@ -891,7 +891,7 @@ notebook prints.
 
 The CLI stored `sales.*` and `finance.orders` in `migration_scope`. Weeks later another admin opens
 **Settings → Permissions**. Both scopes are listed as "added from the CLI by <name>, <date>", with
-their grants read back live. The admin ticks `finance.billing` in "What you can see", presses
+their grants read back live. The admin ticks `finance.billing` in "Schemas you can see", presses
 **Preview**, then **Grant**. The new row records door `app`, and the page offers **Profile the new
 scope**. The admin needs to know nothing about the earlier CLI run; the reverse handoff (app, then
 CLI) works the same way, because the CLI reads the stored scopes when `scopes` is blank.
@@ -964,11 +964,17 @@ Pull the release, redeploy, run the installer with the defaults. It checks, find
 grant ("already done"), and refreshes the views through the conductor. A release that needs a new
 grant (for example, the app reading a new control table) shows it as a plan line to confirm.
 
-### CUJ-11 · The workspace blocks the `sql` scope
+### CUJ-11 · The app has no SQL access for the user
 
-Settings says: "This workspace does not let apps act for you, so the app cannot grant. Run one of
-these instead." It shows the notebook widget values and the CLI command for the exact pending plan,
-with its fingerprint. Everything else in the app works as before.
+The user's sign-in carries no `sql` scope: they consented before the app asked for it, or the
+workspace blocks the scope. Settings says: "Your sign-in to this app does not include SQL access, so
+nothing here was checked", and tells them to open the app in a new private window and approve the
+sign-in prompt. Every plan line reads **not checked**, with no grantor, because the owner and grant
+reads all failed. The CLI command is a dry run, with no `confirm_grants` and no `plan_id`: a plan
+built from failed reads is not the plan the CLI computes (for one, it cannot see that the control
+schema exists), so pinning its fingerprint would only make the CLI refuse. The dry run checks as the
+installer and prints the real plan and its `plan_id` to confirm. The notebook path is shown too.
+Everything else in the app works as before.
 
 ### CUJ-12 · Uninstall
 
@@ -1191,17 +1197,19 @@ A missing piece prints the one install command and exits 1.
 ## 22. App UI flow
 
 **Where it lives.** The navigation's **Connection & policy** page (`/settings`) keeps its
-Connection and Query health cards. Its **Permissions the app needs** panel (`GrantsPanel`, today
-generate and copy only) becomes **Permissions**, with five parts in this order:
+Connection and Query health cards. Its **Permissions** panel (`PermissionsPanel`) has five parts in
+this order, and **The app's own access** (`GrantsPanel`) below it checks only the app service
+principal's control-table grants:
 
 1. **Can you grant here?** The rights and coverage report for the signed-in user.
 2. **Who runs the jobs.** The jobs' identity, its kind and warnings; **Change** opens the command
    generator (section 5), never an in-app change.
 3. **Migration scope.** The stored scopes with door, who and when, and per-set status
-   (`present` / `missing` / `can't read`), plus **Add schemas** (today's "What you can see"
-   picker).
-4. **Convert rights.** All at once or per wave, the schemas holding `MANAGE` from the tool, and
-   **Hand back** where ready.
+   (`present` / `missing` / `not checked`), plus **Add schemas** (the "Schemas you can see"
+   picker of the external tables the signed-in admin can see, and a typed input).
+4. **Convert rights.** All at once or per wave, the schemas holding `MANAGE` from the tool,
+   **Hand back** where ready, and the per-table convert permission summary with its
+   `convert-permissions.sql` download.
 5. **Plan.** The pending plan with **Preview**, **Grant**, **Download plan** and **Copy request**.
 
 **How the page decides what to show:**
@@ -1212,7 +1220,7 @@ stateDiagram-v2
   [*] --> CannotAct: no forwarded token or no sql scope
   [*] --> Ready
   NotInstalled: Finish install (notebook or CLI commands, rights check still runs)
-  CannotAct: Commands for the pending plan (CUJ-11)
+  CannotAct: CLI dry run and notebook path, lines not checked (CUJ-11)
   Ready --> NothingToDo: every line present
   Ready --> Pending: lines missing
   Pending --> CanGrant: signed-in user can grant and is in installer_group
@@ -1286,7 +1294,7 @@ workspace, and each is covered by a test or a live check.
 | Notebook output in a job run | Every cell keeps its output | `dbutils.notebook.exit` replaces the output of the cell it runs in. A cell that prints a plan or remediation and then stops records the exit, and the next cell takes it, so a job run keeps what was printed. A guard test checks that every such cell is followed by one. |
 | CLI and notebook apply time | A few minutes | With `data_mode=real`, apply waits for `99 setup` and the profiling job, about 30 minutes on a fresh serverless estate. `data_mode=none` skips the data step. |
 | Convert gate after a grant | Shows the new rights at once | The convert gate shows the stored `convert_authority` verdict, which the jobs write. The app grants, but it never writes a verdict, so the gate updates on the next dry run, Authorize, or Refresh the next step. |
-| Folder and jobs permission lines | Read back like the SQL grants | The app cannot read workspace permissions for you, so those two lines read "can't read" in Settings and name who can grant them. The notebook and CLI read them back. |
+| Folder and jobs permission lines | Read back like the SQL grants | The app cannot read workspace permissions for you, so those two lines read "not checked" in Settings and name who can grant them. The notebook and CLI read them back. |
 | Jobs count in the rights check | "all N jobs agree" | The app counts the jobs it is bound to (19), the notebook and CLI count every job of the deployment (24). Both check the same identity. |
 | Hand-back plan id | One plan id format | A hand-back or uninstall plan has its own fingerprint (`revoke=True`), so a grant plan id can never apply a revoke. |
 | Hand-back with no scopes | Revokes what cleanup marked ready | As designed, and an empty plan now says which grants are still held and why ("Still held, not ready yet … name it in scopes"). Settings shows the same reason in one line. |

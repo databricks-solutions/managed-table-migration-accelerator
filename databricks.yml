@@ -23,6 +23,9 @@ bundle:
 include:
   - backend/resources/*.yml
   - app/resources/*.yml
+  # Optional, git-ignored: your own targets (e.g. a long-lived demo deployment) in
+  # databricks.local.yml. A glob, so the bundle validates when the file does not exist.
+  - "databricks.local*.yml"
 
 # The install CLI (backend/scripts/install.py), run in the bundle's auth context:
 #   databricks bundle run install -t <target> --profile <p>
@@ -255,10 +258,10 @@ variables:
     default: ""
   dataset_catalog:
     description: Catalog the dashboard/Genie read control tables from (defaults to the manifest catalog).
-    default: main
+    default: ${var.manifest_catalog}
   dataset_schema:
     description: Schema the dashboard/Genie read control tables from (defaults to the manifest schema).
-    default: migration
+    default: ${var.manifest_schema}
   workspace_id:
     description: >-
       Numeric workspace/org id (the `?o=` URL param). Exposed to the app via
@@ -272,11 +275,17 @@ variables:
     default: " "
 
 targets:
+  # The workspace is the one you deploy to: --profile on the CLI, or the workspace that holds the
+  # Git folder. Set your SQL warehouse ID below (or export BUNDLE_VAR_warehouse_id, so that both
+  # bundle deploy and bundle run see it) and, if main.migration is not where the control tables
+  # should live, the catalog and schema.
   dev:
     mode: development
     default: true
-    workspace:
-      host: https://CHANGE-ME-dev.cloud.databricks.com
+    variables:
+      warehouse_id: ""
+      # manifest_catalog: main
+      # manifest_schema: migration
 
   # Development target for the live e2e estate (backend/.e2e). Nothing workspace-specific is
   # committed: the host comes from --profile and the workspace values from BUNDLE_VAR_* (copy

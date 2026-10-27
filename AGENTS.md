@@ -182,7 +182,8 @@ New tooling lands under `backend/`, new app source under `app/`, and operator do
 nothing new goes at the repo root except release and bundle files.
 
 **Tool artifacts and working notes stay git-ignored, never committed** (`.cursor/`,
-`.superpowers/`, `.isaac/`, `docs/superpowers/`, `app/docs/plans/`, `.env.e2e`). Workspace
+`.superpowers/`, `.isaac/`, `docs/superpowers/`, `app/docs/plans/`, `.env.e2e` and any other
+`.env.<name>`, `databricks.local.yml` for your own bundle targets). Workspace
 hosts, IDs, buckets and profile names never go in tracked files — the `e2e` target and the
 `.e2e` drivers read them from the environment (`.env.e2e.example`).
 

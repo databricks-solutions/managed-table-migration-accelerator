@@ -84,9 +84,10 @@ The jobs' identity also needs `CAN_MANAGE_RUN` on every job of the deployment, s
 (a `JOBS` line, an additive Permissions API update that keeps the app SP's own run permission).
 It is not a bundle `permissions` block: bundle-managed job permissions replace the whole access
 list, which would remove the run permission the app's job bindings give the app SP. Deploying
-as a service principal? Set `jobs_run_as`: the default names a user. The Settings grants panel
-addresses Tier 2 to the identity read from the deployed jobs' `run_as`, and shows a
-`<jobs-run-as>` placeholder when the jobs disagree or cannot be read.
+as a service principal? Set `jobs_run_as`: the default names a user. The Settings → Permissions
+plan and `GET /api/grants/plan` address Tier 2 to the identity read from the deployed jobs'
+`run_as`; the plan endpoint shows a `<jobs-run-as>` placeholder when the jobs disagree or cannot be
+read.
 
 **This is why converts "just worked" in dev/e2e:** the job ran as *you* (the deployer) and
 you own the seeded estate — the SP was never the executor. The prod/SP authority path is a
@@ -117,8 +118,8 @@ The installers' group (`installer_group`, falling back to the installer) gets wr
 install records (`migration_scope`, `ownership_ledger`, `audit_log`). Grants run as the person at
 the keyboard: the notebook session, the CLI profile, or the signed-in admin in Settings →
 Permissions (their forwarded token, never the app's identity). The app's own service principal gains
-no new authority. Tier 2 below is the same Read + Change scope, as copy-paste SQL for an admin who
-prefers to run it by hand.
+no new authority. Tier 2 below is the same Read + Change scope; the Permissions panel's **Download
+plan** gives it as SQL for an admin who prefers to run it by hand.
 
 ## The two grant tiers
 
@@ -401,70 +402,48 @@ This is a UX degradation, **not** a correctness problem — and it must be surfa
 
 ## In-app surface (Settings → Connection & policy)
 
-> **Built — Plan 2 (`permissioning-02`).** The **"Grants the App SP needs"** panel
-> (`app/client/src/pages/settings/GrantsPanel.tsx`) is implemented: it calls
-> `GET /api/grants/plan` (Tier 1/2 SQL + `SHOW GRANTS` status + ownership summary),
-> `GET /api/estate/obo-discovery` (admin-visibility scope pre-fill), and
-> `GET /api/grants/convert-permissions.sql` (the per-grantor convert-permission grant script; the
-> old `ownership.sql` path is an alias). The app generates and verifies; it never executes a grant.
+> **Built.** Settings has two grant panels, one per identity, and the app never runs a `GRANT` as
+> its own identity.
 >
-> **Now titled "Permissions the app needs"**, and it sits below the **Permissions** panel
-> (`app/client/src/pages/settings/PermissionsPanel.tsx`, `GET/POST /api/permissions*`). That panel
-> is the installer's Settings front door: it runs the shared rights check and grant plan, and its
-> **Grant** and **Hand back** run as the signed-in admin (their forwarded token), never as the app
-> SP. This panel stays read-only.
-
-A prominent, read-only **"Grants the App SP needs"** panel. The app **generates** the SQL;
-it **never executes** it (consistent with `control_plane.md` §0.2 and SR12 download-not-send).
+> - **Permissions** (`app/client/src/pages/settings/PermissionsPanel.tsx`, `GET/POST
+>   /api/permissions*`) is the installer's Settings front door for **the jobs' identity**: it runs
+>   the shared rights check and grant plan, and its **Grant** and **Hand back** run as the signed-in
+>   admin (their forwarded token), never as the app SP. Its **Migration scope** part holds the
+>   schema picker (`ScopePicker.tsx`, fed by `GET /api/estate/obo-discovery`), and its **Convert
+>   rights** part the per-table convert summary and the `GET /api/grants/convert-permissions.sql`
+>   download (the old `ownership.sql` path is an alias).
+> - **The app's own access** (`GrantsPanel.tsx`) is read-only and covers **the app SP** alone: Tier 1
+>   with its `SHOW GRANTS` status and a Copy button.
+>
+> Both read `GET /api/grants/plan?tier2=0` once (`useAppGrantsPlan.ts`): Tier 1 plus the convert
+> summary, with no per-schema reads. Without `tier2=0` the endpoint still returns Tier 2 SQL and its
+> status for the manifest targets and any `scopes`; the MCP tool `mtm_get_grants_plan` uses that.
+> Earlier builds had the second panel also carry a Tier 2 copy-paste block and its own scope picker,
+> which repeated the Permissions plan for the same identity; both were folded into Permissions.
 
 - **Parameterized from what the app already knows:** the SP identity (resolve via
   `current_user()` — the app runs as the SP — or `w.apps.get(...).service_principal_client_id`;
-  fall back to a `<app-sp-client-id>` placeholder with a one-line "how to find it"), the
-  control catalog/schema (env `MIGRATION_CATALOG` / `MIGRATION_SCHEMA`), and the **distinct
-  target catalogs/schemas** (from `table_manifest` in-scope EXTERNAL rows post-profiler, or
-  the admin's OBO-discovered/typed scope pre-profiler).
-- **OBO list is labelled as the admin's visibility, never "the estate,"** and always sits
-  next to a manual "add catalog/schema" input (discovery layer 2) so narrow OBO visibility
-  never caps the scope.
-- **Selection is opt-in (built).** Discovered schemas render as unticked suggestion chips with
-  their external-table count; a typed scope is ticked on add. Only ticked scopes are sent as
-  `GET /api/grants/plan?scopes=cat.sch,…`, and the plan returns Tier 2 for the manifest targets
-  plus those scopes (each group labelled `source: scan | selected`; a scope already in the
-  manifest stays one `scan` group). Tier 2 includes `MANAGE`, so nothing is pre-selected; "Select
-  all" is an explicit click. A schema whose plan group is `source: scan` renders as a read-only
-  "already covered by the scan" chip instead of a toggle: its grants are in Tier 2 whatever the
-  selection, so "Select all" skips it and the "N selected" count excludes it. The server re-validates every scope against a strict
-  `catalog.schema` pattern (letters, digits, underscores) and caps the list at 50
-  (`grants.pure.ts` `parseScopeParam`), because the names are interpolated into `SHOW GRANTS`
-  statements the SP executes; the client mirrors the pattern (golden cases in
-  `app/server/routes/fixtures/scope_cases.json`) and shows why a typed name was rejected.
-  The selection is saved in the browser (`localStorage`), never in a control table, and
-  `targets_known` still means "the profiler has listed targets".
-- **Prefer schema-grain grants** in the generated SQL (they cover tables OBO didn't list);
-  the convert-permission grant script is the only per-table artifact, grouped by who must run
-  each statement.
-- **Copy button** for Tier 1 + the schema-level Tier 2 grants (short, static-shaped).
-- **Built for large estates.** Tier 2 opens on a summary (schemas, landed, missing, not
-  checked) and a **Missing only** view by default; schemas whose schema grants have all landed
-  collapse into one "N schemas with every schema grant landed" line. Grants are grouped by
-  catalog with `USE CATALOG` once per catalog; groups start closed past three catalogs and show
-  ten schemas at a time. **Copy all missing**, **Copy all** and **Download .sql** always take every
-  grant in the view, never only the open groups. The scope picker is grouped by catalog (a
-  three-state tick-all per catalog), filterable, defaults to the schemas the scan does not cover,
-  and scrolls inside a fixed height; a catalog tick or "Select all" that would pass the
-  50-scope limit is disabled with the reason shown. Server side, `buildGrantsPlan` reads each
-  catalog and schema once (`USE SCHEMA` / `SELECT` / `MANAGE` share one `SHOW GRANTS ON SCHEMA`),
-  at most 8 statements at a time, so N schemas over C catalogs cost N + C reads instead of 4N.
-  Successful reads are reused across plan loads for 60 s (a failed read is never kept, so it
-  still reads `unknown`); the panel's **Refresh** sends `?refresh=1` to check again.
-- **Download `convert-permissions.sql`** for the per-table grants the SP still needs, generated
-  from the stored `convert_authority` verdicts (mirrors the runbook / comms-feed download). This
-  handles "thousands of tables" without a giant on-screen block.
-- **Honest states (SR7):** before the profiler runs the target list is unknown — say so,
-  don't emit an empty grant block; the Tier 2 notice points at the scope picker instead. The
-  picker shows one state per situation: checking (spinner only), unavailable (with the reason),
-  nothing visible, partial scan (coverage text), and the listed schemas. A `SHOW GRANTS` verification read (like `job_99_setup`)
-  can flag which Tier 1 grants have / haven't landed.
+  fall back to a `<app-sp-client-id>` placeholder with a one-line "how to find it") and the
+  control catalog/schema (env `MIGRATION_CATALOG` / `MIGRATION_SCHEMA`).
+- **The picker is labelled as the admin's visibility, never "the estate,"** and always sits
+  next to a typed input (`catalog.schema` or `catalog.*`), so narrow visibility never caps the
+  scope.
+- **Selection is opt-in.** Discovered schemas render as unticked chips with their external-table
+  count. A ticked or typed schema joins the plan as a `new` scope row (removable) on top of the
+  stored `migration_scope`, and is stored only when its grants run. A schema already in the stored
+  scope renders as a read-only "in scope" chip, so "Select all" skips it. Picks last for the visit;
+  nothing is saved in the browser or a control table before a grant. The picker is grouped by
+  catalog (a three-state tick-all per catalog), filterable, defaults to the schemas not yet in
+  scope, scrolls inside a fixed height, and caps a visit at 50 picks with the reason shown.
+- **Prefer schema-grain grants** in the plan (they cover tables nobody has listed); the
+  convert-permission grant script is the only per-table artifact, grouped by who must run each
+  statement. It is generated from the stored `convert_authority` verdicts, so it handles
+  "thousands of tables" without a giant on-screen block.
+- **Honest states (SR7):** the picker shows one state per situation: checking (spinner only),
+  unavailable (with the reason), nothing visible, partial scan (coverage text), and the listed
+  schemas. A grant whose read failed reads **not checked**, never missing or present. When the
+  signed-in user's token has no `sql` scope, Permissions says so, marks every line not checked
+  with no grantor, and gives a CLI dry run (no `plan_id`: that plan was built from failed reads).
 
 ---
 

@@ -28,16 +28,18 @@ From `app/client/src/components/nav.ts` (four nav groups, plus the workstream de
 Genie is a docked panel available on every route, not a route of its own (the **Ask Genie**
 button, backed by the Genie space).
 
-**Permissions** (`/settings#permissions`, under **Connection & policy**) is the installer's third
-front door. It runs the same rights check and grant plan as the install notebook and CLI, for the
-signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
-after a confirm that lists each statement and pins the previewed `plan_id`. From there you can add
-schemas to the migration scope, switch convert rights between all at once and per wave, and hand
+**Permissions** (`/settings#permissions`, under **Connection & policy**) carries on after the first
+install, which runs from the notebook or the CLI. It runs the same rights check and grant plan as
+they do, for the signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
+after a confirm that lists each statement and pins the previewed `plan_id`. From there you can tick the
+schemas you can see into the migration scope, switch convert rights between all at once and per wave, and hand
 convert rights back. Lines you cannot grant name who can, with **Copy request**. When a stored scope
 or the control plane is missing a grant, a banner on every page links here. The convert gate offers
 **Grant convert rights** for a per-wave install, and the runbook's **Hand back convert rights** rows
-have a **Hand back** button. If the workspace does not let the app run SQL for you, the page shows the
-notebook and CLI commands instead. Step by step, with screenshots:
+have a **Hand back** button. If your sign-in to the app has no SQL access, the page says so, marks
+every line **not checked**, and shows a CLI dry run and the notebook path; open the app in a new
+private window and approve the sign-in prompt to grant from the app. Below it, **The app's own
+access** checks the app service principal's control-table grants. Step by step, with screenshots:
 [Installation](./00-installation.md#carry-on-in-the-app).
 
 ![Settings → Permissions: the rights check, who runs the jobs, the migration scope with Look, Read and Change status per schema, convert rights, and the plan](images/install/app/settings-permissions.png)

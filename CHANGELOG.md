@@ -98,6 +98,12 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **Dependency security updates.** The app moves to `@modelcontextprotocol/sdk` 1.32.1,
+  `react-router` 7.18.4, `zod` 4.6.7 and `vitest` 4.1.12, and overrides the copies of
+  `dompurify`, `js-yaml`, `echarts`, `drizzle-orm`, `qs` and `@opentelemetry/propagator-jaeger`
+  that `@databricks/appkit` pins. The docs site moves to Docusaurus 3.10.2 and overrides
+  `tinypool`, `serialize-javascript` and `sockjs`'s `uuid`. This clears every critical advisory.
+
 - **A fresh install recommends the profiler, not "Plan the waves again".** Before the first
   profile the conductor's `replan` row (no planned schema, no discovered table) is now titled
   **Run the profiler first**, with the `job_00_profiler` command and the `profiler` alias; the kind

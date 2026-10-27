@@ -1,22 +1,65 @@
-# Version and security updates. Every update arrives as a PR that CI checks;
-# keep the action SHA pins and their version comments in step when merging.
+# Version updates: one grouped PR per ecosystem a week for minor and patch bumps, and only
+# for releases at least 7 days old (30 for a major). The cooldown also keeps Dependabot behind
+# the internal npm/PyPI mirrors, which hold new releases back for about a week, so `make ci`
+# keeps working locally. Major bumps still open one PR each, to merge deliberately.
+#
+# Security updates are separate: they ignore the cooldown and the version-update groups and
+# arrive as soon as an advisory is published.
+#
+# Every update is a PR that CI checks; keep the action SHA pins and their version comments in
+# step when merging.
 version: 2
 updates:
   - package-ecosystem: github-actions
     directory: /
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      actions:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: npm
     directory: /app
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      app-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: npm
     directory: /docs/site
     schedule:
       interval: weekly
     open-pull-requests-limit: 5
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      docs-site-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
+
   - package-ecosystem: pip
     directory: /backend
     schedule:
       interval: weekly
+    cooldown:
+      default-days: 7
+      semver-major-days: 30
+    groups:
+      backend-minor-and-patch:
+        applies-to: version-updates
+        patterns: ["*"]
+        update-types: ["minor", "patch"]

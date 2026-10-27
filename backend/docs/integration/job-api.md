@@ -113,8 +113,8 @@ authoritative.
 | `warehouse_id` | `""` | SQL warehouse powering the scoping dashboard + Genie space. |
 | `ensure_genie` | `true` | Whether the profiler creates/updates the Genie space (needs `warehouse_id`). |
 | `genie_grant_users` | `true` | Grant the `users` group `CAN_RUN` on the Agent; `false` = creator-only (the `e2e` target sets `false`). |
-| `dataset_catalog` | `main` | Catalog the dashboard/Genie read control tables from. |
-| `dataset_schema` | `migration` | Schema the dashboard/Genie read control tables from. |
+| `dataset_catalog` | `${var.manifest_catalog}` | Catalog the dashboard/Genie read control tables from. |
+| `dataset_schema` | `${var.manifest_schema}` | Schema the dashboard/Genie read control tables from. |
 
 ### Deploy targets and integration-test assets
 

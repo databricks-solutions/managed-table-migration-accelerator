@@ -228,11 +228,28 @@ def main(argv: Optional[List[str]] = None, env: Optional[Mapping[str, str]] = No
         w = WorkspaceClient()
     from migration import provision_io as pio  # noqa: PLC0415
 
+    deployment = (env.get(ENV_DEPLOYMENT) or "").strip() or ins.deployment_qualifier(BUNDLE_NAME, target)
+    try:
+        job_ids = _job_ids(w, deployment)
+    except Exception as ex:  # noqa: BLE001
+        job_ids = {}
+        out.say(f"could not list jobs ({type(ex).__name__}: {str(ex)[:140]}).")
+    deployed = pio.deployed_setup_parameters(w, job_ids.get(ins.SETUP_JOB_KEY))
+
+    other = ins.deployed_control_schema_mismatch(catalog, schema, deployed)
+    if other:
+        out.note(f"This target was deployed with the control schema {other}, but this run resolves "
+                 f"{catalog}.{schema}. Run with the variables the deploy used: set manifest_catalog and "
+                 f"manifest_schema under targets.{target}.variables in databricks.yml, or export "
+                 "BUNDLE_VAR_manifest_catalog and BUNDLE_VAR_manifest_schema for both commands.")
+        return out.finish(pv.EXIT_INVALID, action=action)
+
     if run_sql is None:
         warehouse = (env.get(ENV_WAREHOUSE) or "").strip()
         if not warehouse:
-            out.note(f"{ENV_WAREHOUSE} is not set. Set var.warehouse_id for this target (the bundle "
-                     "script passes it), or export it when you run the script directly.")
+            out.note(f"No SQL warehouse. Run through the bundle with warehouse_id set under "
+                     f"targets.{target}.variables or as BUNDLE_VAR_warehouse_id; when you run the script "
+                     f"directly, export {ENV_WAREHOUSE}.")
             return out.finish(pv.EXIT_INVALID, action=action)
         run_sql = pio.statement_runner(w, warehouse)
     wh_err = pio.check_warehouse(run_sql)
@@ -240,17 +257,11 @@ def main(argv: Optional[List[str]] = None, env: Optional[Mapping[str, str]] = No
         out.note(f"The SQL warehouse cannot run a query as you ({wh_err[:200]}). You need CAN_USE on it.")
         return out.finish(pv.EXIT_NO_GO, action=action)
 
-    deployment = (env.get(ENV_DEPLOYMENT) or "").strip() or ins.deployment_qualifier(BUNDLE_NAME, target)
-    try:
-        job_ids = _job_ids(w, deployment)
-    except Exception as ex:  # noqa: BLE001
-        job_ids = {}
-        out.say(f"could not list jobs ({type(ex).__name__}: {str(ex)[:140]}).")
     try:
         app_names = [getattr(a, "name", None) for a in w.apps.list()]
     except Exception:  # noqa: BLE001
         app_names = []
-    wanted = (opts["app_name"] or pio.deployed_app_name(w, job_ids.get(ins.SETUP_JOB_KEY)) or BUNDLE_NAME)
+    wanted = opts["app_name"] or deployed.get("app_name") or BUNDLE_NAME
     app_name = ins.resolve_app_name(app_names, wanted)
     pre = ins.preflight_summary(app_name, job_ids)
     if not pre["ok"] and action in (pv.ACTION_INSTALL, pv.ACTION_GRANT_CONVERT):

@@ -59,6 +59,9 @@ engine; the full walkthrough is [Installation](./00-installation.md#install-from
 ## Bundle commands
 
 ```bash
+# The workspace comes from your profile: add --profile <profile> to each command, or set
+# DATABRICKS_CONFIG_PROFILE. Settings such as BUNDLE_VAR_warehouse_id apply to every command.
+
 # Validate the bundle config (after editing databricks.yml or resources/*.yml)
 databricks bundle validate -t dev            # or: make validate
 

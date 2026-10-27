@@ -92,6 +92,14 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **The install commands work as written.** The README passed `--var warehouse_id` only to
+  `bundle deploy`, so every `bundle run install` after it failed with `dashboard warehouse_id is
+  required`: `bundle run` resolves the variables again. The instructions now set them once for
+  every command. The installer (CLI and notebook) also stops, naming the deployed control schema,
+  when a run resolves a different `manifest_catalog` / `manifest_schema` from the deploy, instead
+  of working on the wrong control plane. From a Git folder, the notebook now resolves its own
+  target's jobs (the `target` widget), not the first deployment it finds.
+
 - **The e2e control-plane wipe empties every control table.** `--wipe-control-plane` now also
   empties `convert_authority` and `migration_scope`, so a fresh install no longer shows old convert
   rights or the old migration scope.
@@ -117,6 +125,16 @@ release may change job parameters or control-table columns; every such change is
 
 ### Changed
 
+- **Clearer install instructions.** The README and [Installation](docs/00-installation.md) now
+  separate the deploy from the installer, give the workspace path first and the CLI second, and
+  say what you see at each step (the GO / WARN / NO-GO lines, the app's sign-in prompt, how long
+  profiling takes). The app's Permissions page is described as what carries on after the first
+  install, not a way to do it. New: an Upgrade section and troubleshooting by the exact message.
+- **The `dev` target has no placeholder host.** The workspace comes from `--profile`, or from the
+  Git folder you deploy from, so no tracked file needs editing for the host. The warehouse ID is
+  the one setting you add (`targets.dev.variables.warehouse_id`). `dataset_catalog` /
+  `dataset_schema` now default to `manifest_catalog` / `manifest_schema`, so the dashboard and
+  Genie follow the control schema without setting both.
 - **Your own bundle targets stay local.** The bundle includes an optional, git-ignored
   `databricks.local.yml` for targets such as a long-lived demo deployment, and `.gitignore` now
   ignores every `.env.<name>` file except the tracked `*.example` templates.

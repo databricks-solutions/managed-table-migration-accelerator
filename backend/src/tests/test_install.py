@@ -207,6 +207,14 @@ def test_resolve_app_ambiguous_suffix_is_none():
     assert ins.resolve_app_name(names, "managed-table-migration") is None
 
 
+def test_control_schema_mismatch_names_the_deployed_one():
+    deployed = {"manifest_catalog": "ops", "manifest_schema": "migration"}
+    assert ins.deployed_control_schema_mismatch("main", "migration", deployed) == "ops.migration"
+    assert ins.deployed_control_schema_mismatch("OPS", "Migration", deployed) is None
+    assert ins.deployed_control_schema_mismatch("main", "migration", {}) is None
+    assert ins.deployed_control_schema_mismatch("main", "migration", {"manifest_catalog": "ops"}) is None
+
+
 def test_resolve_app_partial_word_is_not_a_match():
     # "supermanaged-table-migration" is not a dev-prefixed form (no -/_ boundary).
     assert ins.resolve_app_name(["supermanaged-table-migration"], "managed-table-migration") is None

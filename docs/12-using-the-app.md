@@ -28,9 +28,9 @@ From `app/client/src/components/nav.ts` (four nav groups, plus the workstream de
 Genie is a docked panel available on every route, not a route of its own (the **Ask Genie**
 button, backed by the Genie space).
 
-**Permissions** (`/settings#permissions`, under **Connection & policy**) is the installer's third
-front door. It runs the same rights check and grant plan as the install notebook and CLI, for the
-signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
+**Permissions** (`/settings#permissions`, under **Connection & policy**) carries on after the first
+install, which runs from the notebook or the CLI. It runs the same rights check and grant plan as
+they do, for the signed-in admin, and every grant runs **as you** (your forwarded sign-in, never the app's identity),
 after a confirm that lists each statement and pins the previewed `plan_id`. From there you can tick the
 schemas you can see into the migration scope, switch convert rights between all at once and per wave, and hand
 convert rights back. Lines you cannot grant name who can, with **Copy request**. When a stored scope

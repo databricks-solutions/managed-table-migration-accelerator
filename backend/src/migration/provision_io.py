@@ -168,16 +168,21 @@ def setup_parameters(jobs: Iterable[Any]) -> Dict[str, str]:
     return {}
 
 
-def deployed_app_name(w, setup_job_id) -> Optional[str]:
-    """The app name the bundle gave this deployment's 99 setup (``var.app_name``). A target that
-    renames the app is only knowable here: the bundle name would resolve another target's app."""
+def deployed_setup_parameters(w, setup_job_id) -> Dict[str, str]:
+    """This deployment's 99 setup base parameters, as the last deploy set them; {} when unknown."""
     if not setup_job_id:
-        return None
+        return {}
     try:
         job = w.jobs.get(setup_job_id)
     except Exception:  # noqa: BLE001 — unreadable means unknown, never a guess
-        return None
-    return (setup_parameters([job]).get("app_name") or "").strip() or None
+        return {}
+    return {k: (v or "").strip() for k, v in setup_parameters([job]).items()}
+
+
+def deployed_app_name(w, setup_job_id) -> Optional[str]:
+    """The app name the bundle gave this deployment's 99 setup (``var.app_name``). A target that
+    renames the app is only knowable here: the bundle name would resolve another target's app."""
+    return deployed_setup_parameters(w, setup_job_id).get("app_name") or None
 
 
 def deploy_folder_open(w, jobs: Iterable[Any]) -> Optional[bool]:

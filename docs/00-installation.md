@@ -176,7 +176,9 @@ With `data_mode=real` (the default) the apply waits for `job_99_setup` and the p
 expect 30 to 45 minutes, even for a few schemas. `MTM_DATA_MODE=none` skips the profiling, so the
 apply finishes in a few minutes; run the profiler later from the app.
 
-For production, set `prod_host`, then `databricks bundle deploy -t prod`. The jobs run as you
+For production, deploy with the production workspace's profile:
+`databricks bundle deploy -t prod --profile <prod-profile>`, and pass the same `-t prod --profile`
+to the installer. The jobs run as you
 there too: anyone who can start them runs them with your access, which the installer says on the
 jobs' identity line. To use a service principal instead, run the installer with
 `jobs_identity=sp:<application-id>` and redeploy. Runs are approved through job-run permissions
@@ -561,7 +563,6 @@ them again:
 | `catalog_filter` / `schema_filter` | `*` / `*` | Glob filters that limit which catalogs and schemas the profiler scans. |
 | `workspace_id` | blank | Your workspace ID, so links from the app open in the right workspace. Optional. |
 | `jobs_run_as` | the deployer | Who every stage job runs as: `{service_principal_name: …}`, `{group_name: …}` or `{user_name: …}`. A complex variable: set it in the target or `.databricks/bundle/<target>/variable-overrides.json` (the installer's `jobs_identity` option writes it), not `BUNDLE_VAR_*`. Required when a service principal deploys. |
-| `prod_host` | placeholder | `prod` target only: the prod workspace URL. |
 | `prod_root_path` | `/Shared/.bundle/<bundle>/prod` | `prod` target only: the deployment folder. The default keeps existing installs in place. For a new install pick a folder only the deployers can edit; the installer warns when every workspace user can edit it. |
 | `mcp_tier` | `v2` | What Genie Code may do through the app: `v2` adds the gated tools that change things; `v1` is reads and non-mutating stages only. |
 | `telemetry_enabled` | `true` | `false` to turn off usage telemetry (see below). |

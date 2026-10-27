@@ -133,6 +133,13 @@ release may change job parameters or control-table columns; every such change is
   `information_schema` views (reported as `EXTERNAL`, format `UNITY_CATALOG`) as tables to
   migrate. Both discovery queries now exclude that schema.
 
+- **The `prod` target deploys.** It set `host: ${var.prod_host}`, which the CLI refuses
+  ("Variable interpolation is not supported for fields that configure authentication"), so
+  `-t prod` could neither validate nor deploy. The workspace now comes from `--profile`, as on
+  `dev` and `e2e`: `databricks bundle deploy -t prod --profile <prod-profile>`. The `prod_host`
+  variable is gone (remove it from any `BUNDLE_VAR_prod_host` export), and `make deploy-prod`
+  requires `PROFILE=`.
+
 - **Settings → Permissions reads more accurately.** A saved `catalog.*` scope covers every schema
   of that catalog in **Add schemas**, so they are not offered again. Convert rights says "All N
   tables still to convert are authorized" when none is blocked, instead of empty counts. The toast

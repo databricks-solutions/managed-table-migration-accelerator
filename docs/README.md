@@ -91,12 +91,3 @@ restates full column lists or full parameter tables.
 The root [`README.md`](../README.md) is the short front door (what it is, install, a first
 migration); the detail lives on these pages. Engineering conventions live in
 [`AGENTS.md`](../AGENTS.md).
-
-## Known doc drift
-
-A few statements elsewhere in the repo are stale or contradicted by the current code. They
-are called out here so a reader is not misled:
-
-- **`app/README.md` mentions a standalone `apps deploy`.** The truth is that the **root
-  bundle owns the app lifecycle**: deploy with `databricks bundle deploy`, never
-  `databricks apps deploy`. See [Using the app](./12-using-the-app.md#deploy).

@@ -32,8 +32,9 @@ validate: ## Validate the bundle config (TARGET=dev|prod)
 deploy: ## Deploy all jobs to dev
 	databricks bundle deploy -t dev
 
-deploy-prod: ## Deploy all jobs to prod (requires prod_host; the jobs run as the deployer)
-	databricks bundle deploy -t prod
+deploy-prod: ## Deploy all jobs to prod (PROFILE=<prod workspace profile>; the jobs run as the deployer)
+	@if [ -z "$(PROFILE)" ]; then echo "ERROR: PROFILE is required (make deploy-prod PROFILE=<profile>)"; exit 1; fi
+	databricks bundle deploy -t prod --profile $(PROFILE)
 
 test: ## Run the pure-logic unit tests (no cluster)
 	python -m pytest backend/src/tests/ -q

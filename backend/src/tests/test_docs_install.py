@@ -59,6 +59,16 @@ def test_dev_target_takes_the_workspace_from_the_profile_or_git_folder():
     assert "warehouse_id" in dev["variables"]
 
 
+def test_no_target_interpolates_an_auth_field():
+    # The CLI resolves auth before variables: "Variable interpolation is not supported for
+    # fields that configure authentication", so `host: ${var.x}` can neither validate nor deploy.
+    for name, target in _bundle()["targets"].items():
+        workspace = target.get("workspace") or {}
+        assert "host" not in workspace, name
+        assert not any("${" in str(v) for k, v in workspace.items() if k != "root_path"), name
+    assert "prod_host" not in _bundle()["variables"]
+
+
 def test_dashboard_dataset_follows_the_control_schema():
     variables = _bundle()["variables"]
     assert variables["dataset_catalog"]["default"] == "${var.manifest_catalog}"

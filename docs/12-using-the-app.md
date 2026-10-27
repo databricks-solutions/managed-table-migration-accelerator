@@ -159,9 +159,8 @@ not run standalone `databricks apps deploy`, and do not restart the app with
 on `MIGRATION_CATALOG`). To restart, re-run `databricks bundle deploy -t <target>`. A freshly
 written `genie_space_id` needs no restart: the app looks it up per request.
 
-> Note the known drift: `app/README.md` has local `apps deploy` wording. The truth is that the
-> root bundle owns deploy, and the root `databricks.yml` intentionally has no `artifacts:` block
-> (the Apps platform rebuilds `dist/`). See [Architecture](./02-architecture.md#one-bundle-two-directories).
+The root `databricks.yml` intentionally has no `artifacts:` block: the Apps platform rebuilds
+`dist/`. See [Architecture](./02-architecture.md#one-bundle-two-directories).
 
 For the full page-by-page reads/writes/triggers, the safety requirements (SR1-SR14), and the
 convert-gate spec, read [`app/docs/control_plane.md`](../app/docs/control_plane.md).

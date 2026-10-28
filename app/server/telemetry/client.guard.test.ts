@@ -31,6 +31,16 @@ describe('telemetry client guard', () => {
     expect(offenders.map((p) => relative(SERVER, p))).toEqual([]);
   });
 
+  it('only server/sdk/ (and telemetry/) touch the workspace client', () => {
+    // Every SDK call goes through server/sdk/workspace.ts, so an SDK upgrade changes that file
+    // and its test, never what a route or MCP tool returns.
+    const raw = /\bgetExecutionContext\b|\bcreateTaggedWorkspaceClient\b|\.statementExecution\b|\.apiClient\b|\.jobs\.(listRuns|runNow|getRun|get)\(/;
+    const offenders = files
+      .filter((p) => !relative(SERVER, p).startsWith('sdk'))
+      .filter((p) => raw.test(readFileSync(p, 'utf8')));
+    expect(offenders.map((p) => relative(SERVER, p))).toEqual([]);
+  });
+
   it('the trigger choke point fires the ping and the MCP passes its surface', () => {
     const trigger = readFileSync(join(SERVER, 'jobs/trigger-alias.ts'), 'utf8');
     expect(trigger).toMatch(/void pingTrigger\(alias, opts\.surface \?\? 'app'\)/);

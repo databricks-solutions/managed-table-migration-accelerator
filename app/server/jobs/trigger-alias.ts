@@ -1,5 +1,5 @@
 import type { IncomingHttpHeaders } from 'node:http';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk } from '../sdk/workspace.js';
 import { migrationJobs, skipsActiveRunGuard } from './job-params.js';
 import { jobIdFor } from './job-registry.js';
 import { applyOperator, resolveOperator } from './operator.js';
@@ -74,12 +74,12 @@ export async function triggerAlias(
   const jobId = jobIdFor(alias);
   if (jobId == null) throw new TriggerError(500, `No job id configured for ${alias} (set DATABRICKS_JOB_${alias.toUpperCase()})`);
 
-  const { client } = getExecutionContext();
+  const sdk = appSdk();
 
   // 409 active-run guard (identical to job-trigger.ts): block a fresh trigger while one runs.
   // A team-pin change is the one exception: the conductor job queues it (skipsActiveRunGuard).
   if (!skipsActiveRunGuard(alias, parsed.data)) {
-    for await (const run of client.jobs.listRuns({ job_id: jobId, active_only: true })) {
+    for await (const run of sdk.activeRuns(jobId)) {
       throw new TriggerError(
         409,
         `A run of ${alias} is already active (run ${run.run_id}). Wait for it to finish.`,
@@ -96,12 +96,12 @@ export async function triggerAlias(
   }
   const finalParams = applyOperator(alias, jobParameters, resolveOperator(opts.headers));
 
-  const resp = await client.jobs.runNow({
+  const resp = await sdk.runNow({
     job_id: jobId,
     idempotency_token: opts.requestId,
     job_parameters: Object.keys(finalParams).length > 0 ? finalParams : undefined,
   });
   void pingTrigger(alias, opts.surface ?? 'app'); // usage telemetry (opt-out: MTM_TELEMETRY_ENABLED=false)
-  const run_page_url = await resolveRunPageUrl((id) => client.jobs.getRun({ run_id: id }), resp.run_id);
+  const run_page_url = await resolveRunPageUrl((id) => sdk.getRun(id), resp.run_id);
   return { ok: true, alias, request_id: opts.requestId, run_id: resp.run_id, run_page_url };
 }

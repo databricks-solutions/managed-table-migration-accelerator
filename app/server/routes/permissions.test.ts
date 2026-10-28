@@ -236,10 +236,9 @@ describe('wiring', () => {
   });
 
   it('reads job run permission across every job (missing on one = missing)', async () => {
-    const acl = (lvl: string) => ({ access_control_list: [{ service_principal_name: SP, all_permissions: [{ permission_level: lvl }] }] });
+    const acl = (lvl: string) => [{ service_principal_name: SP, all_permissions: [{ permission_level: lvl }] }];
     const client = (levels: Record<string, string>) => ({
-      jobs: { get: () => Promise.resolve({}) },
-      permissions: { get: (r: { request_object_id: string }) => Promise.resolve(acl(levels[r.request_object_id])) },
+      jobAcl: (jobId: string) => Promise.resolve(acl(levels[jobId])),
     });
     expect(await jobsRunHeld(client({ 1: 'CAN_MANAGE_RUN', 2: 'CAN_MANAGE' }), ['1', '2'], [SP])).toEqual(new Set(['CAN_MANAGE_RUN']));
     expect(await jobsRunHeld(client({ 1: 'CAN_MANAGE_RUN', 2: 'CAN_VIEW' }), ['1', '2'], [SP])).toEqual(new Set());
@@ -248,7 +247,7 @@ describe('wiring', () => {
   it('an unreadable access list is null, and the log names only the error kind', async () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => undefined);
     const denied = Object.assign(new Error('secret detail about user@x.com'), { errorCode: 'PERMISSION_DENIED' });
-    const client = { jobs: { get: () => Promise.resolve({}) }, permissions: { get: () => Promise.reject(denied) } };
+    const client = { jobAcl: () => Promise.reject(denied) };
     expect(await jobsRunHeld(client, ['1', '2'], [SP])).toBeNull();
     expect(warn).toHaveBeenCalledTimes(1);
     expect(String(warn.mock.calls[0][0])).toContain('PERMISSION_DENIED');

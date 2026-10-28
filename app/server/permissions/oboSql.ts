@@ -1,5 +1,5 @@
 import type { Request } from 'express';
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { executeWithTimeout, requireSucceeded, rowObjects, userSdk } from '../sdk/workspace.js';
 
 /** Hard bound so a cold warehouse cannot hang a permissions request (mirrors grants-plan.ts). */
 export const OBO_SQL_TIMEOUT_MS = 45000;
@@ -39,34 +39,14 @@ export function oboSql(token: string, env: NodeJS.ProcessEnv = process.env): Obo
   const warehouseId = env.DATABRICKS_WAREHOUSE_ID?.trim();
   if (!host) throw new Error('DATABRICKS_HOST is not set in the app environment.');
   if (!warehouseId) throw new Error('DATABRICKS_WAREHOUSE_ID is not set in the app environment.');
-  const client = createTaggedWorkspaceClient({ token, host, authType: 'pat' });
+  const sdk = userSdk(token, host);
   return async (statement) => {
-    const exec = client.statementExecution.executeStatement({
-      warehouse_id: warehouseId,
-      statement,
-      wait_timeout: '30s',
-      on_wait_timeout: 'CANCEL',
-    });
-    exec.catch(() => undefined);
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const resp = await Promise.race([
-      exec,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(() => reject(new Error(`statement timed out after ${OBO_SQL_TIMEOUT_MS}ms`)), OBO_SQL_TIMEOUT_MS);
-      }),
-    ]).finally(() => {
-      if (timer) clearTimeout(timer);
-    });
-    if (resp.status?.state !== 'SUCCEEDED') {
-      throw new Error(resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`);
-    }
-    const cols = (resp.manifest?.schema?.columns ?? []).map((c) => c.name ?? '');
-    return (resp.result?.data_array ?? []).map((arr) => {
-      const row: Record<string, unknown> = {};
-      cols.forEach((name, i) => {
-        if (name) row[name] = arr[i];
-      });
-      return row;
-    });
+    const outcome = await executeWithTimeout(
+      sdk,
+      { warehouse_id: warehouseId, statement, wait_timeout: '30s', on_wait_timeout: 'CANCEL' },
+      OBO_SQL_TIMEOUT_MS,
+      `statement timed out after ${OBO_SQL_TIMEOUT_MS}ms`,
+    );
+    return rowObjects(requireSucceeded(outcome));
   };
 }

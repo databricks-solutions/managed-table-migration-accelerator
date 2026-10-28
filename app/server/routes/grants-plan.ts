@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk, executeWithTimeout, requireSucceeded, rowObjects } from '../sdk/workspace.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 import {
   type GrantSpec,
@@ -211,34 +211,13 @@ function cell(v: unknown): string {
 async function spQuery(statement: string): Promise<Record<string, unknown>[]> {
   const warehouseId = process.env.DATABRICKS_WAREHOUSE_ID;
   if (!warehouseId) throw new Error('DATABRICKS_WAREHOUSE_ID is not set in the app environment.');
-  const client = getExecutionContext().client;
-  const exec = client.statementExecution.executeStatement({
-    warehouse_id: warehouseId,
-    statement,
-    wait_timeout: '30s',
-    on_wait_timeout: 'CANCEL',
-  });
-  exec.catch(() => undefined);
-  let timer: ReturnType<typeof setTimeout> | undefined;
-  const resp = await Promise.race([
-    exec,
-    new Promise<never>((_, reject) => {
-      timer = setTimeout(() => reject(new Error(`grants read timed out after ${GRANTS_TIMEOUT_MS}ms`)), GRANTS_TIMEOUT_MS);
-    }),
-  ]).finally(() => {
-    if (timer) clearTimeout(timer);
-  });
-  if (resp.status?.state !== 'SUCCEEDED') {
-    throw new Error(resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`);
-  }
-  const cols = (resp.manifest?.schema?.columns ?? []).map((c) => c.name ?? '');
-  return (resp.result?.data_array ?? []).map((arr) => {
-    const row: Record<string, unknown> = {};
-    cols.forEach((name, i) => {
-      if (name) row[name] = arr[i];
-    });
-    return row;
-  });
+  const outcome = await executeWithTimeout(
+    appSdk(),
+    { warehouse_id: warehouseId, statement, wait_timeout: '30s', on_wait_timeout: 'CANCEL' },
+    GRANTS_TIMEOUT_MS,
+    `grants read timed out after ${GRANTS_TIMEOUT_MS}ms`,
+  );
+  return rowObjects(requireSucceeded(outcome));
 }
 
 export function registerGrantsPlanRoute(app: Application): void {
@@ -263,12 +242,12 @@ export function registerGrantsPlanRoute(app: Application): void {
           }
         },
         jobsRunAs: async () => {
-          const client = getExecutionContext().client;
+          const sdk = appSdk();
           const ids = MIGRATION_ALIASES.map((a) => jobIdFor(a)).filter((id): id is number => id != null);
           return Promise.all(
             [...new Set(ids)].map(async (job_id) => {
               try {
-                return (await client.jobs.get({ job_id })).run_as_user_name ?? null;
+                return (await sdk.getJob(job_id)).run_as_user_name ?? null;
               } catch {
                 return null;
               }

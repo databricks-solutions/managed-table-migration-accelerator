@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { executeWithTimeout, spSdk } from '../sdk/workspace.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 
 /** Hard bound so a cold-warehouse diagnostic can't hang the request forever. */
@@ -55,35 +55,18 @@ export function registerDiagRoute(app: Application): void {
         return;
       }
 
-      const client = createTaggedWorkspaceClient();
-      const exec = client.statementExecution.executeStatement({
-        warehouse_id: warehouseId,
-        statement: `SELECT * FROM ${target} LIMIT 1`,
-        wait_timeout: '30s',
-        on_wait_timeout: 'CANCEL',
-      });
-      exec.catch(() => undefined); // swallow a late rejection if the timeout wins the race
-      let timer: ReturnType<typeof setTimeout> | undefined;
-      const resp = await Promise.race([
-        exec,
-        new Promise<never>((_, reject) => {
-          timer = setTimeout(
-            () =>
-              reject(
-                new Error(`diagnostic timed out after ${DIAG_TIMEOUT_MS}ms (warehouse likely cold — retry)`),
-              ),
-            DIAG_TIMEOUT_MS,
-          );
-        }),
-      ]).finally(() => {
-        if (timer) clearTimeout(timer);
-      });
+      const resp = await executeWithTimeout(
+        spSdk(),
+        { warehouse_id: warehouseId, statement: `SELECT * FROM ${target} LIMIT 1`, wait_timeout: '30s', on_wait_timeout: 'CANCEL' },
+        DIAG_TIMEOUT_MS,
+        `diagnostic timed out after ${DIAG_TIMEOUT_MS}ms (warehouse likely cold — retry)`,
+      );
 
-      if (resp.status?.state === 'SUCCEEDED') {
+      if (resp.state === 'SUCCEEDED') {
         const body: ControlReadDiagnostic = {
           ok: true,
           target,
-          rows: resp.result?.data_array?.length ?? 0,
+          rows: resp.rows.length,
         };
         res.json(body);
         return;
@@ -94,9 +77,9 @@ export function registerDiagRoute(app: Application): void {
       const body: ControlReadDiagnostic = {
         ok: false,
         target,
-        state: resp.status?.state ?? 'unknown',
-        errorCode: resp.status?.error?.error_code ?? null,
-        error: resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`,
+        state: resp.state ?? 'unknown',
+        errorCode: resp.errorCode,
+        error: resp.errorMessage ?? `statement ${resp.state ?? 'unknown'}`,
       };
       res.json(body);
     })().catch((err: unknown) => {

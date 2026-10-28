@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { userSdk } from '../sdk/workspace.js';
 import { resolveOperator } from '../jobs/operator.js';
 import {
   type DiscoveredTable,
@@ -213,11 +213,8 @@ export function createDiscoveryCache(ttlMs = CACHE_TTL_MS, maxEntries = CACHE_MA
 }
 
 function oboRequest(token: string, host: string): UcRequest {
-  const client = createTaggedWorkspaceClient({ token, host, authType: 'pat' });
-  return (path, query) =>
-    client.apiClient.request({ path, method: 'GET', headers: new Headers(), raw: false, query }) as Promise<
-      Record<string, unknown>
-    >;
+  const sdk = userSdk(token, host);
+  return (path, query) => sdk.restGet(path, query);
 }
 
 const cache = createDiscoveryCache();

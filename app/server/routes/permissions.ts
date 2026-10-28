@@ -1,11 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 import type { UcRequest } from './estate-discovery.js';
 import { forwardedToken, oboSql, tokenScopes } from '../permissions/oboSql.js';
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { appSdk, userSdk } from '../sdk/workspace.js';
+import type { JobInfo, WorkspaceApi } from '../sdk/types.js';
 import {
   type DeployedJobs,
   type FlowDeps,
@@ -200,39 +200,26 @@ export async function handBack(deps: FlowDeps, raw: RawOptions) {
 // Wiring: the user's token for SQL, the app's identity for the bound jobs
 // --------------------------------------------------------------------------- //
 
-type JobsClient = {
-  jobs: {
-    get(r: { job_id: number }): Promise<{ run_as_user_name?: string; creator_user_name?: string; settings?: Record<string, unknown> }>;
-  };
-  permissions: {
-    get(r: { request_object_type: string; request_object_id: string }): Promise<{
-      access_control_list?: {
-        user_name?: string; group_name?: string; service_principal_name?: string;
-        all_permissions?: { permission_level?: string }[];
-      }[];
-    }>;
-  };
-};
+type JobsClient = Pick<WorkspaceApi, 'getJob' | 'jobAcl'>;
 
-function notebookPathOf(settings: Record<string, unknown> | undefined): string | null {
-  const tasks = Array.isArray(settings?.tasks) ? (settings.tasks as Record<string, unknown>[]) : [];
-  for (const t of tasks) {
-    const nb = t.notebook_task as { notebook_path?: unknown } | undefined;
-    if (typeof nb?.notebook_path === 'string' && nb.notebook_path.includes('/files/backend/notebooks/')) {
-      return nb.notebook_path.replace(/\/[^/]+$/, '/install');
+function notebookPathOf(settings: JobInfo['settings']): string | null {
+  for (const t of settings?.tasks ?? []) {
+    const path = t.notebook_task?.notebook_path;
+    if (typeof path === 'string' && path.includes('/files/backend/notebooks/')) {
+      return path.replace(/\/[^/]+$/, '/install');
     }
   }
   return null;
 }
 
-export async function deployedJobs(client: JobsClient, ids: number[]): Promise<DeployedJobs> {
+export async function deployedJobs(client: Pick<WorkspaceApi, 'getJob'>, ids: number[]): Promise<DeployedJobs> {
   const byJob: Record<string, Identity | null> = {};
   const creatorByJob: Record<string, string | null> = {};
   let installNotebook: string | null = null;
   await Promise.all([...new Set(ids)].map(async (job_id) => {
     try {
-      const job = await client.jobs.get({ job_id });
-      byJob[String(job_id)] = identityFromRunAs(job.settings?.run_as as Record<string, unknown> | undefined)
+      const job = await client.getJob(job_id);
+      byJob[String(job_id)] = identityFromRunAs(job.settings?.run_as)
         ?? identityFromPrincipal(job.run_as_user_name);
       creatorByJob[String(job_id)] = job.creator_user_name || null;
       installNotebook ??= notebookPathOf(job.settings);
@@ -251,12 +238,12 @@ export function errorKindOf(err: unknown): string {
   return typeof kind === 'string' || typeof kind === 'number' ? String(kind) : 'unknown';
 }
 
-export async function jobsRunHeld(client: JobsClient, jobIds: string[], principals: string[]): Promise<Set<string> | null> {
+export async function jobsRunHeld(client: Pick<WorkspaceApi, 'jobAcl'>, jobIds: string[], principals: string[]): Promise<Set<string> | null> {
   let unreadable = false;
   for (const jid of jobIds) {
     let levels: Set<string> | null;
     try {
-      const acl = (await client.permissions.get({ request_object_type: 'jobs', request_object_id: jid })).access_control_list ?? [];
+      const acl = await client.jobAcl(jid);
       levels = new Set(acl
         .filter((a) => principals.some((p) => samePrincipal(a.user_name || a.group_name || a.service_principal_name, p)))
         .flatMap((a) => (a.all_permissions ?? []).map((p) => String(p.permission_level ?? ''))));
@@ -272,19 +259,6 @@ export async function jobsRunHeld(client: JobsClient, jobIds: string[], principa
   }
   return unreadable ? null : new Set([JOB_RUN_PRIVILEGE]);
 }
-
-type MeClient = {
-  currentUser: { me(): Promise<{ userName?: string; groups?: { display?: string }[] }> };
-  apiClient: {
-    request(opts: {
-      path: string;
-      method: 'GET';
-      headers: Headers;
-      raw: false;
-      query: Record<string, string>;
-    }): Promise<unknown>;
-  };
-};
 
 /** Catalog name → `catalog_type`, as the signed-in user sees them (throws when unreadable). */
 export async function catalogTypesOf(request: UcRequest): Promise<Record<string, string | null>> {
@@ -310,15 +284,15 @@ export function depsFor(req: Request): FlowDeps {
   }
   const host = process.env.DATABRICKS_HOST?.trim();
   if (!host) throw new Error('DATABRICKS_HOST is not set in the app environment.');
-  const appClient = getExecutionContext().client as unknown as JobsClient;
-  const userClient = createTaggedWorkspaceClient({ token, host, authType: 'pat' }) as unknown as MeClient;
+  const appClient: JobsClient = appSdk();
+  const userClient = userSdk(token, host);
   return {
     catalog: resolveMigrationCatalog(),
     schema: resolveMigrationSchema(),
     sql: oboSql(token),
     me: async () => {
       try {
-        const me = await userClient.currentUser.me();
+        const me = await userClient.me();
         return { user: me.userName ?? null, groups: (me.groups ?? []).map((g) => g.display ?? '').filter(Boolean) };
       } catch {
         return { user: null, groups: [] };
@@ -326,13 +300,7 @@ export function depsFor(req: Request): FlowDeps {
     },
     jobs: () => deployedJobs(appClient, MIGRATION_ALIASES.map((a) => jobIdFor(a)).filter((id): id is number => id != null)),
     jobRunHeld: (ids, principals) => jobsRunHeld(appClient, ids, principals),
-    catalogTypes: () =>
-      catalogTypesOf(
-        (path, query) =>
-          userClient.apiClient.request({ path, method: 'GET', headers: new Headers(), raw: false, query }) as Promise<
-            Record<string, unknown>
-          >
-      ),
+    catalogTypes: () => catalogTypesOf((path, query) => userClient.restGet(path, query)),
     appSp: process.env.DATABRICKS_CLIENT_ID?.trim() || null,
     installerGroup: installerGroupFromEnv(process.env.MTM_INSTALLER_GROUP),
     deployment: process.env.MTM_DEPLOYMENT?.trim() || null,

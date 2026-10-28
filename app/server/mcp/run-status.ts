@@ -1,7 +1,7 @@
 // Thin edge: reads live run state via the Jobs SDK and composes a summary. Reuses the exact
 // projections the app's /api/jobs/active and /api/jobs/recent routes use, so the MCP surface and
 // the app UI report one consistent picture. Read-only: never triggers, cancels, or mutates.
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk } from '../sdk/workspace.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 import { mapActiveRun, type ActiveRun } from '../routes/jobs-active.js';
 import { mapRecentRun, type RecentRun } from '../routes/jobs-recent.js';
@@ -19,7 +19,7 @@ export interface RunStatusOutput {
  * specific stages (e.g. ['profiler']); empty = all stages.
  */
 export async function getRunStatus(aliasFilter: string[] = []): Promise<RunStatusOutput> {
-  const client = getExecutionContext().client;
+  const sdk = appSdk();
   const wanted = aliasFilter.filter(Boolean);
   const aliases = wanted.length > 0 ? MIGRATION_ALIASES.filter((a) => wanted.includes(a)) : MIGRATION_ALIASES;
 
@@ -29,7 +29,7 @@ export async function getRunStatus(aliasFilter: string[] = []): Promise<RunStatu
         const jobId = jobIdFor(alias);
         if (jobId == null) return [];
         const runs: ActiveRun[] = [];
-        for await (const run of client.jobs.listRuns({ job_id: jobId, active_only: true })) {
+        for await (const run of sdk.activeRuns(jobId)) {
           runs.push(mapActiveRun(alias, run));
         }
         return runs;
@@ -39,7 +39,7 @@ export async function getRunStatus(aliasFilter: string[] = []): Promise<RunStatu
       aliases.map(async (alias): Promise<RecentRun[]> => {
         const jobId = jobIdFor(alias);
         if (jobId == null) return [];
-        for await (const run of client.jobs.listRuns({ job_id: jobId, completed_only: true, limit: 1 })) {
+        for await (const run of sdk.completedRuns(jobId, 1)) {
           return [mapRecentRun(alias, run)];
         }
         return [];

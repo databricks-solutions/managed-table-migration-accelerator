@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk, contextWarehouseId } from '../sdk/workspace.js';
 import { migrationTableFqn } from '../config/catalog.js';
 
 /**
@@ -82,14 +82,13 @@ export function registerActionWriteRoute(app: Application): void {
         `WHEN MATCHED THEN UPDATE SET ${setClauses.join(', ')}`,
       ].join('\n');
 
-      const ctx = getExecutionContext();
-      const warehouseId = (ctx.warehouseId ? await ctx.warehouseId : undefined) ?? process.env.DATABRICKS_WAREHOUSE_ID;
+      const warehouseId = await contextWarehouseId();
       if (!warehouseId) {
         res.status(500).json({ error: 'No SQL warehouse configured' });
         return;
       }
 
-      const resp = await ctx.client.statementExecution.executeStatement({
+      const resp = await appSdk().executeStatement({
         warehouse_id: warehouseId,
         statement,
         parameters,
@@ -97,15 +96,15 @@ export function registerActionWriteRoute(app: Application): void {
         on_wait_timeout: 'CANCEL',
       });
 
-      const state = resp.status?.state;
+      const state = resp.state;
       if (state !== 'SUCCEEDED') {
-        const msg = resp.status?.error?.message ?? `statement ${state ?? 'unknown'}`;
+        const msg = resp.errorMessage ?? `statement ${state ?? 'unknown'}`;
         res.status(502).json({ error: `Write failed: ${msg}`, request_id: requestId });
         return;
       }
 
       // MERGE returns a one-row count summary: [num_affected_rows, num_updated_rows, ...].
-      const affected = Number(resp.result?.data_array?.[0]?.[0] ?? '0');
+      const affected = Number(resp.rows[0]?.[0] ?? '0');
       if (affected === 0) {
         // No row matched => the action_key does not exist.
         res.status(404).json({ error: `Unknown action_key: ${actionKey}`, request_id: requestId });

@@ -78,7 +78,7 @@
   "overrides": {
     "vite": "$vite",
     "@opentelemetry/core": "2.8.0",
-    "systeminformation": "5.33.14",
+    "systeminformation": "5.33.16",
     "dompurify": "3.4.17",
     "js-yaml": "4.3.2",
     "echarts": "6.1.0",

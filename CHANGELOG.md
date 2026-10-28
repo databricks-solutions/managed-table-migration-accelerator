@@ -106,8 +106,9 @@ release may change job parameters or control-table columns; every such change is
 ### Fixed
 
 - **Dependency security updates (2026-10-28 advisories):** `@hono/node-server` 2.1.5 (via the MCP
-  SDK; `serveStatic` path decoding) and `systeminformation` 5.33.14 (via OpenTelemetry host
-  metrics; prototype pollution and path traversal in `networkStats()`). `systeminformation` is
+  SDK; `serveStatic` path decoding) and `systeminformation` 5.33.16 (via OpenTelemetry host
+  metrics; prototype pollution and path traversal in `networkStats()`, and a Windows-only command
+  injection in `services()`). `systeminformation` is
   pinned in the app's `overrides`, so the pin itself moves. `npm audit` is back to its earlier
   13 findings, 0 critical.
 

@@ -121,3 +121,41 @@ def test_contract_probe_calls_only_the_mcp_drivers_read_tools():
     # The probe must never call a tool that starts a run: its list is the MCP driver's list.
     assert _frozenset_names("backend/.e2e/e2e_app_contract.py", "NO_RUN_TOOLS") == \
         _frozenset_names("backend/.e2e/e2e_mcp.py", "_NO_RUN_TOOLS")
+
+
+def test_value_mode_redacts_identifying_values():
+    config = {"catalog": "main", "workspace_host": "https://acme.cloud.databricks.com", "workspace_id": "1234567890123456",
+              "user": "Jane Doe", "dashboard_id": "01ef0000aaaabbbb", "note": "ask jane@acme.com",
+              "sp": "a7c1e2d4-5b6f-4a8e-9c0d-1e2f3a4b5c6d", "org": 1234567890123456, "count": 3}
+    out = ac.normalize(config)
+    assert out == {"catalog": "main", "workspace_host": "<redacted:string>", "workspace_id": "<redacted:string>",
+                   "user": "<redacted:string>", "dashboard_id": "01ef0000aaaabbbb", "note": "ask <redacted:email>",
+                   "sp": "<redacted:uuid>", "org": "<redacted:id>", "count": 3}
+    import json
+    blob = json.dumps(out)
+    for leak in ("acme", "Jane", "1234567890123456", "a7c1e2d4"):
+        assert leak not in blob
+
+
+def test_redaction_is_stable_so_snapshots_still_compare():
+    body = {"workspace_host": "https://x.cloud.databricks.com", "user": "a"}
+    assert ac.compare({"entries": {"c": ac.entry(200, body)}}, {"entries": {"c": ac.entry(200, body)}}) == []
+
+
+def test_rows_mode_ignores_a_run_that_happens_to_be_active():
+    idle = ac.entry(200, {"runs": []}, ac.ROWS)
+    busy = ac.entry(200, {"runs": [{"alias": "conductor", "run_id": 9, "state": "RUNNING"}]}, ac.ROWS)
+    two = ac.entry(200, {"runs": [{"alias": "a", "run_id": 1, "state": "RUNNING"}, {"alias": "b", "run_id": 2, "state": "PENDING"}]}, ac.ROWS)
+    assert ac.compare({"entries": {"r": idle}}, {"entries": {"r": busy}}) == []
+    assert ac.compare({"entries": {"r": busy}}, {"entries": {"r": two}}) == []
+
+
+def test_rows_mode_still_catches_a_changed_run_field():
+    before = ac.entry(200, {"runs": [{"run_id": 9, "state": "RUNNING"}]}, ac.ROWS)
+    after = ac.entry(200, {"runs": [{"run_id": "9", "state": "RUNNING"}]}, ac.ROWS)
+    assert ac.compare({"entries": {"r": before}}, {"entries": {"r": after}})
+
+
+def test_shape_mode_keeps_the_rows_to_no_rows_signal():
+    assert ac.compare({"entries": {"q": ac.entry(200, [{"a": "1"}], ac.SHAPE)}},
+                      {"entries": {"q": ac.entry(200, [], ac.SHAPE)}})

@@ -10,7 +10,7 @@
  *   diagnostics, the boot-time control-config read).
  * - `userSdk(token, host)`: the signed-in user's forwarded token (OBO permissions and discovery).
  */
-import { getExecutionContext } from '@databricks/appkit';
+import { getExecutionContext, getWarehouseId } from '@databricks/appkit';
 import { createTaggedWorkspaceClient } from '../telemetry/client.js';
 import type { JobParam } from '../jobs/run-variant.js';
 import type { AclEntry, JobInfo, RunInfo, StatementOutcome, StatementRequest, WorkspaceApi } from './types.js';
@@ -152,31 +152,13 @@ export function toAcl(entries: RawAcl[] | undefined): AclEntry[] {
   }));
 }
 
-/** A failed REST call: the HTTP status and the Databricks error code (never the response text). */
-export class RestError extends Error {
-  constructor(
-    readonly statusCode: number,
-    readonly errorCode: string | undefined,
-    path: string
-  ) {
-    super(`GET ${path} failed: HTTP ${statusCode}${errorCode ? ` (${errorCode})` : ''}`);
-    this.name = 'RestError';
-  }
-}
-
-/** GET a workspace REST path through the client's request seam, as JSON. Throws RestError on non-2xx. */
+/**
+ * GET a workspace REST path through the client's request seam, as JSON. A non-2xx response throws
+ * the seam's ApiError (`statusCode`, `errorCode`), the same error the legacy `apiClient.request`
+ * threw, so callers that degrade on a refused read keep doing so.
+ */
 async function restJson(raw: RawClient, path: string, query: Record<string, string>): Promise<Record<string, unknown>> {
   const res = await raw.request({ method: 'GET', path, query });
-  if (!res.ok) {
-    let code: string | undefined;
-    try {
-      const body = (await res.json()) as { error_code?: unknown };
-      code = typeof body.error_code === 'string' ? body.error_code : undefined;
-    } catch {
-      code = undefined;
-    }
-    throw new RestError(res.status, code, path);
-  }
   return (await res.json()) as Record<string, unknown>;
 }
 
@@ -241,15 +223,23 @@ interface Overrides {
   user?: (token: string, host: string) => WorkspaceApi;
   warehouseId?: () => Promise<string | undefined>;
 }
-let overrides: Overrides = {};
+let overrides: Overrides | null = null;
 
-/** Tests only: replace the identities' clients with fakes (call with `{}` to restore). */
-export function setWorkspaceForTest(o: Overrides): void {
+/** Tests only: replace the identities with fakes (`null` restores the real clients). Once set,
+ *  any identity the test did not stub throws rather than reaching a real client. */
+export function setWorkspaceForTest(o: Overrides | null): void {
   overrides = o;
 }
 
+const testMode = () => overrides !== null;
+function required<K extends keyof Overrides>(key: K): NonNullable<Overrides[K]> {
+  const fn = overrides?.[key];
+  if (!fn) throw new Error(`setWorkspaceForTest: ${key} was not stubbed`);
+  return fn;
+}
+
 export function appSdk(): WorkspaceApi {
-  if (overrides.app) return overrides.app();
+  if (testMode()) return required('app')();
   // appkit 0.89's context types import a namespace its workspace-client .d.ts does not export, so
   // `client` reads as `any` (skipLibCheck hides it). At runtime it is the same createWorkspaceClient
   // facade this adapter is typed against (appkit context/service-context.js), so narrow it here,
@@ -257,19 +247,27 @@ export function appSdk(): WorkspaceApi {
   return bindWorkspace(getExecutionContext().client as RawClient);
 }
 
+// The app's own identity never changes, so one client serves every SP read (and keeps its token cache).
+let spClient: WorkspaceApi | null = null;
 export function spSdk(): WorkspaceApi {
-  return overrides.sp ? overrides.sp() : bindWorkspace(createTaggedWorkspaceClient());
+  if (testMode()) return required('sp')();
+  spClient ??= bindWorkspace(createTaggedWorkspaceClient());
+  return spClient;
 }
 
 export function userSdk(token: string, host: string): WorkspaceApi {
-  return overrides.user ? overrides.user(token, host) : bindWorkspace(createTaggedWorkspaceClient({ token, host }));
+  if (testMode()) return required('user')(token, host);
+  return bindWorkspace(createTaggedWorkspaceClient({ token, host }));
 }
 
-/** The warehouse the execution context runs on, else the bound DATABRICKS_WAREHOUSE_ID. */
+/** The app's bound SQL warehouse (AppKit's getWarehouseId), else DATABRICKS_WAREHOUSE_ID. */
 export async function contextWarehouseId(): Promise<string | undefined> {
-  if (overrides.warehouseId) return overrides.warehouseId();
-  const ctx = getExecutionContext();
-  return (ctx.warehouseId ? await ctx.warehouseId : undefined) ?? process.env.DATABRICKS_WAREHOUSE_ID;
+  if (testMode()) return required('warehouseId')();
+  try {
+    return await getWarehouseId();
+  } catch {
+    return process.env.DATABRICKS_WAREHOUSE_ID;
+  }
 }
 
 /**

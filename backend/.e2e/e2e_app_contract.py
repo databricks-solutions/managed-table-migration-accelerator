@@ -14,7 +14,8 @@ active/recent/history, diag, grants plan, permissions, OBO estate discovery, con
 SQL, convert preflight for one planned scope), every analytics query in ``app/config/queries``
 through the same ``/api/analytics/query/<key>`` route and parameters the UI sends, MCP
 ``tools/list``, and every MCP read tool that starts no run. Bodies are normalised by
-``migration.app_contract`` (volatile fields masked; run lists and query rows compared by shape).
+``migration.app_contract`` (volatile fields masked, identifying values redacted; run lists and
+query rows compared by shape).
 
 ``--launch --confirm-execute`` adds one live launch of the read-only conductor job through the
 app's own trigger route and checks: one run starts and its id comes back; the run shows in
@@ -60,15 +61,15 @@ NO_RUN_TOOLS = frozenset({
     "mtm_get_runbook", "mtm_get_readiness", "mtm_get_streaming_waves", "mtm_get_convert_permissions",
     "mtm_get_ownership_gap", "mtm_list_schema_steps", "mtm_get_permissions",
 })
-# Where rows legitimately change between two captures, compare shape, not values.
-SHAPE_TOOLS = frozenset({"mtm_get_run_status"})
+# Run lists change with whatever happens to be running: compare their row shape only.
+ROWS_TOOLS = frozenset({"mtm_get_run_status"})
 
 # (entry name, path, mode). Paths are GET, read-only.
 ROUTES = [
     ("GET /api/config", "/api/config", ac.VALUE),
-    ("GET /api/jobs/active", "/api/jobs/active", ac.SHAPE),
-    ("GET /api/jobs/recent", "/api/jobs/recent", ac.SHAPE),
-    ("GET /api/jobs/history", "/api/jobs/history", ac.SHAPE),
+    ("GET /api/jobs/active", "/api/jobs/active", ac.ROWS),
+    ("GET /api/jobs/recent", "/api/jobs/recent", ac.ROWS),
+    ("GET /api/jobs/history", "/api/jobs/history", ac.ROWS),
     ("GET /api/diag/control-read", "/api/diag/control-read", ac.VALUE),
     ("GET /api/diag/readiness", "/api/diag/readiness", ac.VALUE),
     ("GET /api/grants/plan", "/api/grants/plan", ac.VALUE),
@@ -228,7 +229,7 @@ def capture_mcp(app: App, entries: dict, config: dict) -> dict:
             print(f"  MCP {name}: skipped (needs {', '.join(missing)})")
             continue
         status, doc = app.call_tool(name, {r: ctx[r] for r in required})
-        entries[f"MCP {name}"] = ac.entry(status, doc, ac.SHAPE if name in SHAPE_TOOLS else ac.VALUE)
+        entries[f"MCP {name}"] = ac.entry(status, doc, ac.ROWS if name in ROWS_TOOLS else ac.VALUE)
         print(f"  MCP {name}: {status}")
     return {"scope": scope}
 
@@ -307,7 +308,6 @@ def _meta(app: App, label: str) -> dict:
     deps = {**pkg.get("dependencies", {}), **pkg.get("devDependencies", {})}
     return {"label": label, "captured_at": datetime.now(timezone.utc).isoformat(timespec="seconds"),
             "local_git_commit": git("rev-parse", "--short", "HEAD"), "local_git_branch": git("branch", "--show-current"),
-            "app_name": getattr(app, "app_name", "(E2E_APP_URL)"),
             "appkit": deps.get("@databricks/appkit"), "appkit_ui": deps.get("@databricks/appkit-ui")}
 
 

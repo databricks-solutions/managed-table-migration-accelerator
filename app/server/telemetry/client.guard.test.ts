@@ -34,7 +34,14 @@ describe('telemetry client guard', () => {
   it('only server/sdk/ (and telemetry/) touch the workspace client', () => {
     // Every SDK call goes through server/sdk/workspace.ts, so an SDK upgrade changes that file
     // and its test, never what a route or MCP tool returns.
-    const raw = /\bgetExecutionContext\b|\bcreateTaggedWorkspaceClient\b|\.statementExecution\b|\.apiClient\b|\.jobs\.(listRuns|runNow|getRun|get)\(/;
+    const raw = new RegExp(
+      [
+        String.raw`\b(getExecutionContext|getWorkspaceClient|createTaggedWorkspaceClient)\b`,
+        String.raw`\.(statementExecution|apiClient)\b|\.currentUser\.me\(`,
+        String.raw`\.jobs\.(listRuns|listRunsIter|runNow|getRun|getJob|get)\(`,
+        String.raw`\.request\(\s*\{\s*method\s*:`,
+      ].join('|'),
+    );
     const offenders = files
       .filter((p) => !relative(SERVER, p).startsWith('sdk'))
       .filter((p) => raw.test(readFileSync(p, 'utf8')));

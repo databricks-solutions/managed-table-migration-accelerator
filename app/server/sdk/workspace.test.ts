@@ -6,7 +6,6 @@
  */
 import { describe, expect, it } from 'vitest';
 import {
-  RestError,
   bindWorkspace,
   executeWithTimeout,
   requireSucceeded,
@@ -171,16 +170,11 @@ describe('jobs', () => {
     expect(calls[0].args).toEqual([{ method: 'GET', path: '/api/2.0/permissions/jobs/12', query: {} }]);
   });
 
-  it('a refused ACL read throws with the HTTP status and error code (never the body text)', async () => {
-    const { raw } = rawClient({
-      request: () => json({ error_code: 'PERMISSION_DENIED', message: 'secret user@x.com' }, 403),
-    });
-    const err = await bindWorkspace(raw)
-      .jobAcl('12')
-      .catch((e: unknown) => e);
-    expect(err).toBeInstanceOf(RestError);
-    expect(err).toMatchObject({ statusCode: 403, errorCode: 'PERMISSION_DENIED' });
-    expect(String((err as Error).message)).not.toContain('user@x.com');
+  it("a refused ACL read throws the seam's ApiError (status and error code), which callers degrade on", async () => {
+    // AppKit's request() throws on any non-2xx (modular.js toApiError), like the legacy apiClient.
+    const denied = Object.assign(new Error('PERMISSION_DENIED'), { statusCode: 403, errorCode: 'PERMISSION_DENIED' });
+    const { raw } = rawClient({ request: () => Promise.reject(denied) });
+    await expect(bindWorkspace(raw).jobAcl('12')).rejects.toBe(denied);
   });
 });
 
@@ -302,8 +296,9 @@ describe('identity calls', () => {
     ]);
   });
 
-  it('a failed restGet throws (callers degrade to their "unreadable" state)', async () => {
-    const { raw } = rawClient({ request: () => Promise.resolve(new Response('not json', { status: 500 })) });
-    await expect(bindWorkspace(raw).restGet('/x', {})).rejects.toMatchObject({ statusCode: 500, errorCode: undefined });
+  it('a failed restGet rethrows the seam error unchanged', async () => {
+    const failed = Object.assign(new Error('Response from server (Internal Server Error)'), { statusCode: 500 });
+    const { raw } = rawClient({ request: () => Promise.reject(failed) });
+    await expect(bindWorkspace(raw).restGet('/x', {})).rejects.toBe(failed);
   });
 });

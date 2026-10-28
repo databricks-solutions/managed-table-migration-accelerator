@@ -43,7 +43,7 @@ beforeEach(() => {
   vi.stubEnv('DATABRICKS_JOB_PROFILER', String(PROFILER));
 });
 afterEach(() => {
-  setWorkspaceForTest({});
+  setWorkspaceForTest(null);
   vi.unstubAllEnvs();
 });
 

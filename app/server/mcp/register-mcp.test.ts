@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { allToolDefs, buildToolDefs, buildToolMap, MCP_INSTRUCTIONS, normalizeAcceptHeader, normalizeOrigin, resolveAllowedOrigin } from './register-mcp.js';
+import { allToolDefs, buildToolDefs, buildToolMap, listedTools, MCP_INSTRUCTIONS, normalizeAcceptHeader, normalizeOrigin, resolveAllowedOrigin } from './register-mcp.js';
 import { DEPRECATED_TOOL_ALIASES, MCP_HIDDEN_ALIASES, MCP_HIDDEN_TOOLS, TOOL_NAME } from './job-tools.js';
 
 describe('MCP_INSTRUCTIONS', () => {
@@ -293,6 +293,14 @@ describe('withheld bulk tools (design §8 Q1, decided at M6.3)', () => {
       const listed = buildToolDefs(env).map((d) => d.name);
       const aliases = Object.entries(DEPRECATED_TOOL_ALIASES).filter(([, cur]) => listed.includes(cur)).map(([old]) => old);
       expect([...map.keys()]).toEqual([...listed, ...aliases]);
+    }
+  });
+  it('tools/list advertises each tool once, by its current name (aliases stay callable only)', () => {
+    for (const env of [{}, { MCP_TIER: 'v2' }]) {
+      const names = listedTools(buildToolMap(env)).map((d) => d.name);
+      expect(new Set(names).size, names.join(',')).toBe(names.length);
+      expect(names).toEqual(buildToolDefs(env).map((d) => d.name));
+      for (const old of Object.keys(DEPRECATED_TOOL_ALIASES)) expect(names).not.toContain(old);
     }
   });
   it('each deprecated tool name dispatches to its listed replacement and is not in tools/list', () => {

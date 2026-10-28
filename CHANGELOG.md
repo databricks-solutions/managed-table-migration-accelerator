@@ -105,6 +105,12 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **MCP `tools/list` advertised two tools twice.** Each deprecated tool name (`mtm_lease_ownership`,
+  `mtm_get_ownership_gap`) is kept callable by mapping it to its replacement, and the list showed
+  that replacement once per name, so `mtm_authorize_convert` and `mtm_get_convert_permissions`
+  appeared twice (some MCP clients reject duplicate names). Each tool is now listed once; the old
+  names still dispatch.
+
 - **Settings → Permissions reads the jobs' access lists again.** The live check of the app's
   `CAN_MANAGE_RUN` on each job called a `permissions` service the AppKit client does not have, so
   it always failed and the jobs line fell back to the install record or the deployer. It now reads

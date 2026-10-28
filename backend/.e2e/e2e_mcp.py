@@ -239,7 +239,10 @@ def probe(url: str) -> None:
     try:
         r = jsonrpc(url, "tools/list", {}, req_id=3)
         check("0d tools/list returns 200", r.status_code == 200, f"HTTP {r.status_code}")
-        names = {t.get("name") for t in parse_result(r).get("tools", [])}
+        listed = [t.get("name") for t in parse_result(r).get("tools", [])]
+        names = set(listed)
+        dupes = sorted({n for n in listed if listed.count(n) > 1})
+        check("0d tools/list names are unique (each tool advertised once)", not dupes, f"duplicates: {dupes}")
         for expected in ("mtm_conversion_preflight", "mtm_get_next_step", "mtm_get_run_status",
                          "mtm_run_profiler", "mtm_dry_run"):
             check(f"0d tools/list advertises {expected}", expected in names)

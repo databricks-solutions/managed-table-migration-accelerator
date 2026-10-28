@@ -571,6 +571,15 @@ export function buildToolMap(env: NodeJS.ProcessEnv = process.env): Map<string, 
   return map;
 }
 
+/**
+ * The tools tools/list advertises: each def once, under its current name. buildToolMap also keys
+ * each deprecated name to its replacement's def (so it stays callable), and listing the map's
+ * values would advertise that def twice.
+ */
+export function listedTools(tools: Map<string, ToolDef>): ToolDef[] {
+  return [...tools].filter(([key, def]) => key === def.name).map(([, def]) => def);
+}
+
 function buildServer(tools: Map<string, ToolDef>, req: Request): Server {
   const server = new Server(
     { name: 'managed-table-migration', version: '1.0.0' },
@@ -578,7 +587,7 @@ function buildServer(tools: Map<string, ToolDef>, req: Request): Server {
   );
 
   server.setRequestHandler(ListToolsRequestSchema, () => ({
-    tools: [...tools.values()].map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
+    tools: listedTools(tools).map(({ name, description, inputSchema }) => ({ name, description, inputSchema })),
   }));
 
   server.setRequestHandler(CallToolRequestSchema, async (r) => {

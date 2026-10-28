@@ -1,7 +1,8 @@
 # Version updates: one grouped PR per ecosystem a week for minor and patch bumps, and only
-# for releases at least 7 days old (30 for a major). The cooldown also keeps Dependabot behind
-# the internal npm/PyPI mirrors, which hold new releases back for about a week, so `make ci`
-# keeps working locally. Major bumps still open one PR each, to merge deliberately.
+# for releases at least 7 days old (30 for a major in npm and pip; github-actions has no
+# semver cooldowns). The cooldown also keeps Dependabot behind the internal npm/PyPI mirrors,
+# which hold new releases back for about a week, so `make ci` keeps working locally. Major
+# bumps still open one PR each, to merge deliberately.
 #
 # Security updates are separate: they ignore the cooldown and the version-update groups and
 # arrive as soon as an advisory is published.
@@ -14,9 +15,9 @@ updates:
     directory: /
     schedule:
       interval: weekly
+    # github-actions supports only default-days (no semver-*-days cooldowns).
     cooldown:
       default-days: 7
-      semver-major-days: 30
     groups:
       actions:
         applies-to: version-updates

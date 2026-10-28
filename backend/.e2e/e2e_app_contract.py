@@ -200,8 +200,15 @@ def capture_queries(app: App, entries: dict, config: dict) -> None:
         key = fname[:-4]
         with open(os.path.join(QUERIES, fname)) as fh:
             params = ac.query_parameters(fh.read(), catalog=catalog, schema=schema)
-        r = app.post(f"/api/analytics/query/{key}", {"parameters": params, "format": "JSON_ARRAY"},
-                     accept="text/event-stream")
+        try:
+            r = app.post(f"/api/analytics/query/{key}", {"parameters": params, "format": "JSON_ARRAY"},
+                         accept="text/event-stream")
+        except requests.RequestException as e:
+            # A dropped stream is recorded for this query (and shows in compare), not fatal to the run.
+            entries[f"query {key}"] = {"status": 0, "mode": ac.VALUE,
+                                       "body": {"outcome": "transport_error", "rows": None, "error": type(e).__name__}}
+            print(f"  query {key}: transport error ({type(e).__name__})")
+            continue
         kind, payload = ac.sse_result(r.text) if r.status_code == 200 else ("http_error", _body(r))
         rows = payload if kind == "result" and isinstance(payload, list) else []
         body = {"outcome": kind,

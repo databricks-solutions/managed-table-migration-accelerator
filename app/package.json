@@ -76,7 +76,7 @@
     "vitest": "4.1.12"
   },
   "overrides": {
-    "vite": "npm:rolldown-vite@7.1.14",
+    "vite": "$vite",
     "@opentelemetry/core": "2.8.0",
     "systeminformation": "5.31.7",
     "dompurify": "3.4.17",
@@ -84,7 +84,7 @@
     "echarts": "6.1.0",
     "drizzle-orm": "0.45.4",
     "@opentelemetry/propagator-jaeger": "2.9.0",
-    "zod": "4.6.7",
+    "zod": "$zod",
     "qs": "6.16.1"
   }
 }

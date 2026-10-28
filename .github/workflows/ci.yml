@@ -29,7 +29,8 @@ jobs:
       # Hash-locked, wheels only: pip refuses any file whose hash is not in the
       # lock and never builds an sdist.
       - name: Install test dependencies
-        run: python -m pip install --require-hashes --only-binary :all: -r backend/requirements-ci.txt
+        # Quoted: an unquoted ":all: " is a YAML key separator and breaks the whole file.
+        run: "python -m pip install --require-hashes --only-binary :all: -r backend/requirements-ci.txt"
       - name: Unit tests (no Spark, no workspace)
         run: python -m pytest backend/src/tests/ -q
 

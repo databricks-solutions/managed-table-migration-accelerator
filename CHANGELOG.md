@@ -105,6 +105,12 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **CI's workflow file parses again, and Dependabot can update the app.** The pip line in
+  `ci.yml` had an unquoted `:all: `, which made the whole file invalid YAML, so GitHub could not
+  load the workflow. The app's `zod` and `vite` overrides repeated the direct version, so npm
+  refused any change to it (`EOVERRIDE`); they now reference the direct dependency (`$zod`,
+  `$vite`). A new backend test parses every workflow and `dependabot.yml`.
+
 - **Docs match the current code.** The app's page list now includes Coverage and says Bulk
   Convert is opened by URL; the MCP tier is set with the `mcp_tier` bundle variable; the playbook's
   first step points to the installer; `warehouse_id` is described as required, with

@@ -200,6 +200,11 @@ release may change job parameters or control-table columns; every such change is
 
 ### Changed
 
+- **App major-version updates:** `react-router` 8.4, `lucide-react` 1.48, `react-resizable-panels`
+  4.14 and `vitest` 5.0.5 (5.0.5 rather than Dependabot's 5.0.2, which carried two `@vitest/mocker`
+  advisories). Verified on the `e2e` deploy: the UI checks and the app contract snapshot are
+  unchanged.
+
 - **The app moves to AppKit 0.89** (`@databricks/appkit` / `appkit-ui` 0.57 → 0.89,
   `@databricks/sdk-experimental` 0.18, React 19.3, Tailwind 4.3, typescript-eslint 8.72 and the
   rest of the grouped minor/patch updates). AppKit 0.89's workspace client is the modular SDK

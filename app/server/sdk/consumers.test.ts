@@ -63,17 +63,24 @@ const doneRun = (id: number, end: number, result = 'SUCCESS') => ({
 });
 
 describe('jobs routes', () => {
-  it('/api/jobs/active lists each alias\'s running runs', async () => {
+  it("/api/jobs/active lists each alias's running runs", async () => {
     use(fakeWorkspace(runsByJob({ [CONDUCTOR]: [activeRun] })));
     const { app, get } = fakeApp();
     registerJobsActiveRoute(app);
     const res = await call(get['/api/jobs/active'], {});
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
-      runs: [{
-        alias: 'conductor', run_id: 901, run_page_url: 'https://example.invalid/run/901', state: 'RUNNING',
-        start_time: 1_790_000_000_000, scan_only: false, redirect_optin: false,
-      }],
+      runs: [
+        {
+          alias: 'conductor',
+          run_id: 901,
+          run_page_url: 'https://example.invalid/run/901',
+          state: 'RUNNING',
+          start_time: 1_790_000_000_000,
+          scan_only: false,
+          redirect_optin: false,
+        },
+      ],
     });
   });
 
@@ -84,19 +91,33 @@ describe('jobs routes', () => {
     registerJobsRecentRoute(app);
     const res = await call(get['/api/jobs/recent'], { query: { aliases: 'profiler' } });
     expect(res.body).toEqual({
-      runs: [{
-        alias: 'profiler', run_id: 55, run_page_url: 'https://example.invalid/run/55', result_state: 'SUCCESS',
-        state_message: '', end_time: 2000, scope: 'cat.sales', scan_only: false, redirect_optin: false,
-      }],
+      runs: [
+        {
+          alias: 'profiler',
+          run_id: 55,
+          run_page_url: 'https://example.invalid/run/55',
+          result_state: 'SUCCESS',
+          state_message: '',
+          end_time: 2000,
+          scope: 'cat.sales',
+          scan_only: false,
+          redirect_optin: false,
+        },
+      ],
     });
     expect(ws.calls.filter((c) => c.method === 'completedRuns').map((c) => c.args)).toEqual([[PROFILER, 1]]);
   });
 
   it('/api/jobs/history merges aliases newest first and caps each alias', async () => {
-    const ws = fakeWorkspace(runsByJob({}, {
-      [PROFILER]: [doneRun(3, 300), doneRun(2, 200), doneRun(1, 100)],
-      [CONDUCTOR]: [doneRun(9, 250)],
-    }));
+    const ws = fakeWorkspace(
+      runsByJob(
+        {},
+        {
+          [PROFILER]: [doneRun(3, 300), doneRun(2, 200), doneRun(1, 100)],
+          [CONDUCTOR]: [doneRun(9, 250)],
+        }
+      )
+    );
     use(ws);
     const { app, get } = fakeApp();
     registerJobsHistoryRoute(app);
@@ -107,7 +128,13 @@ describe('jobs routes', () => {
   });
 
   it('a jobs read failure is a 502 with the message', async () => {
-    use(fakeWorkspace({ activeRuns: () => { throw new Error('boom'); } }));
+    use(
+      fakeWorkspace({
+        activeRuns: () => {
+          throw new Error('boom');
+        },
+      })
+    );
     const { app, get } = fakeApp();
     registerJobsActiveRoute(app);
     const res = await call(get['/api/jobs/active'], {});
@@ -127,12 +154,17 @@ describe('job trigger', () => {
     const { app, post } = fakeApp();
     registerJobTriggerRoute(app);
     const res = await call(post['/api/jobs/:alias/trigger'], {
-      params: { alias: 'conductor' }, body: { request_id: REQ, params: {} },
+      params: { alias: 'conductor' },
+      body: { request_id: REQ, params: {} },
       headers: { 'x-forwarded-email': 'op@example.invalid' },
     });
     expect(res.statusCode).toBe(200);
     expect(res.body).toEqual({
-      ok: true, alias: 'conductor', request_id: REQ, run_id: 777, run_page_url: 'https://example.invalid/run/777',
+      ok: true,
+      alias: 'conductor',
+      request_id: REQ,
+      run_id: 777,
+      run_page_url: 'https://example.invalid/run/777',
     });
     const runNow = ws.calls.filter((c) => c.method === 'runNow');
     expect(runNow).toHaveLength(1);
@@ -141,12 +173,16 @@ describe('job trigger', () => {
   });
 
   it('a second trigger while one runs is a 409 naming the active run, and starts nothing', async () => {
-    const ws = fakeWorkspace({ ...runsByJob({ [CONDUCTOR]: [activeRun] }), runNow: () => Promise.resolve({ run_id: 1 }) });
+    const ws = fakeWorkspace({
+      ...runsByJob({ [CONDUCTOR]: [activeRun] }),
+      runNow: () => Promise.resolve({ run_id: 1 }),
+    });
     use(ws);
     const { app, post } = fakeApp();
     registerJobTriggerRoute(app);
     const res = await call(post['/api/jobs/:alias/trigger'], {
-      params: { alias: 'conductor' }, body: { request_id: REQ, params: {} },
+      params: { alias: 'conductor' },
+      body: { request_id: REQ, params: {} },
     });
     expect(res.statusCode).toBe(409);
     expect(res.body).toMatchObject({ run_id: 901, run_page_url: 'https://example.invalid/run/901' });
@@ -154,15 +190,18 @@ describe('job trigger', () => {
   });
 
   it('an unreadable run page still returns the run id', async () => {
-    use(fakeWorkspace({
-      ...runsByJob({}),
-      runNow: () => Promise.resolve({ run_id: 778 }),
-      getRun: () => Promise.reject(new Error('nope')),
-    }));
+    use(
+      fakeWorkspace({
+        ...runsByJob({}),
+        runNow: () => Promise.resolve({ run_id: 778 }),
+        getRun: () => Promise.reject(new Error('nope')),
+      })
+    );
     const { app, post } = fakeApp();
     registerJobTriggerRoute(app);
     const res = await call(post['/api/jobs/:alias/trigger'], {
-      params: { alias: 'conductor' }, body: { request_id: REQ, params: {} },
+      params: { alias: 'conductor' },
+      body: { request_id: REQ, params: {} },
     });
     expect(res.body).toMatchObject({ run_id: 778, run_page_url: null });
   });
@@ -192,11 +231,18 @@ describe('statements', () => {
   });
 
   it('readiness carries the statement error code into the verdict', async () => {
-    use(fakeWorkspace({
-      executeStatement: () => Promise.resolve(outcome({
-        state: 'FAILED', errorCode: 'TABLE_OR_VIEW_NOT_FOUND', errorMessage: '[TABLE_OR_VIEW_NOT_FOUND] x',
-      })),
-    }));
+    use(
+      fakeWorkspace({
+        executeStatement: () =>
+          Promise.resolve(
+            outcome({
+              state: 'FAILED',
+              errorCode: 'TABLE_OR_VIEW_NOT_FOUND',
+              errorMessage: '[TABLE_OR_VIEW_NOT_FOUND] x',
+            })
+          ),
+      })
+    );
     const { app, get } = fakeApp();
     registerReadinessRoute(app);
     const res = await call(get['/api/diag/readiness'], {});
@@ -208,26 +254,43 @@ describe('statements', () => {
     let { app, get } = fakeApp();
     registerDiagRoute(app);
     expect((await call(get['/api/diag/control-read'], {})).body).toEqual({
-      ok: true, target: 'cat.sch.migration_control_config', rows: 1,
+      ok: true,
+      target: 'cat.sch.migration_control_config',
+      rows: 1,
     });
-    use(fakeWorkspace({
-      executeStatement: () => Promise.resolve(outcome({ state: 'FAILED', errorCode: 'BAD_REQUEST', errorMessage: 'denied' })),
-    }));
+    use(
+      fakeWorkspace({
+        executeStatement: () =>
+          Promise.resolve(outcome({ state: 'FAILED', errorCode: 'BAD_REQUEST', errorMessage: 'denied' })),
+      })
+    );
     ({ app, get } = fakeApp());
     registerDiagRoute(app);
     expect((await call(get['/api/diag/control-read'], {})).body).toEqual({
-      ok: false, target: 'cat.sch.migration_control_config', state: 'FAILED', errorCode: 'BAD_REQUEST', error: 'denied',
+      ok: false,
+      target: 'cat.sch.migration_control_config',
+      state: 'FAILED',
+      errorCode: 'BAD_REQUEST',
+      error: 'denied',
     });
   });
 
   it('the control-config read picks genie and dashboard ids by column name', async () => {
-    use(fakeWorkspace({
-      executeStatement: () => Promise.resolve(outcome({
-        columns: ['dashboard_id', 'other', 'genie_space_id'], rows: [['d1', 'x', 'g1']],
-      })),
-    }));
+    use(
+      fakeWorkspace({
+        executeStatement: () =>
+          Promise.resolve(
+            outcome({
+              columns: ['dashboard_id', 'other', 'genie_space_id'],
+              rows: [['d1', 'x', 'g1']],
+            })
+          ),
+      })
+    );
     expect(await readControlConfig()).toEqual({ genieSpaceId: 'g1', dashboardId: 'd1' });
-    use(fakeWorkspace({ executeStatement: () => Promise.resolve(outcome({ columns: ['dashboard_id'], rows: [['']] })) }));
+    use(
+      fakeWorkspace({ executeStatement: () => Promise.resolve(outcome({ columns: ['dashboard_id'], rows: [['']] })) })
+    );
     expect(await readControlConfig()).toEqual({ genieSpaceId: null, dashboardId: null });
   });
 
@@ -240,7 +303,10 @@ describe('statements', () => {
       body: { action_key: 'K', request_id: REQ, notes: 'hi', assignee: null },
     });
     expect(ok.statusCode).toBe(200);
-    const req = ws.calls.find((c) => c.method === 'executeStatement')?.args[0] as { parameters: unknown[]; warehouse_id: string };
+    const req = ws.calls.find((c) => c.method === 'executeStatement')?.args[0] as {
+      parameters: unknown[];
+      warehouse_id: string;
+    };
     expect(req.warehouse_id).toBe('wh-1');
     expect(req.parameters).toEqual([
       { name: 'action_key', type: 'STRING', value: 'K' },
@@ -250,17 +316,29 @@ describe('statements', () => {
     use(fakeWorkspace({ executeStatement: () => Promise.resolve(outcome({ rows: [['0', '0']] })) }));
     const r2 = fakeApp();
     registerActionWriteRoute(r2.app);
-    expect((await call(r2.post['/api/actions/update'], { body: { action_key: 'K', request_id: REQ, notes: 'x' } })).statusCode)
-      .toBe(404);
+    expect(
+      (await call(r2.post['/api/actions/update'], { body: { action_key: 'K', request_id: REQ, notes: 'x' } }))
+        .statusCode
+    ).toBe(404);
   });
 
   it('an MCP control query returns rows keyed by column and binds only declared params', async () => {
     const ws = fakeWorkspace({
-      executeStatement: () => Promise.resolve(outcome({ columns: ['wave_id', 'n'], rows: [['w1', '3'], ['w2', null]] })),
+      executeStatement: () =>
+        Promise.resolve(
+          outcome({
+            columns: ['wave_id', 'n'],
+            rows: [
+              ['w1', '3'],
+              ['w2', null],
+            ],
+          })
+        ),
     });
     use(ws);
     expect(await runControlQuery('wave_members', { wave_id: 'w1', not_declared: 'x' })).toEqual([
-      { wave_id: 'w1', n: '3' }, { wave_id: 'w2', n: null },
+      { wave_id: 'w1', n: '3' },
+      { wave_id: 'w2', n: null },
     ]);
     const req = ws.calls[0].args[0] as { parameters: { name: string }[]; warehouse_id: string };
     expect(req.warehouse_id).toBe('wh-1');
@@ -268,7 +346,9 @@ describe('statements', () => {
   });
 
   it('an MCP control query throws the statement error', async () => {
-    use(fakeWorkspace({ executeStatement: () => Promise.resolve(outcome({ state: 'FAILED', errorMessage: 'bad sql' })) }));
+    use(
+      fakeWorkspace({ executeStatement: () => Promise.resolve(outcome({ state: 'FAILED', errorMessage: 'bad sql' })) })
+    );
     await expect(runControlQuery('wave_members')).rejects.toThrow('bad sql');
   });
 
@@ -286,14 +366,15 @@ describe('statements', () => {
 describe('permissions reads', () => {
   it('deployed jobs: run-as identity, creator and the install notebook path', async () => {
     const client = fakeWorkspace({
-      getJob: (jobId) => Promise.resolve({
-        run_as_user_name: 'ignored-when-settings-say',
-        creator_user_name: `creator-${jobId}@example.invalid`,
-        settings: {
-          run_as: { service_principal_name: 'sp-app-id' },
-          tasks: [{ notebook_task: { notebook_path: '/Workspace/x/.bundle/m/files/backend/notebooks/00_profiler' } }],
-        },
-      }),
+      getJob: (jobId) =>
+        Promise.resolve({
+          run_as_user_name: 'ignored-when-settings-say',
+          creator_user_name: `creator-${jobId}@example.invalid`,
+          settings: {
+            run_as: { service_principal_name: 'sp-app-id' },
+            tasks: [{ notebook_task: { notebook_path: '/Workspace/x/.bundle/m/files/backend/notebooks/00_profiler' } }],
+          },
+        }),
     });
     const out = await deployedJobs(client, [1, 1, 2]);
     expect(out.jobIds).toEqual(['1', '2']);
@@ -302,9 +383,12 @@ describe('permissions reads', () => {
     expect(out.installNotebook).toBe('/Workspace/x/.bundle/m/files/backend/notebooks/install');
   });
 
-  it('job run permission is read from each job\'s access list', async () => {
+  it("job run permission is read from each job's access list", async () => {
     const client = fakeWorkspace({
-      jobAcl: () => Promise.resolve([{ service_principal_name: 'sp-app-id', all_permissions: [{ permission_level: 'CAN_MANAGE_RUN' }] }]),
+      jobAcl: () =>
+        Promise.resolve([
+          { service_principal_name: 'sp-app-id', all_permissions: [{ permission_level: 'CAN_MANAGE_RUN' }] },
+        ]),
     });
     expect(await jobsRunHeld(client, ['1'], ['sp-app-id'])).toEqual(new Set(['CAN_MANAGE_RUN']));
     expect(client.calls.map((c) => c.args)).toEqual([['1']]);

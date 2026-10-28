@@ -81,11 +81,13 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
   const [convertRights, setConvertRights] = useState<string>('');
   const [view, setView] = useState<PermissionsView | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(true);
+  // Which request the shown view answers: busy while the current one is still in flight.
+  const [loadedKey, setLoadedKey] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
   const [result, setResult] = useState<string | null>(null);
   const [failures, setFailures] = useState<string[]>([]);
-  const [obo, setObo] = useState<OboDiscoveryLite | null>(null);
+  // Discovery result tagged with the scan it answers; a new scan reads as null (loading) until it lands.
+  const [oboResult, setOboResult] = useState<{ scan: number; data: OboDiscoveryLite } | null>(null);
   const [oboScans, setOboScans] = useState(0);
 
   /** With nothing stored, the first view plans `all`: its scopes become this visit's picks once,
@@ -106,17 +108,18 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
     return o;
   }, [scopesParam, convertRights]);
 
+  const obo = oboResult?.scan === oboScans ? oboResult.data : null;
+
   useEffect(() => {
     let cancelled = false;
-    setObo(null);
     const path = oboScans > 0 ? '/api/estate/obo-discovery?refresh=1' : '/api/estate/obo-discovery';
     void (async () => {
       try {
         const r = await fetch(path, { headers: { accept: 'application/json' } });
         const data = (await r.json()) as OboDiscoveryLite;
-        if (!cancelled) setObo(data);
+        if (!cancelled) setOboResult({ scan: oboScans, data });
       } catch {
-        if (!cancelled) setObo({ available: false, reason: 'discovery request failed', visibility: [] });
+        if (!cancelled) setOboResult({ scan: oboScans, data: { available: false, reason: 'discovery request failed', visibility: [] } });
       }
     })();
     return () => {
@@ -124,9 +127,12 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
     };
   }, [oboScans]);
 
+  const loadKey = `${reload}|${viewUrl(options)}`;
+  const busy = loadedKey !== loadKey;
+
   useEffect(() => {
     let cancelled = false;
-    setBusy(true);
+    const key = `${reload}|${viewUrl(options)}`;
     void (async () => {
       try {
         const r = await fetch(viewUrl(options), { headers: { accept: 'application/json' } });
@@ -141,7 +147,7 @@ export function PermissionsPanel({ appPlan }: { appPlan: AppGrantsPlan }) {
       } catch (e) {
         if (!cancelled) setError(e instanceof Error ? e.message : String(e));
       } finally {
-        if (!cancelled) setBusy(false);
+        if (!cancelled) setLoadedKey(key);
       }
     })();
     return () => {

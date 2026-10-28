@@ -25,7 +25,7 @@ export function sqlLit(v: unknown): string {
   if (v === null || v === undefined) return 'NULL';
   if (typeof v === 'boolean') return v ? 'true' : 'false';
   if (typeof v === 'number') return String(v);
-  const s = typeof v === 'string' ? v : typeof v === 'object' ? JSON.stringify(v) : String(v as bigint);
+  const s = typeof v === 'string' ? v : typeof v === 'bigint' ? String(v) : JSON.stringify(v);
   return `'${s.replace(/\\/g, '\\\\').replace(/'/g, "\\'")}'`;
 }
 

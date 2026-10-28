@@ -82,7 +82,7 @@ function rawOf(args: Args): Record<string, string> {
 function parse<T extends z.ZodTypeAny>(schema: T, args: Args): z.infer<T> {
   const parsed = schema.safeParse(args);
   if (!parsed.success) throw new TriggerError(400, 'Invalid arguments', parsed.error.issues);
-  return parsed.data as z.infer<T>;
+  return parsed.data;
 }
 
 /** No sign-in reached the app: there is no app-identity fallback, so the answer is the CLI. */

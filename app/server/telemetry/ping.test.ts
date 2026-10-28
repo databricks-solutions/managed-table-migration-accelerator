@@ -17,7 +17,7 @@ describe('triggerSignals', () => {
         expect(v).toMatch(UA_RE);
       }
     }
-    expect(triggerSignals('convert', 'mcp', {} as NodeJS.ProcessEnv)?.['e2m.mcp_tier']).toBe('v1');
+    expect(triggerSignals('convert', 'mcp', {})?.['e2m.mcp_tier']).toBe('v1');
   });
 
   it.each(['main.sales.customers', 'not_an_alias', '__proto__', 'toString', ''])('drops unknown alias %j', (a) => {
@@ -45,7 +45,7 @@ describe('pingTrigger', () => {
   it('sends nothing when opted out or unset', async () => {
     const makeClient = vi.fn();
     for (const env of [{ MTM_TELEMETRY_ENABLED: 'false' }, {}, { MTM_TELEMETRY_ENABLED: 'true', DO_NOT_TRACK: '1' }]) {
-      await expect(pingTrigger('convert', 'app', { env: env as NodeJS.ProcessEnv, makeClient })).resolves.toBe(false);
+      await expect(pingTrigger('convert', 'app', { env: env, makeClient })).resolves.toBe(false);
     }
     expect(makeClient).not.toHaveBeenCalled();
   });

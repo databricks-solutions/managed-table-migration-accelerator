@@ -194,6 +194,17 @@ release may change job parameters or control-table columns; every such change is
 
 ### Changed
 
+- **The app moves to AppKit 0.89** (`@databricks/appkit` / `appkit-ui` 0.57 → 0.89,
+  `@databricks/sdk-experimental` 0.18, React 19.3, Tailwind 4.3, typescript-eslint 8.72 and the
+  rest of the grouped minor/patch updates). AppKit 0.89's workspace client is the modular SDK
+  (camelCase fields, bigint ids, a raw-request seam, no permissions service). Every SDK call now
+  goes through one adapter, `app/server/sdk/`, which keeps the app's own field names and number ids
+  (a bigint beyond 2^53 fails loud instead of rounding), so no route, MCP tool or UI read changes.
+  `sdk/consumers.test.ts` pins what each route and tool returns and passes unchanged on both
+  versions; new guards check every plugin-required env var is bound in `app.yml` and that no
+  plugin route overlaps an app route. `backend/.e2e/e2e_app_contract.py` snapshots a deployed app
+  before and after (`capture` / `compare`) to prove it end to end.
+
 - **The jobs run as you on every target, prod included.** The `prod` target no longer overrides
   `jobs_run_as`, and the `prod_run_as_sp` variable is gone (contract change: see
   `backend/docs/contracts/jobs.md` and `backend/docs/integration/job-api.md`). A person-run install

@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { filterRunbookToScope, handbackScope } from './runbook.pure';
 
 const row = (catalog: string | null, schema: string | null, id: string) =>
-  ({ catalog, schema, id }) as { catalog: string | null; schema: string | null; id: string };
+  ({ catalog, schema, id });
 
 describe('filterRunbookToScope', () => {
   it('keeps only rows in the given catalog.schema', () => {

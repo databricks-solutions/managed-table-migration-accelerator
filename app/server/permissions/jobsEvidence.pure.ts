@@ -39,7 +39,8 @@ export const jobsAuditSql = (catalog: string, schema: string): string =>
 
 const RECORDING_DOORS = new Set([DOOR_NOTEBOOK, DOOR_CLI]);
 
-const text = (v: unknown): string => (typeof v === 'string' ? v : v === null || v === undefined ? '' : String(v as number));
+const text = (v: unknown): string =>
+  typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint' ? String(v) : JSON.stringify(v);
 
 function parseDetail(raw: unknown): Record<string, unknown> | null {
   try {

@@ -40,7 +40,10 @@ export function fakeWorkspace(over: Partial<WorkspaceApi> = {}): WorkspaceApi & 
 }
 
 /** Runs per job id: `activeRuns` / `completedRuns` read from these maps. */
-export function runsByJob(active: Record<number, RunInfo[]>, completed: Record<number, RunInfo[]> = {}): Partial<WorkspaceApi> {
+export function runsByJob(
+  active: Record<number, RunInfo[]>,
+  completed: Record<number, RunInfo[]> = {}
+): Partial<WorkspaceApi> {
   return {
     activeRuns: (jobId) => iterate(active[jobId] ?? []),
     completedRuns: (jobId) => iterate(completed[jobId] ?? []),

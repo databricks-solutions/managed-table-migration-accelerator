@@ -81,8 +81,8 @@ export function RunsPage() {
       header: 'State',
       render: (r) => {
         // auditStateLabel: a cell can arrive as an object (AppKit parses JSON-looking strings).
-        const from = auditStateLabel(r.from_state as unknown);
-        const to = auditStateLabel(r.to_state as unknown);
+        const from = auditStateLabel(r.from_state);
+        const to = auditStateLabel(r.to_state);
         return (
           <span className="flex items-center gap-1 text-xs">
             {from ? <Badge variant="outline" title={from.title ?? undefined}>{from.label}</Badge> : null}

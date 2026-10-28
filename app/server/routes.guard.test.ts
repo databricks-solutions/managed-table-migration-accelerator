@@ -32,7 +32,7 @@ function appRoutes(): Route[] {
       [...readFileSync(join(dir, f), 'utf8').matchAll(/app\.(get|post|put|delete)\(\s*'([^']+)'/g)].map((m) => ({
         method: m[1],
         path: m[2],
-      })),
+      }))
     );
 }
 
@@ -48,13 +48,15 @@ function overlaps(a: Route, b: Route): boolean {
 describe('route ownership', () => {
   it('reads the plugin and app routes', () => {
     expect(pluginRoutes().map((r) => r.path)).toContain('/api/jobs/:jobKey/run');
-    expect(appRoutes().map((r) => r.path)).toEqual(expect.arrayContaining(['/api/jobs/:alias/trigger', '/api/jobs/active']));
+    expect(appRoutes().map((r) => r.path)).toEqual(
+      expect.arrayContaining(['/api/jobs/:alias/trigger', '/api/jobs/active'])
+    );
   });
 
   it('no plugin route overlaps an app route', () => {
     const plugins = pluginRoutes();
     const clashes = appRoutes().flatMap((a) =>
-      plugins.filter((p) => overlaps(a, p)).map((p) => `${a.method.toUpperCase()} ${a.path} vs ${p.path}`),
+      plugins.filter((p) => overlaps(a, p)).map((p) => `${a.method.toUpperCase()} ${a.path} vs ${p.path}`)
     );
     expect(clashes).toEqual([]);
   });

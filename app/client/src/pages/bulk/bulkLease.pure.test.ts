@@ -36,7 +36,7 @@ describe('leaseCardView', () => {
       open_pre_convert_freeze: 0,
       open_pre_convert_lease: 1,
       open_pre_convert_lease_unverified: 1,
-    } as BatchRollup);
+    });
     expect(v.hints[0]).toBe(AUTHORITY_PROVENANCE);
     expect(v.hints[1]).toMatch(/not verified yet/);
   });

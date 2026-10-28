@@ -24,9 +24,13 @@ function requiredEnv(plugin: unknown): string[] {
 }
 
 describe('boot resource gate', () => {
-  for (const [name, factory] of [['analytics', analytics], ['genie', genie], ['jobs', jobs]] as const) {
+  for (const [name, factory] of [
+    ['analytics', analytics],
+    ['genie', genie],
+    ['jobs', jobs],
+  ] as const) {
     it(`every env var the ${name} plugin requires is bound`, () => {
-      const env = requiredEnv(factory({} as never).plugin);
+      const env = requiredEnv(factory({}).plugin);
       expect(env.length).toBeGreaterThan(0);
       expect(env.filter((e) => !boundEnv.has(e) && !setBeforeBoot.has(e))).toEqual([]);
     });

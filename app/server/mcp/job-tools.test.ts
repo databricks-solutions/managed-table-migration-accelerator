@@ -148,7 +148,7 @@ describe('path-based redirect opt-in over MCP', () => {
     expect(mcpParamsSchema('profiler')?.safeParse(optIn).success).toBe(false);
     expect(mcpParamsSchema('profiler')?.safeParse({ path_redirect_action: 'revoke', path_redirect_tables: 'c.s.t' }).success).toBe(false);
     expect(profilerApp.safeParse(optIn).success).toBe(true);
-    const props = Object.keys((toInputSchema(mcpParamsSchema('profiler')!).properties ?? {}) as Record<string, unknown>);
+    const props = Object.keys((toInputSchema(mcpParamsSchema('profiler')!).properties ?? {}));
     expect(props.filter((p) => p.startsWith('path_redirect') || p === 'confirm_execute')).toEqual([]);
   });
 

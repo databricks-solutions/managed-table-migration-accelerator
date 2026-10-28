@@ -144,7 +144,7 @@ const MCP_SCHEMA_OVERRIDES: Record<string, z.ZodType> = {
 
 /** The schema an MCP tool advertises and enforces: the tightened override, else the alias schema. */
 export function mcpParamsSchema(alias: string): z.ZodType | undefined {
-  return MCP_SCHEMA_OVERRIDES[alias] ?? (migrationJobs.jobs?.[alias]?.params as z.ZodType | undefined);
+  return MCP_SCHEMA_OVERRIDES[alias] ?? (migrationJobs.jobs?.[alias]?.params);
 }
 
 /**

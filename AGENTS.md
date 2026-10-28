@@ -131,7 +131,8 @@ backend/                  # migration TOOLING
 app/                      # admin CONTROL-PLANE UI (Databricks App: AppKit/React+TS)
   resources/app.yml       #   the app resource (source_code_path: .. -> app/)
   app.yaml                #   app runtime manifest (command + env valueFrom)
-  client/ server/ shared/ config/   #   AppKit source (server/mcp/ = the Genie Code MCP server, POST /mcp)
+  client/ server/ shared/ config/   #   AppKit source (server/mcp/ = the Genie Code MCP server, POST /mcp;
+                          #   server/sdk/ = the ONLY code that calls the Databricks SDK, guarded by client.guard.test.ts)
 docs/                     # operator docs (markdown, the single source of truth)
   site/                   #   Docusaurus site built from docs/ + six backend/docs reference pages
 ```

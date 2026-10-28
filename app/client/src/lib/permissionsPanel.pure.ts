@@ -125,7 +125,7 @@ export interface ScopeRow {
 export function scopeRows(v: Pick<PermissionsView, 'scopes' | 'stored_scopes' | 'lines'>): ScopeRow[] {
   const rank: Record<SetStatus, number> = { none: 0, present: 1, unknown: 2, missing: 3 };
   return v.scopes.map((scope) => {
-    const sets: Record<string, SetStatus> = Object.fromEntries(GRANT_SETS.map((s) => [s, 'none' as SetStatus]));
+    const sets: Record<string, SetStatus> = Object.fromEntries(GRANT_SETS.map((s) => [s, 'none']));
     const cat = scope.split('.')[0];
     for (const l of v.lines) {
       const mine = l.scope === scope || l.scope === `${cat}.*`;

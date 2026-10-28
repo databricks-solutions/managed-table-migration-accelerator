@@ -71,8 +71,12 @@ def type_name(value: Any) -> str:
     return type(value).__name__
 
 
-def redact(text: str) -> str:
-    """``text`` with every email, URL, UUID and long numeric id replaced by ``<redacted:kind>``."""
+def redact(text: str, aliases: dict[str, str] | None = None) -> str:
+    """``text`` with every email, URL, UUID and long numeric id replaced by ``<redacted:kind>``,
+    and each ``aliases`` literal (e.g. the estate's catalog name) by its token."""
+    for literal, token in sorted((aliases or {}).items(), key=lambda kv: -len(kv[0])):
+        if literal:
+            text = text.replace(literal, token)
     for kind, pattern in _REDACT:
         text = pattern.sub(f"<redacted:{kind}>", text)
     return text
@@ -91,7 +95,7 @@ def _shape(value: Any, band: bool = True) -> Any:
     return f"<{type_name(value)}>"
 
 
-def _value(value: Any) -> Any:
+def _value(value: Any, aliases: dict[str, str] | None = None) -> Any:
     if isinstance(value, dict):
         out = {}
         for k in sorted(value):
@@ -101,29 +105,29 @@ def _value(value: Any) -> Any:
             elif k.lower() in _SENSITIVE_KEYS and v not in (None, ""):
                 out[k] = f"<redacted:{type_name(v)}>"
             else:
-                out[k] = _value(v)
+                out[k] = _value(v, aliases)
         return out
     if isinstance(value, list):
-        return [_value(v) for v in value]
+        return [_value(v, aliases) for v in value]
     if isinstance(value, str):
-        return "<timestamp>" if _ISO_TS.match(value) else redact(value)
+        return "<timestamp>" if _ISO_TS.match(value) else redact(value, aliases)
     if isinstance(value, int) and not isinstance(value, bool) and abs(value) >= 10**12:
         return "<redacted:id>"
     return value
 
 
-def normalize(value: Any, mode: str = VALUE) -> Any:
-    """The stable form of a response body for ``mode`` (``value`` or ``shape``)."""
+def normalize(value: Any, mode: str = VALUE, aliases: dict[str, str] | None = None) -> Any:
+    """The stable form of a response body for ``mode``; ``aliases`` maps literals to tokens."""
     if mode not in MODES:
         raise ValueError(f"unknown mode {mode!r}; expected one of {MODES}")
     if mode == VALUE:
-        return _value(value)
+        return _value(value, aliases)
     return _shape(value, band=(mode == SHAPE))
 
 
-def entry(status: int, body: Any, mode: str = VALUE) -> dict:
+def entry(status: int, body: Any, mode: str = VALUE, aliases: dict[str, str] | None = None) -> dict:
     """One snapshot entry: the HTTP (or tool) status, the mode and the normalised body."""
-    return {"status": status, "mode": mode, "body": normalize(body, mode)}
+    return {"status": status, "mode": mode, "body": normalize(body, mode, aliases)}
 
 
 def _diff(a: Any, b: Any, path: str, out: list[str], limit: int) -> None:

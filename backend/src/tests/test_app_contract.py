@@ -159,3 +159,10 @@ def test_rows_mode_still_catches_a_changed_run_field():
 def test_shape_mode_keeps_the_rows_to_no_rows_signal():
     assert ac.compare({"entries": {"q": ac.entry(200, [{"a": "1"}], ac.SHAPE)}},
                       {"entries": {"q": ac.entry(200, [], ac.SHAPE)}})
+
+
+def test_aliases_redact_the_estate_catalog_name_everywhere():
+    body = {"full_name": "acme_cat.sales.orders", "title": "Pause compaction on acme_cat.sales.orders", "n": 1}
+    assert ac.normalize(body, aliases={"acme_cat": "<catalog>"}) == {
+        "full_name": "<catalog>.sales.orders", "n": 1, "title": "Pause compaction on <catalog>.sales.orders"}
+    assert ac.redact("in acme_cat.x", {"acme_cat": "<catalog>"}) == "in <catalog>.x"

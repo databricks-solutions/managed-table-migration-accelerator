@@ -79,6 +79,12 @@ ROUTES = [
 ]
 
 _checks: dict[str, bool | None] = {}
+# Literals redacted from every value (set from /api/config: the estate's catalog name).
+_ALIASES: dict[str, str] = {}
+
+
+def entry(status: int, body: object, mode: str = ac.VALUE) -> dict:
+    return ac.entry(status, body, mode, _ALIASES)
 
 
 def check(name: str, ok: bool | None, detail: str = "") -> None:
@@ -179,7 +185,9 @@ def capture_routes(app: App, entries: dict) -> dict:
         body = _body(r)
         if path == "/api/config" and isinstance(body, dict):
             config = body
-        entries[name] = ac.entry(r.status_code, body, mode)
+            if config.get("catalog"):
+                _ALIASES[str(config["catalog"])] = "<catalog>"
+        entries[name] = entry(r.status_code, body, mode)
         print(f"  {name}: HTTP {r.status_code}")
     return config
 
@@ -198,7 +206,8 @@ def capture_queries(app: App, entries: dict, config: dict) -> None:
         rows = payload if kind == "result" and isinstance(payload, list) else []
         body = {"outcome": kind,
                 "rows": ac.normalize(rows[:50], ac.SHAPE),
-                "error": str(payload)[:300] if kind != "result" else None}
+        # error text, with the estate's names and ids redacted
+                "error": ac.redact(str(payload)[:300], _ALIASES) if kind != "result" else None}
         entries[f"query {key}"] = {"status": r.status_code, "mode": ac.VALUE, "body": body}
         print(f"  query {key}: {kind} ({len(rows)} rows)")
 
@@ -206,7 +215,7 @@ def capture_queries(app: App, entries: dict, config: dict) -> None:
 def capture_mcp(app: App, entries: dict, config: dict) -> dict:
     listed = app.mcp("tools/list", {})
     tools = sorted((listed.get("result") or {}).get("tools") or [], key=lambda t: t.get("name", ""))
-    entries["MCP tools/list"] = ac.entry(listed["http"], [{"name": t.get("name"), "inputSchema": t.get("inputSchema")}
+    entries["MCP tools/list"] = entry(listed["http"], [{"name": t.get("name"), "inputSchema": t.get("inputSchema")}
                                                          for t in tools])
     print(f"  MCP tools/list: {len(tools)} tools")
     ctx: dict[str, object] = {}
@@ -218,29 +227,31 @@ def capture_mcp(app: App, entries: dict, config: dict) -> dict:
     scope = group if isinstance(group, str) and "." in group else None
     for k in ("target", "target_schema", "scope", "schema_key"):
         ctx[k] = scope
+    # Tools whose required argument is enforced by a refine (not listed in inputSchema.required).
+    extra_args = {"mtm_conversion_preflight": ["target"]}
     for t in tools:
         name = t.get("name", "")
         if name not in NO_RUN_TOOLS:
             continue
-        required = ((t.get("inputSchema") or {}).get("required")) or []
+        required = list(((t.get("inputSchema") or {}).get("required")) or []) + extra_args.get(name, [])
         missing = [r for r in required if ctx.get(r) in (None, "")]
         if missing:
-            entries[f"MCP {name}"] = ac.entry(0, {"skipped": sorted(missing)})
+            entries[f"MCP {name}"] = entry(0, {"skipped": sorted(missing)})
             print(f"  MCP {name}: skipped (needs {', '.join(missing)})")
             continue
         status, doc = app.call_tool(name, {r: ctx[r] for r in required})
-        entries[f"MCP {name}"] = ac.entry(status, doc, ac.ROWS if name in ROWS_TOOLS else ac.VALUE)
+        entries[f"MCP {name}"] = entry(status, doc, ac.ROWS if name in ROWS_TOOLS else ac.VALUE)
         print(f"  MCP {name}: {status}")
     return {"scope": scope}
 
 
 def capture_preflight(app: App, entries: dict, scope: str | None) -> None:
     if not scope:
-        entries["GET /api/convert/preflight"] = ac.entry(0, {"skipped": "no planned scope"})
+        entries["GET /api/convert/preflight"] = entry(0, {"skipped": "no planned scope"})
         print("  GET /api/convert/preflight: skipped (no planned scope)")
         return
     r = app.get("/api/convert/preflight", target=scope, **{"for": "convert"})
-    entries["GET /api/convert/preflight"] = ac.entry(r.status_code, _body(r))
+    entries["GET /api/convert/preflight"] = entry(r.status_code, _body(r))
     print(f"  GET /api/convert/preflight: HTTP {r.status_code}")
 
 

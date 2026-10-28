@@ -105,6 +105,12 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **Dependency security updates (2026-10-28 advisories):** `@hono/node-server` 2.1.5 (via the MCP
+  SDK; `serveStatic` path decoding) and `systeminformation` 5.33.14 (via OpenTelemetry host
+  metrics; prototype pollution and path traversal in `networkStats()`). `systeminformation` is
+  pinned in the app's `overrides`, so the pin itself moves. `npm audit` is back to its earlier
+  13 findings, 0 critical.
+
 - **MCP `tools/list` advertised two tools twice.** Each deprecated tool name (`mtm_lease_ownership`,
   `mtm_get_ownership_gap`) is kept callable by mapping it to its replacement, and the list showed
   that replacement once per name, so `mtm_authorize_convert` and `mtm_get_convert_permissions`

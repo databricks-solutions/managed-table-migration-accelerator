@@ -205,7 +205,7 @@ export function optionsFixture() {
 function cellText(v: unknown): string {
   if (typeof v === 'string') return v;
   if (v === null || v === undefined) return '';
-  return typeof v === 'object' ? JSON.stringify(v) : String(v as number);
+  return typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint' ? String(v) : JSON.stringify(v);
 }
 
 export const appOptionNames = (): string[] => OPTIONS.filter((o) => o.app).map((o) => o.name);
@@ -1075,7 +1075,7 @@ export function grantedByTool(auditRows: AuditRecord[] | null | undefined): Reco
     if (!d || typeof d !== 'object' || !d.privilege) continue;
     const k = lineKeyString({ grantee: detailText(d.grantee), privilege: detailText(d.privilege),
       securable_type: detailText(d.securable_type), securable: detailText(d.securable) });
-    const ts = r.created_at === null || r.created_at === undefined ? '' : String(r.created_at as string);
+    const ts = cellText(r.created_at);
     const prev = latest.get(k);
     if (!prev || ts >= prev[0]) latest.set(k, [ts, String(r.action), d]);
   }

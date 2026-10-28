@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk } from '../sdk/workspace.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 import { mapRecentRun, type RecentRun } from './jobs-recent.js';
 
@@ -48,7 +48,7 @@ function clampInt(raw: unknown, dflt: number, max: number): number {
 export function registerJobsHistoryRoute(app: Application): void {
   app.get('/api/jobs/history', async (req: Request, res: Response): Promise<void> => {
     try {
-      const client = getExecutionContext().client;
+      const sdk = appSdk();
       const perAliasLimit = clampInt(req.query.per_alias, DEFAULT_PER_ALIAS, MAX_PER_ALIAS);
       const totalLimit = clampInt(req.query.limit, DEFAULT_TOTAL, MAX_TOTAL);
 
@@ -57,11 +57,7 @@ export function registerJobsHistoryRoute(app: Application): void {
           const jobId = jobIdFor(alias);
           if (jobId == null) return [];
           const runs: RecentRun[] = [];
-          for await (const run of client.jobs.listRuns({
-            job_id: jobId,
-            completed_only: true,
-            limit: perAliasLimit,
-          })) {
+          for await (const run of sdk.completedRuns(jobId, perAliasLimit)) {
             runs.push(mapRecentRun(alias, run));
             if (runs.length >= perAliasLimit) break;
           }

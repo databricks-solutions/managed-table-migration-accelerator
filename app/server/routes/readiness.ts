@@ -2,7 +2,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
 import type { Application, Request, Response } from 'express';
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { executeWithTimeout, spSdk } from '../sdk/workspace.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 import {
   aggregateReadiness,
@@ -103,44 +103,26 @@ export function registerReadinessRoute(app: Application): void {
         return;
       }
 
-      const client = createTaggedWorkspaceClient();
+      const sdk = spSdk();
       const results: ProbeResult[] = [];
 
       for (const { object, statement } of buildProbes(catalog, schema)) {
         try {
-          const exec = client.statementExecution.executeStatement({
-            warehouse_id: warehouseId,
-            statement,
-            wait_timeout: '30s',
-            on_wait_timeout: 'CANCEL',
-          });
-          exec.catch(() => undefined); // swallow a late rejection if the timeout wins the race
-          let timer: ReturnType<typeof setTimeout> | undefined;
-          const resp = await Promise.race([
-            exec,
-            new Promise<never>((_, reject) => {
-              timer = setTimeout(
-                () =>
-                  reject(
-                    new Error(
-                      `readiness probe timed out after ${READINESS_TIMEOUT_MS}ms (warehouse likely cold — retry)`,
-                    ),
-                  ),
-                READINESS_TIMEOUT_MS,
-              );
-            }),
-          ]).finally(() => {
-            if (timer) clearTimeout(timer);
-          });
+          const resp = await executeWithTimeout(
+            sdk,
+            { warehouse_id: warehouseId, statement, wait_timeout: '30s', on_wait_timeout: 'CANCEL' },
+            READINESS_TIMEOUT_MS,
+            `readiness probe timed out after ${READINESS_TIMEOUT_MS}ms (warehouse likely cold — retry)`,
+          );
 
-          if (resp.status?.state === 'SUCCEEDED') {
+          if (resp.state === 'SUCCEEDED') {
             results.push({ object, ok: true });
           } else {
             results.push({
               object,
               ok: false,
-              errorCode: resp.status?.error?.error_code ?? null,
-              error: resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`,
+              errorCode: resp.errorCode,
+              error: resp.errorMessage ?? `statement ${resp.state ?? 'unknown'}`,
             });
           }
         } catch (err) {

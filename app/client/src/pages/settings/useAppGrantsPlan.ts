@@ -44,12 +44,13 @@ const APP_PLAN_URL = '/api/grants/plan?tier2=0';
 export function useAppGrantsPlan(): AppGrantsPlan {
   const [plan, setPlan] = useState<GrantsPlan | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [busy, setBusy] = useState(true);
   const [reloads, setReloads] = useState(0);
+  // Which reload the shown plan answers: busy while the current one is still in flight.
+  const [loaded, setLoaded] = useState<number | null>(null);
+  const busy = loaded !== reloads;
   useEffect(() => {
     let cancelled = false;
     const ctrl = new AbortController();
-    setBusy(true);
     void (async () => {
       try {
         const r = await fetch(reloads ? withRefresh(APP_PLAN_URL) : APP_PLAN_URL, {
@@ -66,7 +67,7 @@ export function useAppGrantsPlan(): AppGrantsPlan {
       } catch (err) {
         if (!cancelled) setError(err instanceof Error ? err.message : String(err));
       } finally {
-        if (!cancelled) setBusy(false);
+        if (!cancelled) setLoaded(reloads);
       }
     })();
     return () => {

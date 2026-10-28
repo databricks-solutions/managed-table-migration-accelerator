@@ -105,6 +105,12 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **Settings → Permissions reads the jobs' access lists again.** The live check of the app's
+  `CAN_MANAGE_RUN` on each job called a `permissions` service the AppKit client does not have, so
+  it always failed and the jobs line fell back to the install record or the deployer. It now reads
+  `GET /api/2.0/permissions/jobs/{id}`. Where the app may not read the lists (it holds
+  `CAN_MANAGE_RUN`, not `CAN_MANAGE`), the line still falls back as before.
+
 - **CI's workflow file parses again, and Dependabot can update the app.** The pip line in
   `ci.yml` had an unquoted `:all: `, which made the whole file invalid YAML, so GitHub could not
   load the workflow. The app's `zod` and `vite` overrides repeated the direct version, so npm
@@ -187,6 +193,17 @@ release may change job parameters or control-table columns; every such change is
   after **Grant** counts the lines the app cannot read as not checked, apart from missing ones.
 
 ### Changed
+
+- **The app moves to AppKit 0.89** (`@databricks/appkit` / `appkit-ui` 0.57 → 0.89,
+  `@databricks/sdk-experimental` 0.18, React 19.3, Tailwind 4.3, typescript-eslint 8.72 and the
+  rest of the grouped minor/patch updates). AppKit 0.89's workspace client is the modular SDK
+  (camelCase fields, bigint ids, a raw-request seam, no permissions service). Every SDK call now
+  goes through one adapter, `app/server/sdk/`, which keeps the app's own field names and number ids
+  (a bigint beyond 2^53 fails loud instead of rounding), so no route, MCP tool or UI read changes.
+  `sdk/consumers.test.ts` pins what each route and tool returns and passes unchanged on both
+  versions; new guards check every plugin-required env var is bound in `app.yml` and that no
+  plugin route overlaps an app route. `backend/.e2e/e2e_app_contract.py` snapshots a deployed app
+  before and after (`capture` / `compare`) to prove it end to end.
 
 - **The jobs run as you on every target, prod included.** The `prod` target no longer overrides
   `jobs_run_as`, and the `prod_run_as_sp` variable is gone (contract change: see

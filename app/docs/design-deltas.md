@@ -728,7 +728,7 @@ dependency (the `driver.js` guided tour remains M4).
 
 ## T35 · Onboarding M4: opt-in guided tour (driver.js) — the first app runtime dependency
 
-The last onboarding layer adds a per-screen coach-mark tour via `driver.js` (exact-pinned `1.8.0`) —
+The last onboarding layer adds a per-screen coach-mark tour via `driver.js` (exact-pinned; `1.8.0` at the time, `1.10.2` since the appkit 0.89 upgrade) —
 the **first runtime dependency** the app takes on, a conscious, scoped departure from T22's zero-new-dep
 posture, justified by not re-implementing overlay positioning/focus-trapping/keyboard for a single
 ~5 kB library (spec §8.1). It is opt-in: a header "Take a tour" button (`TakeATourButton`, hidden on

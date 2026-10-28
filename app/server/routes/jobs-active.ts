@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk } from '../sdk/workspace.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 import { isProfilerRedirectOptIn, isProfilerScanOnly, type JobParam } from '../jobs/run-variant.js';
 
@@ -60,7 +60,7 @@ export function mapActiveRun(
 export function registerJobsActiveRoute(app: Application): void {
   app.get('/api/jobs/active', async (_req: Request, res: Response): Promise<void> => {
     try {
-      const client = getExecutionContext().client;
+      const sdk = appSdk();
 
       // One listRuns(active_only) per configured alias, in parallel. Each yields the active
       // runs for that job (usually 0 or 1 — the trigger route's 409 guard keeps it at 1).
@@ -69,7 +69,7 @@ export function registerJobsActiveRoute(app: Application): void {
           const jobId = jobIdFor(alias);
           if (jobId == null) return [];
           const runs: ActiveRun[] = [];
-          for await (const run of client.jobs.listRuns({ job_id: jobId, active_only: true })) {
+          for await (const run of sdk.activeRuns(jobId)) {
             runs.push(mapActiveRun(alias, run));
           }
           return runs;

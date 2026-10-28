@@ -153,7 +153,7 @@ async function attempt(sql: OboSql, statement: string): Promise<[Rows | null, st
 }
 
 const text = (v: unknown): string =>
-  typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'object' ? JSON.stringify(v) : String(v as number);
+  typeof v === 'string' ? v : v === null || v === undefined ? '' : typeof v === 'number' || typeof v === 'boolean' || typeof v === 'bigint' ? String(v) : JSON.stringify(v);
 const truthy = (v: unknown): boolean => v === true || (typeof v === 'string' && v.toLowerCase() === 'true');
 
 export interface Context {

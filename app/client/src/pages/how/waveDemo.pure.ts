@@ -103,7 +103,7 @@ export function chunkIntoWaves(tables: DemoTable[], caps: WaveCaps): DemoWave[] 
   if (pilot.length > caps.pilotMax) {
     const overflow = pilot.slice(caps.pilotMax);
     byBucket.set('pilot', pilot.slice(0, caps.pilotMax));
-    byBucket.set('normal', [...overflow.map((t) => ({ ...t, bucket: 'normal' as Bucket })), ...(byBucket.get('normal') ?? [])]);
+    byBucket.set('normal', [...overflow.map((t) => ({ ...t, bucket: 'normal' }) satisfies DemoTable), ...(byBucket.get('normal') ?? [])]);
   }
 
   const waves: DemoWave[] = [];

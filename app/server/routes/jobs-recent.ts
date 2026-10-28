@@ -1,5 +1,5 @@
 import type { Application, Request, Response } from 'express';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk } from '../sdk/workspace.js';
 import { MIGRATION_ALIASES, jobIdFor } from '../jobs/job-registry.js';
 import { isProfilerRedirectOptIn, isProfilerScanOnly, type JobParam } from '../jobs/run-variant.js';
 
@@ -80,7 +80,7 @@ export function mapRecentRun(
 export function registerJobsRecentRoute(app: Application): void {
   app.get('/api/jobs/recent', async (req: Request, res: Response): Promise<void> => {
     try {
-      const client = getExecutionContext().client;
+      const sdk = appSdk();
       const rawAliases = typeof req.query.aliases === 'string' ? req.query.aliases : '';
       const requested = rawAliases
         .split(',')
@@ -94,11 +94,7 @@ export function registerJobsRecentRoute(app: Application): void {
         aliases.map(async (alias): Promise<RecentRun[]> => {
           const jobId = jobIdFor(alias);
           if (jobId == null) return [];
-          for await (const run of client.jobs.listRuns({
-            job_id: jobId,
-            completed_only: true,
-            limit: 1,
-          })) {
+          for await (const run of sdk.completedRuns(jobId, 1)) {
             return [mapRecentRun(alias, run)];
           }
           return [];

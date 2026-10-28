@@ -94,7 +94,7 @@ import {
 } from './freezeCard.pure';
 import { convertCtaMode, isConvertRecommendationStale } from './convertCta.pure';
 import { estateSubline, scopeChipLabel, situationTiles } from './estateSubline.pure';
-import { manualPreConvertActions, actionsWavePin, runbookHref, consciousSkipConvertParams, type OpenActionRow } from './actionsCard.pure';
+import { manualPreConvertActions, actionsWavePin, runbookHref, consciousSkipConvertParams } from './actionsCard.pure';
 import { actionKindLabel } from './actionCopy.pure';
 import { actionNextMove, requiresRecencyAck } from './actionNextMove.pure';
 import { useOverviewLanding } from './useOverviewLanding';
@@ -1253,7 +1253,7 @@ function GuidedActionsCard({
     wave_id: sql.string(waveId),
     batch_id: sql.string(''),
   });
-  const manual = manualPreConvertActions((q.data ?? []) as OpenActionRow[]);
+  const manual = manualPreConvertActions((q.data ?? []));
   const requireRecencyAck = requiresRecencyAck(manual);
 
   return (

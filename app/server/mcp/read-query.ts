@@ -1,7 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve as resolvePath } from 'node:path';
-import { getExecutionContext } from '@databricks/appkit';
+import { appSdk, contextWarehouseId, requireSucceeded } from '../sdk/workspace.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from '../config/catalog.js';
 
 export const MAX_ROWS = 500; // control tables are small; cap defensively
@@ -59,23 +59,16 @@ export async function runControlQuery(name: string, extra: Record<string, string
     resolveMigrationSchema(),
   );
 
-  const ctx = getExecutionContext();
-  const warehouseId = (ctx.warehouseId ? await ctx.warehouseId : undefined) ?? process.env.DATABRICKS_WAREHOUSE_ID;
+  const warehouseId = await contextWarehouseId();
   if (!warehouseId) throw new Error('No SQL warehouse configured');
 
-  const resp = await ctx.client.statementExecution.executeStatement({
+  const resp = requireSucceeded(await appSdk().executeStatement({
     warehouse_id: warehouseId,
     statement: sql,
     parameters,
     wait_timeout: '45s',
     on_wait_timeout: 'CANCEL',
     row_limit: MAX_ROWS,
-  });
-  if (resp.status?.state !== 'SUCCEEDED') {
-    throw new Error(resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`);
-  }
-
-  const cols = resp.manifest?.schema?.columns ?? [];
-  const rows = resp.result?.data_array ?? [];
-  return rows.map((r) => Object.fromEntries(cols.map((c, idx) => [c.name ?? `col${idx}`, r[idx]])));
+  }));
+  return resp.rows.map((r) => Object.fromEntries(resp.columns.map((c, idx) => [c || `col${idx}`, r[idx]])));
 }

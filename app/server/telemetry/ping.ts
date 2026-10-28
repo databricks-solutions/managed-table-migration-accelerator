@@ -1,6 +1,7 @@
 import { migrationJobs } from '../jobs/job-params.js';
 import { mcpTier } from '../mcp/tiers.js';
 import { createTaggedWorkspaceClient } from './client.js';
+import { bindWorkspace } from '../sdk/workspace.js';
 import { KEY_PREFIX, safeToken, telemetryEnabled } from './product.js';
 
 export type TriggerSurface = 'app' | 'mcp';
@@ -39,8 +40,10 @@ export interface PingDeps {
   timeoutMs?: number;
 }
 
-const defaultMakeClient = (extra: Record<string, string>): PingClient =>
-  createTaggedWorkspaceClient({ clientOptions: { userAgentExtra: extra } }) as unknown as PingClient;
+const defaultMakeClient = (extra: Record<string, string>): PingClient => {
+  const sdk = bindWorkspace(createTaggedWorkspaceClient({ clientOptions: { userAgentExtra: extra } }));
+  return { currentUser: { me: () => sdk.me() } };
+};
 
 function withTimeout<T>(p: Promise<T>, ms: number): Promise<T> {
   let timer: ReturnType<typeof setTimeout> | undefined;

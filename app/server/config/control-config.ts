@@ -1,4 +1,4 @@
-import { createTaggedWorkspaceClient } from '../telemetry/client.js';
+import { executeWithTimeout, requireSucceeded, spSdk } from '../sdk/workspace.js';
 import { resolveMigrationCatalog, resolveMigrationSchema } from './catalog.js';
 
 export interface ControlConfig {
@@ -45,43 +45,31 @@ export async function readControlConfig(): Promise<ControlConfig> {
     const warehouseId = process.env.DATABRICKS_WAREHOUSE_ID;
     if (!warehouseId) throw new Error('DATABRICKS_WAREHOUSE_ID is not set');
 
-    const client = createTaggedWorkspaceClient();
     // SELECT * (not the named columns) so a not-yet-materialised genie_space_id column
     // does not error — columns are picked by name from the result manifest. wait_timeout
     // is the API minimum (5s) + CANCEL so the server-side statement can't linger after we
-    // stop waiting.
-    const exec = client.statementExecution.executeStatement({
-      warehouse_id: warehouseId,
-      statement: `SELECT * FROM ${catalog}.${schema}.migration_control_config LIMIT 1`,
-      wait_timeout: '5s',
-      on_wait_timeout: 'CANCEL',
-    });
-    exec.catch(() => undefined); // swallow a late rejection if the timeout wins the race
-    // Bound the wait: if the warehouse is cold, bail at CONTROL_READ_TIMEOUT_MS and degrade.
-    let timer: ReturnType<typeof setTimeout> | undefined;
-    const resp = await Promise.race([
-      exec,
-      new Promise<never>((_, reject) => {
-        timer = setTimeout(
-          () => reject(new Error(`timed out after ${CONTROL_READ_TIMEOUT_MS}ms (warehouse likely cold)`)),
-          CONTROL_READ_TIMEOUT_MS,
-        );
-      }),
-    ]).finally(() => {
-      if (timer) clearTimeout(timer);
-    });
-    if (resp.status?.state !== 'SUCCEEDED') {
-      throw new Error(resp.status?.error?.message ?? `statement ${resp.status?.state ?? 'unknown'}`);
-    }
+    // stop waiting; the wait is bounded at CONTROL_READ_TIMEOUT_MS so a cold warehouse degrades.
+    const resp = requireSucceeded(
+      await executeWithTimeout(
+        spSdk(),
+        {
+          warehouse_id: warehouseId,
+          statement: `SELECT * FROM ${catalog}.${schema}.migration_control_config LIMIT 1`,
+          wait_timeout: '5s',
+          on_wait_timeout: 'CANCEL',
+        },
+        CONTROL_READ_TIMEOUT_MS,
+        `timed out after ${CONTROL_READ_TIMEOUT_MS}ms (warehouse likely cold)`,
+      ),
+    );
 
-    const row = resp.result?.data_array?.[0];
+    const row = resp.rows[0];
     if (!row) return empty; // no row yet — profiler hasn't run
 
-    const cols = resp.manifest?.schema?.columns ?? [];
     const at = (name: string): string | null => {
-      const col = cols.find((c) => c.name === name);
-      if (!col || col.position === undefined) return null; // column not present yet
-      const v = row[col.position];
+      const i = resp.columns.indexOf(name);
+      if (i < 0) return null; // column not present yet
+      const v = row[i];
       return v === undefined || v === null || v === '' ? null : v;
     };
     return { genieSpaceId: at('genie_space_id'), dashboardId: at('dashboard_id') };

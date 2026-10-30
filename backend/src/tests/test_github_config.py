@@ -76,3 +76,16 @@ def test_dependabot_parses_and_github_actions_uses_only_default_days():
         if update["package-ecosystem"] == "github-actions":
             # GitHub rejects the semver-*-days keys for this ecosystem and ignores the whole file.
             assert set(cooldown) <= {"default-days"}, cooldown
+
+
+def test_only_the_pages_deploy_runs_off_github_hosted_runners():
+    # The org IP allow list refuses the Pages API from GitHub-hosted runners, so the deploy job
+    # (and only it) runs on IT's public-repos group, which allow-lists deploy-docs.yml at main.
+    public_group = {"group": "databricks-ghec-public-repos-runner-group-small",
+                    "labels": "linux-ubuntu-latest-public-2core-8gb"}
+    for path in WORKFLOWS:
+        for name, job in _load(path)["jobs"].items():
+            if (path.name, name) == ("deploy-docs.yml", "deploy"):
+                assert job["runs-on"] == public_group
+            else:
+                assert job["runs-on"] == "ubuntu-latest", (path.name, name)

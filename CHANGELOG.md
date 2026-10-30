@@ -105,6 +105,10 @@ release may change job parameters or control-table columns; every such change is
 
 ### Fixed
 
+- **The docs site deploy reaches GitHub Pages.** The `databricks-solutions` IP allow list refused the
+  Pages deployment from GitHub-hosted runners (HTTP 403), so the deploy job now runs on IT's
+  public-repos runner group; the build job and CI stay on GitHub-hosted runners.
+
 - **Dependency security updates (2026-10-28 advisories):** `@hono/node-server` 2.1.5 (via the MCP
   SDK; `serveStatic` path decoding) and `systeminformation` 5.33.16 (via OpenTelemetry host
   metrics; prototype pollution and path traversal in `networkStats()`, and a Windows-only command

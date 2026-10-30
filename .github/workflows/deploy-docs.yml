@@ -45,8 +45,12 @@ jobs:
   deploy:
     name: Deploy to GitHub Pages
     needs: build
-    # GitHub-hosted: the org's protected runner groups do not serve public repositories.
-    runs-on: ubuntu-latest
+    # IT-managed public-repos runners: the org IP allow list refuses the Pages API call from
+    # GitHub-hosted runners. Allow-listed for this workflow at refs/heads/main only
+    # (databricks-it/github-managed-runners-iac #93); build and CI stay on ubuntu-latest.
+    runs-on: # zizmor: ignore[self-hosted-runner] IT-managed group; allow-listed at refs/heads/main only
+      group: databricks-ghec-public-repos-runner-group-small
+      labels: linux-ubuntu-latest-public-2core-8gb
     timeout-minutes: 10
     # Pages write scope is confined to this job only.
     permissions:

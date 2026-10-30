@@ -848,7 +848,9 @@ any of them):
 app typecheck, tests and lint) on every pull request and push to `main`; `deploy-docs.yml`
 publishes `docs/site/` to GitHub Pages on a push to `main` that touches `docs/` or `backend/docs/`.
 Both are secretless and `contents: read` (only the Pages deploy job gets `pages: write` +
-`id-token: write`), run on GitHub-hosted runners, install from lockfiles without install scripts (`npm ci --ignore-scripts`; pip
+`id-token: write`), run on GitHub-hosted runners (except the Pages deploy job: the org IP allow list
+refuses it there, so it runs on IT's `databricks-ghec-public-repos-runner-group-small`, allow-listed
+for `deploy-docs.yml@refs/heads/main` in `databricks-it/github-managed-runners-iac`), install from lockfiles without install scripts (`npm ci --ignore-scripts`; pip
 `--require-hashes --only-binary :all:` from `backend/requirements-ci.txt`), and pin every action to a full commit SHA with its version in a
 comment. `make ci` is still the pre-merge gate, and there is no release workflow: releases are
 published from a checkout. Do not add a workflow that publishes, holds secrets, or runs on

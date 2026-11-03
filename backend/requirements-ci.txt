@@ -1,7 +1,9 @@
 certifi==2026.10.19 \
     --hash=sha256:035c1e85572b141bf1c3a3eff0e33a8eb74917522f2559075ff8d2fea780a1ae \
     --hash=sha256:42d35340cc5b9ba78e818ddbff0c5b1c2b779de448a340fd1b989f5fa8670e1b
-    # via requests
+    # via
+    #   databricks-sdk
+    #   requests
 cffi==2.1.1 \
     --hash=sha256:046bfc24911b37851ee1b51aab8bffe713d89c68c6a057b09484ce9fd5f69b4e \
     --hash=sha256:06c72bb76605a4b0cd0aad6930b69d4baf7dd5d806cfc409b824191099700e66 \
@@ -339,9 +341,9 @@ cryptography==50.0.2 \
     --hash=sha256:fa8f5efb344d6908a1ce62f4a24e2e5780f825d6f53f5f50ec5ffacac72936cb \
     --hash=sha256:fdd28f912fccfec1846a94e2e1e8f9b0012f557f0c46fe4f3eb0d7a87afcf90b
     # via google-auth
-databricks-sdk==0.154.0 \
-    --hash=sha256:70af90c889e76ecc0ab62d5df5b2d7c9dca4f4e7bc2caddec3701c47c1719d79 \
-    --hash=sha256:a87413ec9469c278104999b1a9f644d52aa97f2307be8f70252eaae3e6e74931
+databricks-sdk==0.157.0 \
+    --hash=sha256:aafde4daeeb2f041f0d8b8b6f2dcc2543413b06b3c00fa57c8a43eff2c7aaecd \
+    --hash=sha256:d20b20cbc399c7cef801d90c8bc4f2f5f63887d2920aef6ebd94edef1ae000f5
     # via -r requirements-ci.in
 google-auth==2.62.0 \
     --hash=sha256:0bef0ce54bdf9ce226c5d66e4264413bd918141c31bbe49fb52eac882f513d69 \

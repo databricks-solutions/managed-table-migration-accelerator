@@ -11,7 +11,7 @@
  */
 
 export const PRODUCT = 'uc-ext2managed';
-export const VERSION = '0.1.0' as const;
+export const VERSION = '0.2.0' as const;
 export const KEY_PREFIX = 'e2m.';
 
 // The SDK User-Agent character set (same as databricks.sdk.useragent.alphanum_pattern). The JS

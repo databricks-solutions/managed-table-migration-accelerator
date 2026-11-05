@@ -8,6 +8,14 @@ release may change job parameters or control-table columns; every such change is
 
 ## [Unreleased]
 
+## [0.2.0] - 2026-11-04
+
+Adds the installer and permissions engine (notebook, `databricks bundle run install`, the app's
+Settings → Permissions page and MCP), the public docs site, Genie Code guidance, the AppKit 0.89
+upgrade and dependency security updates. Contract changes: a new `migration_scope` control table,
+an additive control-table column, and the jobs' identity variable `jobs_run_as` replaces
+`prod_run_as_sp` (see `backend/docs/contracts/`).
+
 ### Added
 
 - **One permissioning engine for every install door.** `migration.provision` (pure) holds the
@@ -359,5 +367,6 @@ as one Databricks Asset Bundle.
   `make release TAG=vX.Y.Z` (`scripts/release.py`), which checks the tag matches the version in
   every versioned file and publishes the GitHub Release from this changelog.
 
-[Unreleased]: https://github.com/databricks-solutions/managed-table-migration-accelerator/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/databricks-solutions/managed-table-migration-accelerator/compare/v0.2.0...HEAD
+[0.2.0]: https://github.com/databricks-solutions/managed-table-migration-accelerator/compare/v0.1.0...v0.2.0
 [0.1.0]: https://github.com/databricks-solutions/managed-table-migration-accelerator/releases/tag/v0.1.0
